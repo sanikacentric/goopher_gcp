@@ -6,10 +6,13 @@ pydantic-settings==2.7.1
 PyJWT==2.10.1
 python-multipart==0.0.20
 
-# --- LLM (Gemini free tier, T6) ---
+# --- LLM (OpenAI — ACTIVE: used for all conversations) ---
+openai==1.59.6
+
+# --- LLM (Gemini) — kept for future use (see commented code in orchestrator) ---
 google-generativeai==0.8.3
 
-# --- ADK orchestrator (T2) ---
+# --- ADK orchestrator (T2) — Gemini-based; kept for future use ---
 google-adk==1.2.1
 
 # --- MCP tools (T5) ---

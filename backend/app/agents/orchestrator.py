@@ -111,32 +111,55 @@ class AgentService:
         self._adk_runner = None
         self._adk_ready = False
         self._adk_sessions: set[str] = set()  # session_ids already created in ADK
-        self._gemini = None
+        self._openai = None   # active LLM client (OpenAI)
+        self._gemini = None   # kept for future use (see commented init below)
         self._init_backends()
 
     def _init_backends(self) -> None:
-        """Best-effort init of ADK Runner and a raw Gemini client."""
-        # ADK runner (path 1).
-        if _settings.google_api_key:
+        """
+        Best-effort init of the LLM client used for natural-language phrasing.
+
+        ALL conversations use OpenAI right now. The ADK (Gemini) multi-agent path
+        and the raw Gemini client are intentionally left commented out below so
+        you can re-enable them in the future without rewriting anything.
+        """
+        # --- OpenAI client (ACTIVE: used for every conversation) ---
+        if _settings.openai_api_key:
             try:
-                from google.adk.runners import InMemoryRunner
+                from openai import OpenAI
 
-                root = build_root_agent()
-                self._adk_runner = InMemoryRunner(agent=root, app_name="goopher")
-                self._adk_ready = True
-                log_event("orchestrator_init", path="adk", model=_settings.gemini_model)
+                kwargs = {"api_key": _settings.openai_api_key}
+                if _settings.openai_base_url:
+                    kwargs["base_url"] = _settings.openai_base_url
+                self._openai = OpenAI(**kwargs)
+                log_event("orchestrator_init", path="openai",
+                          model=_settings.openai_model)
             except Exception as exc:
-                log_event("adk_unavailable", reason=str(exc))
+                log_event("openai_unavailable", reason=str(exc))
 
-        # Raw Gemini client for the fallback phrasing path.
-        if _settings.google_api_key:
-            try:
-                import google.generativeai as genai
-
-                genai.configure(api_key=_settings.google_api_key)
-                self._gemini = genai.GenerativeModel(_settings.gemini_model)
-            except Exception as exc:
-                log_event("gemini_unavailable", reason=str(exc))
+        # --- GEMINI / ADK (COMMENTED OUT — kept for future use) ---
+        # To switch back to Gemini: set llm_provider="gemini", provide
+        # GOOGLE_API_KEY, and uncomment the blocks below.
+        #
+        # # ADK runner (Gemini multi-agent path).
+        # if _settings.use_adk_path and _settings.google_api_key:
+        #     try:
+        #         from google.adk.runners import InMemoryRunner
+        #         root = build_root_agent()
+        #         self._adk_runner = InMemoryRunner(agent=root, app_name="goopher")
+        #         self._adk_ready = True
+        #         log_event("orchestrator_init", path="adk", model=_settings.gemini_model)
+        #     except Exception as exc:
+        #         log_event("adk_unavailable", reason=str(exc))
+        #
+        # # Raw Gemini client for the phrasing path.
+        # if _settings.google_api_key:
+        #     try:
+        #         import google.generativeai as genai
+        #         genai.configure(api_key=_settings.google_api_key)
+        #         self._gemini = genai.GenerativeModel(_settings.gemini_model)
+        #     except Exception as exc:
+        #         log_event("gemini_unavailable", reason=str(exc))
 
     # ----- public API ----- #
     def run_turn(self, req: ChatRequest, customer_id: str) -> ChatResponse:
@@ -316,47 +339,65 @@ class AgentService:
 
     # ----- phrasing & formatting helpers ----- #
     def _phrase(self, user_text: str, facts: str, directives: str) -> str:
-        """Turn structured facts into a natural reply (Gemini if available)."""
-        if self._gemini is not None:
+        """
+        Turn structured tool results into a natural reply using the LLM.
+
+        ALL conversations use OpenAI. The prompt grounds the model in the real
+        tool output ("do not invent beyond this"), so the answer is always
+        accurate. If OpenAI is unavailable/errors, we fall back to the
+        already-human-readable tool facts so the service never hard-fails.
+        """
+        system_prompt = f"{ROOT_INSTRUCTION}\n\n{directives}"
+        user_prompt = (
+            f"User asked: {user_text}\n\n"
+            f"Tool results (ground truth — do not invent beyond this):\n{facts}\n\n"
+            "Write a helpful, concise reply using only the tool results."
+        )
+
+        # --- OpenAI (ACTIVE) ---
+        if self._openai is not None:
             try:
-                prompt = (
-                    f"{ROOT_INSTRUCTION}\n\n{directives}\n\n"
-                    f"User asked: {user_text}\n\n"
-                    f"Tool results (ground truth — do not invent beyond this):\n{facts}\n\n"
-                    "Write a helpful reply using only the tool results."
+                incr("tokens_estimated_total", (len(system_prompt) + len(user_prompt)) // 4)
+                resp = self._openai.chat.completions.create(
+                    model=_settings.openai_model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=0.3,
+                    max_tokens=600,
                 )
-                incr("tokens_estimated_total", len(prompt) // 4)
-                # IMPORTANT: gemini-2.5-* models use "thinking" by default, which
-                # consumes output tokens internally. A generous max_output_tokens
-                # ensures budget remains for the visible answer (otherwise the
-                # response finishes as MAX_TOKENS with empty text).
-                resp = self._gemini.generate_content(
-                    prompt, generation_config={"max_output_tokens": 2048}
-                )
-                text = self._extract_text(resp)
+                text = (resp.choices[0].message.content or "").strip()
                 if text:
                     return text
-                log_event("gemini_phrasing_empty",
-                          finish=str(getattr(resp.candidates[0], "finish_reason", "?")))
+                log_event("openai_phrasing_empty")
             except Exception as exc:
-                log_event("gemini_phrasing_failed", reason=str(exc))
+                log_event("openai_phrasing_failed", reason=str(exc))
+
+        # --- GEMINI (COMMENTED OUT — kept for future use) ---
+        # if self._gemini is not None:
+        #     try:
+        #         prompt = f"{system_prompt}\n\n{user_prompt}"
+        #         resp = self._gemini.generate_content(
+        #             prompt, generation_config={"max_output_tokens": 2048}
+        #         )
+        #         text = self._extract_text(resp)
+        #         if text:
+        #             return text
+        #     except Exception as exc:
+        #         log_event("gemini_phrasing_failed", reason=str(exc))
+
         # Template fallback (no LLM / on error): facts are already human-readable.
         return facts
 
-    @staticmethod
-    def _extract_text(resp) -> str:
-        """
-        Safely pull text out of a Gemini response.
-
-        We avoid `resp.text` because that quick-accessor raises if any part is a
-        non-text part (e.g. a function_call) — instead we concatenate the text
-        parts ourselves, which is robust across model/SDK versions.
-        """
-        try:
-            parts = resp.candidates[0].content.parts or []
-        except (AttributeError, IndexError):
-            return ""
-        return "".join(getattr(p, "text", "") or "" for p in parts).strip()
+    # @staticmethod
+    # def _extract_text(resp) -> str:
+    #     """Safely pull text out of a Gemini response (kept for future use)."""
+    #     try:
+    #         parts = resp.candidates[0].content.parts or []
+    #     except (AttributeError, IndexError):
+    #         return ""
+    #     return "".join(getattr(p, "text", "") or "" for p in parts).strip()
 
     @staticmethod
     def _parse_filters(lowered: str):

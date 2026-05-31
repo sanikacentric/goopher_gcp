@@ -71,24 +71,59 @@ def extract_order_ids_from_file(att: Attachment) -> list[str]:
 
 def describe_image(att: Attachment, model: str) -> Optional[str]:
     """
-    Ask Gemini to describe an uploaded product image and extract search terms.
-    Returns a short text description, or None if multimodal is unavailable.
+    Ask the LLM (OpenAI vision) to describe an uploaded product image and extract
+    search terms. Returns a short text description, or None if unavailable.
+
+    `model` is the orchestrator's configured model name; for OpenAI this should
+    be a vision-capable model (e.g. gpt-4o-mini). The Gemini implementation is
+    kept commented below for future use.
     """
     if not att.content_b64:
         return None
-    try:
-        import google.generativeai as genai  # lazy import
 
-        gmodel = genai.GenerativeModel(model)
-        image_part = {"mime_type": att.mime_type, "data": base64.b64decode(att.content_b64)}
-        prompt = (
-            "Describe this clothing item for a retail search: garment type, "
-            "color, sleeve length, and overall style, in one sentence."
-        )
-        resp = gmodel.generate_content([prompt, image_part])
-        return resp.text.strip()
-    except Exception:
-        return None
+    from ..config import get_settings  # local import to avoid cycles
+
+    settings = get_settings()
+    prompt = (
+        "Describe this retail product for a catalog search in one sentence: "
+        "item type, color, and key style/flavor details."
+    )
+
+    # --- OpenAI vision (ACTIVE) ---
+    if settings.openai_api_key:
+        try:
+            from openai import OpenAI
+
+            kwargs = {"api_key": settings.openai_api_key}
+            if settings.openai_base_url:
+                kwargs["base_url"] = settings.openai_base_url
+            client = OpenAI(**kwargs)
+            data_url = f"data:{att.mime_type};base64,{att.content_b64}"
+            resp = client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                }],
+                max_tokens=120,
+            )
+            return (resp.choices[0].message.content or "").strip() or None
+        except Exception:
+            return None
+
+    # --- GEMINI (COMMENTED OUT — kept for future use) ---
+    # try:
+    #     import google.generativeai as genai  # lazy import
+    #     gmodel = genai.GenerativeModel(model)
+    #     image_part = {"mime_type": att.mime_type, "data": base64.b64decode(att.content_b64)}
+    #     resp = gmodel.generate_content([prompt, image_part])
+    #     return resp.text.strip()
+    # except Exception:
+    #     return None
+    return None
 
 
 def normalize_to_text(message: str, attachments: list[Attachment], model: str) -> str:

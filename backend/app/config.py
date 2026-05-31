@@ -28,17 +28,26 @@ class Settings(BaseSettings):
     environment: str = "local"  # local | staging | production
     log_level: str = "INFO"
 
-    # --- LLM (Gemini free tier) ---
+    # --- LLM provider selection ---
+    # ALL conversations currently use OpenAI. Set OPENAI_API_KEY in your .env.
+    # Get a key at https://platform.openai.com/api-keys
+    llm_provider: str = "openai"          # "openai" (active) | "gemini" (future)
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"     # fast, low-cost, great for phrasing
+    openai_base_url: str = ""             # optional override (Azure/proxy); blank = default
+
+    # --- LLM (Gemini) — COMMENTED OUT / kept for future use ---
+    # To switch back to Gemini later: set llm_provider="gemini" and provide a key.
     # Get a free key at https://aistudio.google.com/app/apikey
     google_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"  # free-tier friendly, fast, multimodal
+
     # When True, try the ADK multi-agent path first and fall back to the grounded
-    # path if it errors. Default False = always use the grounded "tools + Gemini
+    # path if it errors. Default False = always use the grounded "tools + LLM
     # phrasing" path: it deterministically routes to the right tool (so it never
-    # refuses or hallucinates) and uses Gemini for the natural-language reply, so
-    # every conversation is still 100% Gemini-powered AND grounded in real data.
-    # The ADK agent tree is always built (Requirement T2); this flag only chooses
-    # which path generates the user-facing reply.
+    # refuses or hallucinates) and uses the LLM for the natural-language reply, so
+    # every conversation is still 100% LLM-powered AND grounded in real data.
+    # NOTE: the ADK path is Gemini-based, so it stays OFF while using OpenAI.
     use_adk_path: bool = False
 
     # --- Google Cloud (free tier) ---

@@ -41,7 +41,7 @@
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  DATA LAYER  (Repository abstraction)                                          │
 │   SQLite  (local/dev/CI)   ◀──same code──▶   Firestore (GCP free tier) [T7]     │
-│   Seeded from backend/data/jcpenney_casual_dresses.json  (mock JCPenney data)  │
+│   Seeded from backend/data/goopher_catalog.json  (mock clothing + food data)  │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 

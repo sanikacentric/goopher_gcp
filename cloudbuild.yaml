@@ -1,11 +1,15 @@
 # Optional: manual one-shot deploy without GitHub Actions.
 #   gcloud builds submit --config cloudbuild.yaml \
-#     --substitutions=_REGION=us-central1,_SERVICE=goopher-api
+#     --substitutions=_REGION=us-central1,_SERVICE=goopher-api,_JWT_SECRET=change-me
 #
-# Builds the image, pushes to Container Registry, and deploys to Cloud Run.
+# Builds the image, pushes to Container Registry, and deploys to Cloud Run with
+# the ADK + Gemini multi-agent path on Vertex AI (uses your $300 GCP credit) and
+# Cloud Trace enabled. To also keep OpenAI as a fallback, pass _OPENAI_API_KEY.
 substitutions:
   _SERVICE: goopher-api
   _REGION: us-central1
+  _JWT_SECRET: change-me-in-production
+  _OPENAI_API_KEY: ""   # optional; leave blank to run Gemini-only
 
 steps:
   - name: gcr.io/cloud-builders/docker
@@ -27,7 +31,7 @@ steps:
       - --min-instances=0
       - --max-instances=2
       - --memory=512Mi
-      - --set-env-vars=ENVIRONMENT=production,DB_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,OTEL_EXPORTER=gcp
+      - --set-env-vars=ENVIRONMENT=production,DB_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,OTEL_EXPORTER=gcp,LLM_PROVIDER=gemini,USE_ADK_PATH=true,USE_VERTEXAI=true,VERTEX_LOCATION=${_REGION},GEMINI_MODEL=gemini-2.5-flash,OPENAI_API_KEY=${_OPENAI_API_KEY},JWT_SECRET=${_JWT_SECRET}
 
 images:
   - gcr.io/$PROJECT_ID/${_SERVICE}:$SHORT_SHA

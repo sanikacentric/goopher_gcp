@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     # --- LLM (Gemini free tier) ---
     # Get a free key at https://aistudio.google.com/app/apikey
     google_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash"  # free-tier friendly, fast, multimodal
+    gemini_model: str = "gemini-2.5-flash"  # free-tier friendly, fast, multimodal
 
     # --- Google Cloud (free tier) ---
     google_cloud_project: str = ""

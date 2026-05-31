@@ -9,9 +9,10 @@ manage **orders** (one at a time *or* in bulk) — across **channels** (web /
 phone), **languages**, and **modalities** (text / voice / image / file) — all
 while preserving conversation context.
 
-> ℹ️ The product/order data is a **synthetic dataset modeled on** the JCPenney
-> casual-dresses category. It is **not scraped** from jcpenney.com. See
-> [`backend/data/jcpenney_casual_dresses.json`](backend/data/jcpenney_casual_dresses.json).
+> ℹ️ The product/order data is a **synthetic, representative dataset** spanning
+> two departments (women's casual clothing + food/snacks). It is **not scraped**
+> from any retailer; brand names are used only for demo realism. See
+> [`backend/data/goopher_catalog.json`](backend/data/goopher_catalog.json).
 
 ---
 
@@ -50,7 +51,7 @@ so you can try everything before touching Google Cloud.
 python -m venv .venv && . .venv/Scripts/activate     # Windows PowerShell: .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 
-# 2. Seed the local SQLite DB with JCPenney casual-dress data
+# 2. Seed the local SQLite DB with the clothing + food catalog
 python scripts/seed_data.py
 
 # 3. Run the API
@@ -160,7 +161,7 @@ goopher/
 │   │   ├── observability/  # logging, tracing, metrics (T10)
 │   │   ├── config.py       # env-driven settings
 │   │   └── main.py         # FastAPI app
-│   └── data/               # mock JCPenney casual-dress dataset
+│   └── data/               # mock catalog: clothing + food (goopher_catalog.json)
 ├── extension/              # Chrome extension "GOOPHER" (MV3)
 ├── evals/                  # behavioral evals (T8)
 ├── tests/                  # unit/integration tests (T9)

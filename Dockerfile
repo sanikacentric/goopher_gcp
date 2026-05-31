@@ -14,9 +14,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Copy the application code.
+# Copy the application code + the storefront site (served at "/").
 COPY backend/ ./backend/
 COPY scripts/ ./scripts/
+COPY site/ ./site/
 
 # Cloud Run injects $PORT (defaults to 8080); the app reads it.
 ENV PORT=8080

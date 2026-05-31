@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Local DB / secrets
+*.db
+.env
+*.local
+
+# Build / OS
+dist/
+build/
+.DS_Store
+Thumbs.db
+
+# GCP keys (never commit)
+*-key.json
+service-account*.json
+gcloud-key.json

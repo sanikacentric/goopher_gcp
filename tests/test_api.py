@@ -1,0 +1,69 @@
+"""
+End-to-end API tests via FastAPI TestClient (T1 auth + /chat + /orders/bulk).
+"""
+from fastapi.testclient import TestClient
+
+from backend.app.main import app
+
+client = TestClient(app)
+
+
+def _token() -> str:
+    r = client.post("/auth/login", json={"email": "demo@goopher.app", "password": "demo"})
+    assert r.status_code == 200
+    return r.json()["access_token"]
+
+
+def test_healthz():
+    r = client.get("/healthz")
+    assert r.status_code == 200
+    assert r.json()["status"] == "ok"
+
+
+def test_login_success():
+    r = client.post("/auth/login", json={"email": "demo@goopher.app", "password": "demo"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["customer"]["customer_id"] == "CUST-1001"
+
+
+def test_login_failure():
+    r = client.post("/auth/login", json={"email": "demo@goopher.app", "password": "bad"})
+    assert r.status_code == 401
+
+
+def test_chat_requires_auth():
+    r = client.post("/chat", json={"message": "hi", "session_id": "x"})
+    assert r.status_code == 401
+
+
+def test_chat_happy_path():
+    token = _token()
+    r = client.post(
+        "/chat",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"message": "where is ORD-50002?", "session_id": "api-1"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert "ORD-50002" in body["reply"]
+    assert body["session_id"] == "api-1"
+
+
+def test_bulk_orders_endpoint():
+    token = _token()
+    r = client.post(
+        "/orders/bulk",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"order_ids": ["ORD-50001", "ORD-50002", "ORD-NOPE"]},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["found"] == 2
+    assert "ORD-NOPE" in body["missing"]
+
+
+def test_metrics_endpoint():
+    r = client.get("/metrics")
+    assert r.status_code == 200
+    assert "chat_requests_total" in r.json()["metrics"]

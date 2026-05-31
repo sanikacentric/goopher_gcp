@@ -1,0 +1,78 @@
+{
+  "description": "GOOPHER evaluation set. Each case checks the unified agent on a realistic shopper turn: did it pick the right tool, ground its answer in real data, and respond in the right language/channel?",
+  "cases": [
+    {
+      "id": "inv-search-color-price",
+      "message": "show me black casual dresses under $45",
+      "channel": "web",
+      "customer_id": "CUST-1001",
+      "expect_tools": ["inventory_search"],
+      "expect_contains_any": ["dress", "$"],
+      "expect_language": "en"
+    },
+    {
+      "id": "inv-check-variant",
+      "message": "is JCP-ANA-1001-NVY-S in stock?",
+      "channel": "web",
+      "customer_id": "CUST-1001",
+      "expect_tools": ["inventory_check_stock"],
+      "expect_contains_any": ["stock", "14"],
+      "expect_language": "en"
+    },
+    {
+      "id": "order-single-shipped",
+      "message": "where is my order ORD-50002?",
+      "channel": "web",
+      "customer_id": "CUST-1001",
+      "expect_tools": ["order_status"],
+      "expect_contains_any": ["Shipped", "ORD-50002"],
+      "expect_language": "en"
+    },
+    {
+      "id": "order-list",
+      "message": "show all my orders",
+      "channel": "web",
+      "customer_id": "CUST-1001",
+      "expect_tools": ["order_list_for_customer"],
+      "expect_contains_any": ["order"],
+      "expect_language": "en"
+    },
+    {
+      "id": "order-bulk",
+      "message": "give me status for ORD-50001 ORD-50002 ORD-50003",
+      "channel": "web",
+      "customer_id": "CUST-1001",
+      "expect_tools": ["order_bulk_status"],
+      "expect_contains_any": ["found", "Processed"],
+      "expect_language": "en"
+    },
+    {
+      "id": "multilingual-spanish",
+      "message": "Hola, ¿dónde está mi pedido ORD-50001?",
+      "channel": "web",
+      "customer_id": "CUST-1002",
+      "expect_tools": ["order_status"],
+      "expect_contains_any": ["ORD-50001"],
+      "expect_language": "es"
+    },
+    {
+      "id": "phone-voice-safe",
+      "message": "where is ORD-50002",
+      "channel": "phone",
+      "customer_id": "CUST-1001",
+      "expect_tools": ["order_status"],
+      "expect_contains_any": ["ORD-50002"],
+      "expect_no_markdown": true,
+      "expect_language": "en"
+    },
+    {
+      "id": "inv-wrap-dress",
+      "message": "do you have a wrap dress in emerald?",
+      "channel": "web",
+      "customer_id": "CUST-1001",
+      "expect_tools": ["inventory_search"],
+      "expect_contains_any": ["Wrap", "Worthington", "dress"],
+      "expect_language": "en"
+    }
+  ]
+}

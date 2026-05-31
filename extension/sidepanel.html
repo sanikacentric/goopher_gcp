@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GOOPHER</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header class="gp-header">
+      <div class="gp-brand">
+        <span class="gp-logo">🛍️</span>
+        <div>
+          <div class="gp-title">GOOPHER</div>
+          <div class="gp-subtitle">JCPenney casual dresses · live help</div>
+        </div>
+      </div>
+      <button id="logoutBtn" class="gp-link" hidden>Sign out</button>
+    </header>
+
+    <!-- LOGIN VIEW (Requirement T1: authenticate the customer) -->
+    <section id="loginView" class="gp-login">
+      <h2>Sign in</h2>
+      <p class="gp-hint">Demo: <code>demo@goopher.app</code> / <code>demo</code></p>
+      <input id="email" type="email" placeholder="Email" value="demo@goopher.app" />
+      <input id="password" type="password" placeholder="Password" value="demo" />
+      <button id="loginBtn" class="gp-primary">Sign in</button>
+      <div id="loginError" class="gp-error" hidden></div>
+    </section>
+
+    <!-- CHAT VIEW -->
+    <section id="chatView" class="gp-chat" hidden>
+      <div class="gp-controls">
+        <label>Channel
+          <select id="channel">
+            <option value="web">Web</option>
+            <option value="phone">Phone (voice)</option>
+          </select>
+        </label>
+        <label>Language
+          <select id="language">
+            <option value="">Auto</option>
+            <option value="en">English</option>
+            <option value="es">Español</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+            <option value="pt">Português</option>
+            <option value="hi">हिन्दी</option>
+            <option value="zh">中文</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="messages" class="gp-messages"></div>
+
+      <div id="attachmentBar" class="gp-attachbar"></div>
+
+      <form id="composer" class="gp-composer">
+        <label class="gp-attach" title="Attach image or file (multi-modal)">
+          📎
+          <input id="fileInput" type="file" accept="image/*,.csv,.txt,.pdf" hidden multiple />
+        </label>
+        <input id="messageInput" type="text" placeholder="Ask about dresses or your orders…" autocomplete="off" />
+        <button type="submit" class="gp-primary">Send</button>
+      </form>
+    </section>
+
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>

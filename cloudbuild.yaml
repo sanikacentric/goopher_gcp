@@ -1,0 +1,33 @@
+# Optional: manual one-shot deploy without GitHub Actions.
+#   gcloud builds submit --config cloudbuild.yaml \
+#     --substitutions=_REGION=us-central1,_SERVICE=goopher-api
+#
+# Builds the image, pushes to Container Registry, and deploys to Cloud Run.
+substitutions:
+  _SERVICE: goopher-api
+  _REGION: us-central1
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-t", "gcr.io/$PROJECT_ID/${_SERVICE}:$SHORT_SHA", "."]
+
+  - name: gcr.io/cloud-builders/docker
+    args: ["push", "gcr.io/$PROJECT_ID/${_SERVICE}:$SHORT_SHA"]
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=gcr.io/$PROJECT_ID/${_SERVICE}:$SHORT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --min-instances=0
+      - --max-instances=2
+      - --memory=512Mi
+      - --set-env-vars=ENVIRONMENT=production,DB_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,OTEL_EXPORTER=gcp
+
+images:
+  - gcr.io/$PROJECT_ID/${_SERVICE}:$SHORT_SHA

@@ -1,0 +1,287 @@
+{
+  "_meta": {
+    "source": "Mock dataset modeled on JCPenney 'Casual Dresses for Women' category (cat100210008).",
+    "disclaimer": "This is SYNTHETIC/representative data for demo purposes. It is NOT scraped from jcpenney.com and does not reflect real-time JCPenney pricing or stock. Brands listed are real JCPenney house/partner brands used here only to make the demo realistic.",
+    "category": "Women > Dresses > Casual",
+    "currency": "USD",
+    "generated_for": "GOOPHER conversational retail agent demo"
+  },
+  "products": [
+    {
+      "sku": "JCP-ANA-1001",
+      "name": "a.n.a Short Sleeve Tiered Midi Dress",
+      "brand": "a.n.a",
+      "category": "Casual Dress",
+      "description": "Soft jersey knit midi dress with a relaxed tiered skirt and short sleeves. Everyday casual fit.",
+      "list_price": 44.0,
+      "sale_price": 29.99,
+      "rating": 4.5,
+      "review_count": 312,
+      "colors": ["Navy", "Black", "Dusty Rose"],
+      "sizes": ["XS", "S", "M", "L", "XL", "XXL"],
+      "material": "95% Rayon, 5% Spandex",
+      "variants": [
+        {"variant_id": "JCP-ANA-1001-NVY-S", "color": "Navy", "size": "S", "stock": 14},
+        {"variant_id": "JCP-ANA-1001-NVY-M", "color": "Navy", "size": "M", "stock": 7},
+        {"variant_id": "JCP-ANA-1001-BLK-M", "color": "Black", "size": "M", "stock": 0},
+        {"variant_id": "JCP-ANA-1001-BLK-L", "color": "Black", "size": "L", "stock": 22},
+        {"variant_id": "JCP-ANA-1001-DRS-S", "color": "Dusty Rose", "size": "S", "stock": 3}
+      ]
+    },
+    {
+      "sku": "JCP-LIZ-1002",
+      "name": "Liz Claiborne Short Sleeve Floral Shift Dress",
+      "brand": "Liz Claiborne",
+      "category": "Casual Dress",
+      "description": "Lightweight floral shift dress with a flattering A-line silhouette. Perfect for warm-weather days out.",
+      "list_price": 54.0,
+      "sale_price": 38.99,
+      "rating": 4.3,
+      "review_count": 188,
+      "colors": ["Blue Floral", "Coral Floral"],
+      "sizes": ["S", "M", "L", "XL"],
+      "material": "100% Polyester",
+      "variants": [
+        {"variant_id": "JCP-LIZ-1002-BLF-S", "color": "Blue Floral", "size": "S", "stock": 9},
+        {"variant_id": "JCP-LIZ-1002-BLF-M", "color": "Blue Floral", "size": "M", "stock": 11},
+        {"variant_id": "JCP-LIZ-1002-CRF-L", "color": "Coral Floral", "size": "L", "stock": 5},
+        {"variant_id": "JCP-LIZ-1002-CRF-XL", "color": "Coral Floral", "size": "XL", "stock": 0}
+      ]
+    },
+    {
+      "sku": "JCP-WOR-1003",
+      "name": "Worthington Sleeveless Wrap Dress",
+      "brand": "Worthington",
+      "category": "Casual Dress",
+      "description": "Versatile sleeveless wrap dress that transitions from office casual to weekend brunch.",
+      "list_price": 60.0,
+      "sale_price": 41.99,
+      "rating": 4.6,
+      "review_count": 421,
+      "colors": ["Black", "Emerald", "Burgundy"],
+      "sizes": ["XS", "S", "M", "L", "XL"],
+      "material": "96% Polyester, 4% Spandex",
+      "variants": [
+        {"variant_id": "JCP-WOR-1003-BLK-XS", "color": "Black", "size": "XS", "stock": 6},
+        {"variant_id": "JCP-WOR-1003-BLK-S", "color": "Black", "size": "S", "stock": 18},
+        {"variant_id": "JCP-WOR-1003-EMR-M", "color": "Emerald", "size": "M", "stock": 12},
+        {"variant_id": "JCP-WOR-1003-BUR-L", "color": "Burgundy", "size": "L", "stock": 2}
+      ]
+    },
+    {
+      "sku": "JCP-SJB-1004",
+      "name": "St. John's Bay Short Sleeve T-Shirt Dress",
+      "brand": "St. John's Bay",
+      "category": "Casual Dress",
+      "description": "Easy-wearing cotton-blend t-shirt dress with a comfortable straight fit and side pockets.",
+      "list_price": 30.0,
+      "sale_price": 19.99,
+      "rating": 4.4,
+      "review_count": 540,
+      "colors": ["Heather Gray", "Olive", "Navy", "White"],
+      "sizes": ["S", "M", "L", "XL", "XXL"],
+      "material": "60% Cotton, 40% Polyester",
+      "variants": [
+        {"variant_id": "JCP-SJB-1004-GRY-M", "color": "Heather Gray", "size": "M", "stock": 31},
+        {"variant_id": "JCP-SJB-1004-OLV-L", "color": "Olive", "size": "L", "stock": 16},
+        {"variant_id": "JCP-SJB-1004-NVY-S", "color": "Navy", "size": "S", "stock": 0},
+        {"variant_id": "JCP-SJB-1004-WHT-XL", "color": "White", "size": "XL", "stock": 8}
+      ]
+    },
+    {
+      "sku": "JCP-STY-1005",
+      "name": "Stylus Long Sleeve Sweater Dress",
+      "brand": "Stylus",
+      "category": "Casual Dress",
+      "description": "Cozy ribbed-knit sweater dress with long sleeves and a midi length for cooler days.",
+      "list_price": 50.0,
+      "sale_price": 34.99,
+      "rating": 4.2,
+      "review_count": 97,
+      "colors": ["Camel", "Charcoal", "Cream"],
+      "sizes": ["S", "M", "L", "XL"],
+      "material": "55% Cotton, 45% Acrylic",
+      "variants": [
+        {"variant_id": "JCP-STY-1005-CML-S", "color": "Camel", "size": "S", "stock": 4},
+        {"variant_id": "JCP-STY-1005-CHR-M", "color": "Charcoal", "size": "M", "stock": 13},
+        {"variant_id": "JCP-STY-1005-CRM-L", "color": "Cream", "size": "L", "stock": 0}
+      ]
+    },
+    {
+      "sku": "JCP-RYE-1006",
+      "name": "Ryegrass Smocked Tiered Maxi Dress",
+      "brand": "Ryegrass",
+      "category": "Casual Dress",
+      "description": "Flowy smocked-bodice maxi dress with adjustable straps and a breezy tiered skirt.",
+      "list_price": 64.0,
+      "sale_price": 44.99,
+      "rating": 4.7,
+      "review_count": 263,
+      "colors": ["Sage", "Terracotta", "Black"],
+      "sizes": ["XS", "S", "M", "L", "XL"],
+      "material": "100% Rayon",
+      "variants": [
+        {"variant_id": "JCP-RYE-1006-SGE-S", "color": "Sage", "size": "S", "stock": 10},
+        {"variant_id": "JCP-RYE-1006-SGE-M", "color": "Sage", "size": "M", "stock": 0},
+        {"variant_id": "JCP-RYE-1006-TRC-M", "color": "Terracotta", "size": "M", "stock": 7},
+        {"variant_id": "JCP-RYE-1006-BLK-L", "color": "Black", "size": "L", "stock": 19}
+      ]
+    },
+    {
+      "sku": "JCP-ANA-1007",
+      "name": "a.n.a Denim Button-Front Shirt Dress",
+      "brand": "a.n.a",
+      "category": "Casual Dress",
+      "description": "Classic chambray button-front shirt dress with a self-tie waist and roll-tab sleeves.",
+      "list_price": 48.0,
+      "sale_price": 32.99,
+      "rating": 4.5,
+      "review_count": 154,
+      "colors": ["Light Wash", "Medium Wash"],
+      "sizes": ["S", "M", "L", "XL", "XXL"],
+      "material": "100% Cotton",
+      "variants": [
+        {"variant_id": "JCP-ANA-1007-LTW-M", "color": "Light Wash", "size": "M", "stock": 21},
+        {"variant_id": "JCP-ANA-1007-LTW-L", "color": "Light Wash", "size": "L", "stock": 6},
+        {"variant_id": "JCP-ANA-1007-MDW-S", "color": "Medium Wash", "size": "S", "stock": 0}
+      ]
+    },
+    {
+      "sku": "JCP-LIZ-1008",
+      "name": "Liz Claiborne Polka Dot Fit & Flare Dress",
+      "brand": "Liz Claiborne",
+      "category": "Casual Dress",
+      "description": "Playful polka-dot fit-and-flare dress with a defined waist and twirl-worthy skirt.",
+      "list_price": 58.0,
+      "sale_price": 39.99,
+      "rating": 4.1,
+      "review_count": 76,
+      "colors": ["Navy Dot", "Red Dot"],
+      "sizes": ["XS", "S", "M", "L"],
+      "material": "97% Polyester, 3% Spandex",
+      "variants": [
+        {"variant_id": "JCP-LIZ-1008-NVD-S", "color": "Navy Dot", "size": "S", "stock": 8},
+        {"variant_id": "JCP-LIZ-1008-RDD-M", "color": "Red Dot", "size": "M", "stock": 1}
+      ]
+    },
+    {
+      "sku": "JCP-WOR-1009",
+      "name": "Worthington Puff Sleeve Ponte Dress",
+      "brand": "Worthington",
+      "category": "Casual Dress",
+      "description": "Structured ponte-knit dress with on-trend puff sleeves and a smoothing silhouette.",
+      "list_price": 62.0,
+      "sale_price": 43.99,
+      "rating": 4.4,
+      "review_count": 129,
+      "colors": ["Black", "Ivory"],
+      "sizes": ["S", "M", "L", "XL"],
+      "material": "68% Rayon, 28% Nylon, 4% Spandex",
+      "variants": [
+        {"variant_id": "JCP-WOR-1009-BLK-S", "color": "Black", "size": "S", "stock": 15},
+        {"variant_id": "JCP-WOR-1009-IVY-M", "color": "Ivory", "size": "M", "stock": 9},
+        {"variant_id": "JCP-WOR-1009-IVY-L", "color": "Ivory", "size": "L", "stock": 0}
+      ]
+    },
+    {
+      "sku": "JCP-SJB-1010",
+      "name": "St. John's Bay Sleeveless Knit Tank Dress",
+      "brand": "St. John's Bay",
+      "category": "Casual Dress",
+      "description": "Effortless sleeveless tank dress in a soft knit, ideal for layering or wearing solo.",
+      "list_price": 28.0,
+      "sale_price": 17.99,
+      "rating": 4.3,
+      "review_count": 205,
+      "colors": ["Black", "Stripe", "Mustard"],
+      "sizes": ["S", "M", "L", "XL", "XXL"],
+      "material": "92% Rayon, 8% Spandex",
+      "variants": [
+        {"variant_id": "JCP-SJB-1010-BLK-L", "color": "Black", "size": "L", "stock": 27},
+        {"variant_id": "JCP-SJB-1010-STR-M", "color": "Stripe", "size": "M", "stock": 12},
+        {"variant_id": "JCP-SJB-1010-MUS-S", "color": "Mustard", "size": "S", "stock": 4}
+      ]
+    }
+  ],
+  "customers": [
+    {
+      "customer_id": "CUST-1001",
+      "email": "demo@goopher.app",
+      "name": "Demo Shopper",
+      "password_hash": "demo",
+      "loyalty_tier": "Gold",
+      "preferred_language": "en"
+    },
+    {
+      "customer_id": "CUST-1002",
+      "email": "maria@example.com",
+      "name": "Maria García",
+      "password_hash": "demo",
+      "loyalty_tier": "Silver",
+      "preferred_language": "es"
+    }
+  ],
+  "orders": [
+    {
+      "order_id": "ORD-50001",
+      "customer_id": "CUST-1001",
+      "status": "Delivered",
+      "order_date": "2026-05-10",
+      "estimated_delivery": "2026-05-15",
+      "delivered_date": "2026-05-14",
+      "tracking_number": "1Z999AA10123456784",
+      "carrier": "UPS",
+      "shipping_address": "123 Demo St, Plano, TX 75024",
+      "items": [
+        {"variant_id": "JCP-ANA-1001-NVY-M", "name": "a.n.a Short Sleeve Tiered Midi Dress", "color": "Navy", "size": "M", "qty": 1, "unit_price": 29.99}
+      ],
+      "total": 29.99
+    },
+    {
+      "order_id": "ORD-50002",
+      "customer_id": "CUST-1001",
+      "status": "Shipped",
+      "order_date": "2026-05-26",
+      "estimated_delivery": "2026-06-02",
+      "delivered_date": null,
+      "tracking_number": "1Z999AA10123456999",
+      "carrier": "UPS",
+      "shipping_address": "123 Demo St, Plano, TX 75024",
+      "items": [
+        {"variant_id": "JCP-WOR-1003-EMR-M", "name": "Worthington Sleeveless Wrap Dress", "color": "Emerald", "size": "M", "qty": 1, "unit_price": 41.99},
+        {"variant_id": "JCP-SJB-1004-GRY-M", "name": "St. John's Bay Short Sleeve T-Shirt Dress", "color": "Heather Gray", "size": "M", "qty": 2, "unit_price": 19.99}
+      ],
+      "total": 81.97
+    },
+    {
+      "order_id": "ORD-50003",
+      "customer_id": "CUST-1001",
+      "status": "Processing",
+      "order_date": "2026-05-30",
+      "estimated_delivery": "2026-06-06",
+      "delivered_date": null,
+      "tracking_number": null,
+      "carrier": null,
+      "shipping_address": "123 Demo St, Plano, TX 75024",
+      "items": [
+        {"variant_id": "JCP-RYE-1006-BLK-L", "name": "Ryegrass Smocked Tiered Maxi Dress", "color": "Black", "size": "L", "qty": 1, "unit_price": 44.99}
+      ],
+      "total": 44.99
+    },
+    {
+      "order_id": "ORD-50004",
+      "customer_id": "CUST-1002",
+      "status": "Cancelled",
+      "order_date": "2026-05-20",
+      "estimated_delivery": null,
+      "delivered_date": null,
+      "tracking_number": null,
+      "carrier": null,
+      "shipping_address": "456 Calle Sol, Miami, FL 33101",
+      "items": [
+        {"variant_id": "JCP-LIZ-1002-CRF-L", "name": "Liz Claiborne Short Sleeve Floral Shift Dress", "color": "Coral Floral", "size": "L", "qty": 1, "unit_price": 38.99}
+      ],
+      "total": 38.99
+    }
+  ]
+}

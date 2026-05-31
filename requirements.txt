@@ -1,0 +1,26 @@
+# --- Core runtime ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+PyJWT==2.10.1
+python-multipart==0.0.20
+
+# --- LLM (Gemini free tier, T6) ---
+google-generativeai==0.8.3
+
+# --- ADK orchestrator (T2) ---
+google-adk==1.2.1
+
+# --- MCP tools (T5) ---
+mcp==1.2.0
+
+# --- Google Cloud free tier: Firestore + observability (T7, T10) ---
+google-cloud-firestore==2.20.0
+opentelemetry-sdk==1.29.0
+opentelemetry-exporter-gcp-trace==1.9.0
+
+# --- Tests & evals (T8, T9) ---
+pytest==8.3.4
+pytest-asyncio==0.25.2
+httpx==0.28.1

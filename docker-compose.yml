@@ -1,0 +1,18 @@
+# Local one-command run of the GOOPHER backend (mirrors the Cloud Run container).
+#   docker compose up --build
+# Then load the extension and point extension/config.js at http://localhost:8080
+services:
+  goopher-api:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      ENVIRONMENT: local
+      DB_BACKEND: sqlite
+      ENABLE_TRACING: "true"
+      OTEL_EXPORTER: console
+      # Set your Gemini free-tier key to enable the live LLM path:
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GEMINI_MODEL: gemini-2.0-flash
+      JWT_SECRET: local-dev-secret
+    restart: unless-stopped

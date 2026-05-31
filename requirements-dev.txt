@@ -1,0 +1,5 @@
+# Minimal dependency set to run unit tests & evals WITHOUT the heavy
+# ADK/MCP/GCP packages. The app is written to degrade gracefully to its
+# deterministic fallback engine when these optional packages are absent,
+# so CI can validate core logic fast and offline.
+-r requirements.txt

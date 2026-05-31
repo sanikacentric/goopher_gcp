@@ -90,9 +90,9 @@ def main() -> int:
     print(f"Aggregate: {n_pass}/{n} = {score:.0%}  (threshold {THRESHOLD:.0%})")
 
     if score < THRESHOLD:
-        print("RESULT: BELOW THRESHOLD ❌")
+        print("RESULT: BELOW THRESHOLD [FAIL]")
         return 1
-    print("RESULT: PASS ✅")
+    print("RESULT: PASS [OK]")
     return 0
 
 

@@ -6,6 +6,7 @@ __pycache__/
 venv/
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
 
 # Local DB / secrets
 *.db
@@ -22,3 +23,6 @@ Thumbs.db
 *-key.json
 service-account*.json
 gcloud-key.json
+
+# Editor/harness local
+.claude/

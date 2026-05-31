@@ -199,7 +199,11 @@ class AgentService:
             + language_agent.language_directive(language)
             + f"\nThe signed-in customer_id is {customer_id}."
         )
-        if self._adk_ready:
+        # Choose the generation path. By default we use the grounded
+        # "tools + Gemini phrasing" path (reliable: it always routes to the right
+        # tool and never refuses/hallucinates, while still using Gemini for the
+        # reply). The raw ADK multi-agent path is opt-in via USE_ADK_PATH=true.
+        if self._adk_ready and _settings.use_adk_path:
             try:
                 return self._generate_adk(session_id, text, customer_id, directives)
             except Exception as exc:

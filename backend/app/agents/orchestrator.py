@@ -23,7 +23,7 @@ language, channel, and modality logic, and are fully traced.
 """
 from __future__ import annotations
 
-from ..config import get_settings
+from ..config import BACKEND_DIR, get_settings
 from ..memory.memory_agent import Turn, get_memory_store
 from ..models.schemas import ChatRequest, ChatResponse
 from ..observability.telemetry import incr, log_event, span
@@ -62,6 +62,45 @@ Multi-agent workflow (ALWAYS, so each specialist is invoked and observable):
 
 
 # --------------------------------------------------------------------------- #
+# MCP tools (real Model Context Protocol transport)
+# --------------------------------------------------------------------------- #
+def _build_mcp_tools():
+    """
+    Connect to the GOOPHER MCP server (backend/app/mcp/server.py) over stdio and
+    expose its tools to the agent via an ADK MCPToolset. Returns the toolset (a
+    list-like of MCP tools) or None if MCP can't be set up (caller then falls
+    back to in-process functions).
+
+    Because this launches the MCP server as a subprocess, tool calls genuinely
+    traverse the MCP protocol and appear as MCP tool invocations in traces.
+    """
+    import sys
+
+    try:
+        from google.adk.tools.mcp_tool.mcp_toolset import (
+            MCPToolset,
+            StdioConnectionParams,
+        )
+        from mcp import StdioServerParameters
+
+        toolset = MCPToolset(
+            connection_params=StdioConnectionParams(
+                server_params=StdioServerParameters(
+                    command=sys.executable,
+                    args=["-m", "backend.app.mcp.server"],
+                    cwd=str(BACKEND_DIR.parent),
+                ),
+                timeout=30,
+            )
+        )
+        log_event("mcp_toolset_init", server="backend.app.mcp.server")
+        return [toolset]
+    except Exception as exc:
+        log_event("mcp_toolset_unavailable", reason=str(exc))
+        return None
+
+
+# --------------------------------------------------------------------------- #
 # ADK agent tree
 # --------------------------------------------------------------------------- #
 def build_root_agent():
@@ -97,9 +136,15 @@ def build_root_agent():
     language_tool = AgentTool(agent=language_agent.build_adk_agent(model))
     channel_tool = AgentTool(agent=channel_agent.build_adk_agent(model))
 
-    # Tools = the specialist agents + the inventory/order (MCP-backed) tools.
-    tools = [modality_tool, language_tool, channel_tool] + \
-        inventory_skill.get_tools() + order_skill.get_tools()
+    # Inventory/order tools: either over the real MCP protocol (use_mcp_tools)
+    # or as in-process functions. MCP launches backend/app/mcp/server.py as a
+    # stdio server so calls genuinely traverse MCP; on any failure we fall back
+    # to the in-process functions so the service still works.
+    retail_tools = _build_mcp_tools() if _settings.use_mcp_tools else None
+    if retail_tools is None:
+        retail_tools = inventory_skill.get_tools() + order_skill.get_tools()
+
+    tools = [modality_tool, language_tool, channel_tool] + retail_tools
 
     root = LlmAgent(
         name="goopher_orchestrator",

@@ -30,8 +30,8 @@ steps:
       - --allow-unauthenticated
       - --min-instances=0
       - --max-instances=2
-      - --memory=512Mi
-      - --set-env-vars=ENVIRONMENT=production,DB_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,OTEL_EXPORTER=gcp,LLM_PROVIDER=gemini,USE_ADK_PATH=true,USE_VERTEXAI=true,VERTEX_LOCATION=${_REGION},GEMINI_MODEL=gemini-2.5-flash,OPENAI_API_KEY=${_OPENAI_API_KEY},JWT_SECRET=${_JWT_SECRET}
+      - --memory=1Gi
+      - --set-env-vars=ENVIRONMENT=production,DB_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,OTEL_EXPORTER=gcp,LLM_PROVIDER=gemini,USE_ADK_PATH=true,USE_VERTEXAI=true,USE_MCP_TOOLS=true,VERTEX_LOCATION=${_REGION},GEMINI_MODEL=gemini-2.5-flash,OPENAI_API_KEY=${_OPENAI_API_KEY},JWT_SECRET=${_JWT_SECRET}
 
 images:
   - gcr.io/$PROJECT_ID/${_SERVICE}:$BUILD_ID

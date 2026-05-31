@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "PowerShell(Get-ChildItem -Force C:\\\\Users\\\\saisa\\\\git-local\\\\goopher | Select-Object Name, Length; Write-Output \"---PYTHON---\"; \\(Get-Command python -ErrorAction SilentlyContinue\\).Source; python --version; Write-Output \"---GIT---\"; git -C C:\\\\Users\\\\saisa\\\\git-local\\\\goopher status 2>$null; Write-Output \"---NODE---\"; node --version 2>$null; Write-Output \"---DOCKER---\"; docker --version 2>$null)"
-    ]
-  }
-}

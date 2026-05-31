@@ -119,7 +119,9 @@ function showLogin() {
 }
 
 // ---- core send ----
-async function send(text, attachments) {
+// `viaVoice` is true ONLY when the question came from the microphone. We speak
+// the answer aloud just for voice questions; typed questions stay text-only.
+async function send(text, attachments, viaVoice = false) {
   const channel = els.channel.value;
   const language = els.language.value;
 
@@ -134,9 +136,9 @@ async function send(text, attachments) {
     hideTyping();
     const meta = `${resp.channel} · ${resp.language}${resp.used_tools?.length ? " · " + resp.used_tools.join(",") : ""}`;
     addMessage(resp.reply, "bot", meta);
-    // Speak the answer aloud whenever the 🔊 toggle is on, OR on the phone
-    // (voice) channel. Uses Google's text-to-speech voices via the browser.
-    if (els.speakToggle?.checked || channel === "phone") {
+    // Speak ONLY when the question was asked by voice (mic) and the 🔊 toggle is
+    // on. Typed questions on the web channel are never spoken aloud.
+    if (viaVoice && els.speakToggle?.checked) {
       speak(resp.reply, resp.language);
     }
   } catch (err) {
@@ -171,10 +173,16 @@ function setupMic() {
   }
 
   // Receive the transcript relayed from the mic popup, then send it as a chat.
+  // De-dupe: the popup may emit more than one "final" result for one utterance,
+  // and chrome.runtime broadcasts can arrive more than once — guard so a single
+  // spoken question produces exactly one answer.
+  let lastVoiceMsgId = null;
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg?.type === "goopher_transcript" && msg.transcript) {
+      if (msg.id && msg.id === lastVoiceMsgId) return; // duplicate delivery
+      lastVoiceMsgId = msg.id || null;
       els.messageInput.value = msg.transcript;
-      send(msg.transcript, []);
+      send(msg.transcript, [], /* viaVoice */ true); // speak the answer
     }
   });
 

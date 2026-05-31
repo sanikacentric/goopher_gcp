@@ -55,6 +55,19 @@ async function run() {
   recognition.interimResults = true;
   recognition.maxAlternatives = 1;
 
+  // Guard so we relay exactly ONE transcript per session (the recognizer can
+  // fire multiple final results / the onend can race), preventing double answers.
+  let sent = false;
+  const relayOnce = (transcript) => {
+    if (sent) return;
+    sent = true;
+    relayAndClose({
+      type: "goopher_transcript",
+      transcript: transcript.trim(),
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    });
+  };
+
   recognition.onstart = () => {
     dot.classList.add("live");
     setStatus("Listening… speak now");
@@ -64,7 +77,8 @@ async function run() {
     const transcript = result[0].transcript;
     setStatus("“" + transcript + "”");
     if (result.isFinal) {
-      relayAndClose({ type: "goopher_transcript", transcript: transcript.trim() });
+      recognition.stop();        // stop capturing once we have the final result
+      relayOnce(transcript);     // relay exactly once
     }
   };
   recognition.onerror = (e) => {

@@ -1,5 +1,13 @@
 # Minimal dependency set to run unit tests & evals WITHOUT the heavy
-# ADK/MCP/GCP packages. The app is written to degrade gracefully to its
-# deterministic fallback engine when these optional packages are absent,
-# so CI can validate core logic fast and offline.
--r requirements.txt
+# ADK / MCP / Google Cloud packages. The app degrades gracefully to its
+# deterministic template engine when those optional packages/keys are absent,
+# so CI validates the core logic fast and offline (no cloud, no LLM key).
+fastapi>=0.115
+uvicorn[standard]>=0.34
+pydantic>=2.10
+pydantic-settings>=2.7
+PyJWT>=2.10
+python-multipart>=0.0.20
+pytest>=8.3
+pytest-asyncio>=0.25
+httpx>=0.28

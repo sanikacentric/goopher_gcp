@@ -5,13 +5,18 @@
 #   2) deploy — runs on push to main IF the GCP secrets are configured. Builds the
 #               Docker image (T16) and deploys to Cloud Run (free tier, T14).
 #
-# Required repository secrets for deploy:
-#   GCP_PROJECT_ID            your Google Cloud project id
-#   GCP_SA_KEY                JSON key of a deployer service account
-#   GOOGLE_API_KEY            Gemini API key (free tier) — set as a Cloud Run env var
+# Required repository secrets for deploy (Settings → Secrets and variables →
+# Actions → New repository secret):
+#   GCP_PROJECT_ID   your Google Cloud project id (e.g. sanika-project-2107)
+#   GCP_SA_KEY       JSON key of a deployer service account (see README/scripts)
+#   JWT_SECRET       a long random string for signing auth tokens
+# Optional:
+#   GOOGLE_API_KEY   AI Studio Gemini key (NOT needed when using Vertex AI, which
+#                    this workflow does via USE_VERTEXAI=true)
+#   OPENAI_API_KEY   only if you also want the OpenAI fallback available in cloud
 #
-# If the secrets are absent (e.g. on a fork), the deploy job is skipped and CI
-# still passes on the test job.
+# If GCP_SA_KEY / GCP_PROJECT_ID are absent (e.g. on a fork), the deploy job is
+# skipped and CI still passes on the test job.
 
 name: goopher-cicd
 
@@ -32,21 +37,27 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - name: Install dependencies (minimal — tests run offline)
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
       - name: Run unit tests (T9)
         env:
           DB_BACKEND: sqlite
           ENABLE_TRACING: "false"
+          GOOGLE_API_KEY: ""
+          OPENAI_API_KEY: ""
+          LLM_PROVIDER: "none"
         run: pytest -q
 
       - name: Run evals (T8)
         env:
           DB_BACKEND: sqlite
           ENABLE_TRACING: "false"
+          GOOGLE_API_KEY: ""
+          OPENAI_API_KEY: ""
+          LLM_PROVIDER: "none"
         run: python evals/run_evals.py
 
   deploy:
@@ -100,6 +111,18 @@ jobs:
             --cpu 1 \
             --set-env-vars "ENVIRONMENT=production,DB_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},OTEL_EXPORTER=gcp,LLM_PROVIDER=gemini,USE_ADK_PATH=true,USE_VERTEXAI=true,USE_MCP_TOOLS=true,VERTEX_LOCATION=us-central1,GEMINI_MODEL=gemini-2.5-flash,OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }},JWT_SECRET=${{ secrets.JWT_SECRET }}"
 
+      - name: Allow public access (run.invoker for allUsers)
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          gcloud run services add-iam-policy-binding "$SERVICE" \
+            --region "$REGION" \
+            --member="allUsers" \
+            --role="roles/run.invoker" || \
+            echo "::warning::Could not add allUsers invoker (org policy?). Service may require auth."
+
       - name: Show service URL
         if: steps.gate.outputs.ready == 'true'
-        run: gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)'
+        run: |
+          URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
+          echo "Deployed: $URL"
+          echo "### 🚀 GOOPHER deployed: [$URL]($URL)" >> "$GITHUB_STEP_SUMMARY"

@@ -27,6 +27,16 @@ gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
 gcloud iam service-accounts create "${SA_NAME}" \
   --display-name="GOOPHER CI/CD deployer" 2>/dev/null || true
 
+# Wait until the SA is actually visible (IAM is eventually consistent — binding
+# roles too soon fails with "service account does not exist").
+echo "Waiting for service account to propagate..."
+for i in $(seq 1 30); do
+  if gcloud iam service-accounts describe "${SA_EMAIL}" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 2
+done
+
 # 3. Grant the roles the pipeline needs: build, push, deploy, act-as runtime SA.
 for ROLE in \
   roles/run.admin \

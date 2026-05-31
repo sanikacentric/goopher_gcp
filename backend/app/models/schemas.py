@@ -22,6 +22,9 @@ class Variant(BaseModel):
 
 
 class Product(BaseModel):
+    # "Clothing" or "Food" — lets the agent and storefront group items by aisle.
+    # Optional with a default so older/clothing-only data still validates.
+    department: str = "Clothing"
     sku: str
     name: str
     brand: str
@@ -31,9 +34,10 @@ class Product(BaseModel):
     sale_price: float
     rating: float
     review_count: int
+    # For clothing these are colors/sizes; for food they hold flavors/pack sizes.
     colors: list[str]
     sizes: list[str]
-    material: str
+    material: str  # for food this carries the key ingredients/notes
     variants: list[Variant]
 
 

@@ -79,11 +79,15 @@ calling). Without one, it falls back to the deterministic engine.
 2. (If needed) generate icons: `python extension/icons/generate_icons.py`.
 3. Open **chrome://extensions** → enable **Developer mode** → **Load unpacked**
    → select the [`extension/`](extension/) folder.
-4. Click the **GOOPHER** toolbar icon to open the side panel.
-5. Sign in with the demo account: **`demo@goopher.app` / `demo`**.
+4. Open the **storefront** at **http://localhost:8080/** to browse the two
+   departments (Clothing + Food).
+5. Click the **GOOPHER** toolbar icon to open the side panel (it works on the
+   storefront and any page).
+6. Sign in with the demo account: **`demo@goopher.app` / `demo`**.
 
-Try:
+Try (clothing **and** food):
 - *"show me black casual dresses under $45"*
+- *"do you have barbecue chips?"* · *"how much are oreos?"*
 - *"is JCP-ANA-1001-NVY-S in stock?"*
 - *"where is my order ORD-50002?"*  →  switch **Channel** to *Phone* and ask again
 - *"Hola, ¿dónde está mi pedido ORD-50001?"*  (multi-lingual)

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GOOPHER Store — Clothing & Food</title>
+    <link rel="stylesheet" href="store.css" />
+  </head>
+  <body>
+    <!-- ===================== HEADER ===================== -->
+    <header class="store-header">
+      <div class="brand">
+        <span class="brand-logo">🛍️</span>
+        <div>
+          <div class="brand-name">GOOPHER STORE</div>
+          <div class="brand-tag">Clothing &amp; Food · one assistant for everything</div>
+        </div>
+      </div>
+      <nav class="dept-nav">
+        <a href="#Clothing">Clothing</a>
+        <a href="#Food">Food &amp; Snacks</a>
+      </nav>
+    </header>
+
+    <!-- ===================== HERO ===================== -->
+    <section class="hero">
+      <h1>Shop clothing &amp; food, helped by <span>GOOPHER</span></h1>
+      <p>
+        Browse the catalog below, then open the <strong>GOOPHER</strong> Chrome
+        extension (side panel) to ask about availability, prices, and your
+        orders — in any language, on web or phone.
+      </p>
+      <div class="hero-howto">
+        <span class="step">1 · Click the GOOPHER icon in your Chrome toolbar</span>
+        <span class="step">2 · Sign in (demo@goopher.app / demo)</span>
+        <span class="step">3 · Ask: “do you have barbecue chips?” or “where is ORD-50002?”</span>
+      </div>
+    </section>
+
+    <!-- ===================== CATALOG (filled by store.js) ===================== -->
+    <main id="catalog" class="catalog">
+      <p class="loading">Loading catalog…</p>
+    </main>
+
+    <footer class="store-footer">
+      <p>
+        Synthetic demo data — not affiliated with any retailer. Powered by the
+        GOOPHER conversational agent (ADK + Gemini + MCP).
+      </p>
+    </footer>
+
+    <script src="store.js"></script>
+  </body>
+</html>

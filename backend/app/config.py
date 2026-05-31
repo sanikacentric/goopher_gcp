@@ -15,7 +15,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Repo paths (resolved relative to this file so they work in any CWD / container).
 APP_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = APP_DIR.parent
-DATA_FILE = BACKEND_DIR / "data" / "jcpenney_casual_dresses.json"
+DATA_FILE = BACKEND_DIR / "data" / "goopher_catalog.json"
 
 
 class Settings(BaseSettings):

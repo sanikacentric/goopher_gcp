@@ -88,12 +88,40 @@ class Repository(ABC):
         """
         import re
 
-        tokens = [t for t in re.findall(r"[a-z0-9]+", query.lower())
-                  if t not in self._STOPWORDS and len(t) > 1]
+        raw_tokens = [t for t in re.findall(r"[a-z0-9]+", query.lower())
+                      if t not in self._STOPWORDS and len(t) > 1]
+
+        # Expand each token with a naive singular form so plural queries match,
+        # e.g. "oreos" -> also try "oreo", "cookies" -> "cookie", "chips" ->
+        # "chip". We keep BOTH forms; matching the haystack on either counts.
+        def singularize(word: str) -> str:
+            if word.endswith("ies") and len(word) > 4:
+                return word[:-3] + "y"
+            if word.endswith("es") and len(word) > 4:
+                return word[:-2]
+            if word.endswith("s") and not word.endswith("ss") and len(word) > 3:
+                return word[:-1]
+            return word
+
+        tokens: list[str] = []
+        for t in raw_tokens:
+            tokens.append(t)
+            s = singularize(t)
+            if s != t:
+                tokens.append(s)
+        # De-dupe while preserving order.
+        tokens = list(dict.fromkeys(tokens))
 
         scored: list[tuple[int, Product]] = []
         for p in self.list_products():
-            haystack = f"{p.name} {p.brand} {p.description} {p.material}".lower()
+            # Include colors/options and sizes in the searchable text so keyword
+            # queries like "black dress" or "barbecue chips" match — these live
+            # in separate fields but a shopper types them as plain keywords.
+            haystack = " ".join([
+                p.name, p.brand, p.description, p.material,
+                p.department, p.category,
+                " ".join(p.colors), " ".join(p.sizes),
+            ]).lower()
 
             # Facet filters (applied regardless of free-text query).
             if color and color.lower() not in [c.lower() for c in p.colors]:

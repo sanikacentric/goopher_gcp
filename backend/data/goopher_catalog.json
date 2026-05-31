@@ -1,0 +1,334 @@
+{
+  "_meta": {
+    "source": "Mock multi-department retail catalog for the GOOPHER demo: women's casual clothing + food/snacks.",
+    "disclaimer": "This is SYNTHETIC/representative data for demo purposes only. It is NOT scraped from any retailer and does not reflect real pricing or stock. Brand names are used solely to make the demo realistic.",
+    "departments": ["Clothing", "Food"],
+    "currency": "USD",
+    "generated_for": "GOOPHER conversational retail agent demo"
+  },
+  "products": [
+    {
+      "department": "Clothing",
+      "sku": "JCP-ANA-1001",
+      "name": "a.n.a Short Sleeve Tiered Midi Dress",
+      "brand": "a.n.a",
+      "category": "Casual Dress",
+      "description": "Soft jersey knit midi dress with a relaxed tiered skirt and short sleeves. Everyday casual fit.",
+      "list_price": 44.0,
+      "sale_price": 29.99,
+      "rating": 4.5,
+      "review_count": 312,
+      "colors": ["Navy", "Black", "Dusty Rose"],
+      "sizes": ["XS", "S", "M", "L", "XL", "XXL"],
+      "material": "95% Rayon, 5% Spandex",
+      "variants": [
+        {"variant_id": "JCP-ANA-1001-NVY-S", "color": "Navy", "size": "S", "stock": 14},
+        {"variant_id": "JCP-ANA-1001-NVY-M", "color": "Navy", "size": "M", "stock": 7},
+        {"variant_id": "JCP-ANA-1001-BLK-M", "color": "Black", "size": "M", "stock": 0},
+        {"variant_id": "JCP-ANA-1001-BLK-L", "color": "Black", "size": "L", "stock": 22},
+        {"variant_id": "JCP-ANA-1001-DRS-S", "color": "Dusty Rose", "size": "S", "stock": 3}
+      ]
+    },
+    {
+      "department": "Clothing",
+      "sku": "JCP-WOR-1003",
+      "name": "Worthington Sleeveless Wrap Dress",
+      "brand": "Worthington",
+      "category": "Casual Dress",
+      "description": "Versatile sleeveless wrap dress that transitions from office casual to weekend brunch.",
+      "list_price": 60.0,
+      "sale_price": 41.99,
+      "rating": 4.6,
+      "review_count": 421,
+      "colors": ["Black", "Emerald", "Burgundy"],
+      "sizes": ["XS", "S", "M", "L", "XL"],
+      "material": "96% Polyester, 4% Spandex",
+      "variants": [
+        {"variant_id": "JCP-WOR-1003-BLK-XS", "color": "Black", "size": "XS", "stock": 6},
+        {"variant_id": "JCP-WOR-1003-BLK-S", "color": "Black", "size": "S", "stock": 18},
+        {"variant_id": "JCP-WOR-1003-EMR-M", "color": "Emerald", "size": "M", "stock": 12},
+        {"variant_id": "JCP-WOR-1003-BUR-L", "color": "Burgundy", "size": "L", "stock": 2}
+      ]
+    },
+    {
+      "department": "Clothing",
+      "sku": "JCP-SJB-1004",
+      "name": "St. John's Bay Short Sleeve T-Shirt Dress",
+      "brand": "St. John's Bay",
+      "category": "Casual Dress",
+      "description": "Easy-wearing cotton-blend t-shirt dress with a comfortable straight fit and side pockets.",
+      "list_price": 30.0,
+      "sale_price": 19.99,
+      "rating": 4.4,
+      "review_count": 540,
+      "colors": ["Heather Gray", "Olive", "Navy", "White"],
+      "sizes": ["S", "M", "L", "XL", "XXL"],
+      "material": "60% Cotton, 40% Polyester",
+      "variants": [
+        {"variant_id": "JCP-SJB-1004-GRY-M", "color": "Heather Gray", "size": "M", "stock": 31},
+        {"variant_id": "JCP-SJB-1004-OLV-L", "color": "Olive", "size": "L", "stock": 16},
+        {"variant_id": "JCP-SJB-1004-NVY-S", "color": "Navy", "size": "S", "stock": 0},
+        {"variant_id": "JCP-SJB-1004-WHT-XL", "color": "White", "size": "XL", "stock": 8}
+      ]
+    },
+    {
+      "department": "Clothing",
+      "sku": "JCP-RYE-1006",
+      "name": "Ryegrass Smocked Tiered Maxi Dress",
+      "brand": "Ryegrass",
+      "category": "Casual Dress",
+      "description": "Flowy smocked-bodice maxi dress with adjustable straps and a breezy tiered skirt.",
+      "list_price": 64.0,
+      "sale_price": 44.99,
+      "rating": 4.7,
+      "review_count": 263,
+      "colors": ["Sage", "Terracotta", "Black"],
+      "sizes": ["XS", "S", "M", "L", "XL"],
+      "material": "100% Rayon",
+      "variants": [
+        {"variant_id": "JCP-RYE-1006-SGE-S", "color": "Sage", "size": "S", "stock": 10},
+        {"variant_id": "JCP-RYE-1006-SGE-M", "color": "Sage", "size": "M", "stock": 0},
+        {"variant_id": "JCP-RYE-1006-TRC-M", "color": "Terracotta", "size": "M", "stock": 7},
+        {"variant_id": "JCP-RYE-1006-BLK-L", "color": "Black", "size": "L", "stock": 19}
+      ]
+    },
+    {
+      "department": "Clothing",
+      "sku": "JCP-JSS-1011",
+      "name": "JS Jessica Simpson Womens Midi Sleeveless A-Line Dress",
+      "brand": "Jessica Simpson",
+      "category": "Casual Dress",
+      "description": "Sleeveless A-line midi dress with a button-front bodice, self-tie waist, and roll-tab detail. A relaxed denim-inspired look for everyday casual wear.",
+      "list_price": 99.5,
+      "sale_price": 47.76,
+      "rating": 4.5,
+      "review_count": 2,
+      "colors": ["Medium Wash", "Chambray Blue"],
+      "sizes": ["XS", "S", "M", "L", "XL"],
+      "material": "100% Cotton",
+      "variants": [
+        {"variant_id": "JCP-JSS-1011-MDW-S", "color": "Medium Wash", "size": "S", "stock": 12},
+        {"variant_id": "JCP-JSS-1011-MDW-M", "color": "Medium Wash", "size": "M", "stock": 8},
+        {"variant_id": "JCP-JSS-1011-MDW-L", "color": "Medium Wash", "size": "L", "stock": 3},
+        {"variant_id": "JCP-JSS-1011-CHB-M", "color": "Chambray Blue", "size": "M", "stock": 5},
+        {"variant_id": "JCP-JSS-1011-CHB-XL", "color": "Chambray Blue", "size": "XL", "stock": 0}
+      ]
+    },
+    {
+      "department": "Food",
+      "sku": "FOOD-LAY-2001",
+      "name": "Lay's Classic Potato Chips",
+      "brand": "Lay's",
+      "category": "Snacks",
+      "description": "Crispy, lightly salted classic potato chips. Made with three simple ingredients. Perfect for lunchboxes and game day.",
+      "list_price": 4.49,
+      "sale_price": 3.29,
+      "rating": 4.7,
+      "review_count": 1894,
+      "colors": ["Classic", "Barbecue", "Sour Cream & Onion"],
+      "sizes": ["Single 1.5oz", "Party 13oz"],
+      "material": "Potatoes, vegetable oil, salt",
+      "variants": [
+        {"variant_id": "FOOD-LAY-2001-CLA-SGL", "color": "Classic", "size": "Single 1.5oz", "stock": 120},
+        {"variant_id": "FOOD-LAY-2001-CLA-PTY", "color": "Classic", "size": "Party 13oz", "stock": 64},
+        {"variant_id": "FOOD-LAY-2001-BBQ-PTY", "color": "Barbecue", "size": "Party 13oz", "stock": 0},
+        {"variant_id": "FOOD-LAY-2001-SCO-SGL", "color": "Sour Cream & Onion", "size": "Single 1.5oz", "stock": 38}
+      ]
+    },
+    {
+      "department": "Food",
+      "sku": "FOOD-ORE-2002",
+      "name": "Oreo Original Chocolate Sandwich Cookies",
+      "brand": "Oreo",
+      "category": "Snacks",
+      "description": "The classic chocolate wafer cookies with a sweet vanilla creme filling. Twist, lick, and dunk.",
+      "list_price": 5.29,
+      "sale_price": 3.99,
+      "rating": 4.9,
+      "review_count": 3120,
+      "colors": ["Original", "Double Stuf", "Golden"],
+      "sizes": ["Family 18.7oz", "Snack Pack 5.25oz"],
+      "material": "Wheat flour, sugar, cocoa, palm oil",
+      "variants": [
+        {"variant_id": "FOOD-ORE-2002-ORG-FAM", "color": "Original", "size": "Family 18.7oz", "stock": 88},
+        {"variant_id": "FOOD-ORE-2002-DBL-FAM", "color": "Double Stuf", "size": "Family 18.7oz", "stock": 41},
+        {"variant_id": "FOOD-ORE-2002-GLD-SNK", "color": "Golden", "size": "Snack Pack 5.25oz", "stock": 26}
+      ]
+    },
+    {
+      "department": "Food",
+      "sku": "FOOD-PLT-2003",
+      "name": "Planters Dry Roasted Salted Peanuts",
+      "brand": "Planters",
+      "category": "Snacks",
+      "description": "Crunchy dry-roasted peanuts with sea salt. A protein-packed snack with no added oil.",
+      "list_price": 4.99,
+      "sale_price": 4.49,
+      "rating": 4.6,
+      "review_count": 742,
+      "colors": ["Salted", "Lightly Salted", "Honey Roasted"],
+      "sizes": ["Jar 16oz"],
+      "material": "Peanuts, sea salt",
+      "variants": [
+        {"variant_id": "FOOD-PLT-2003-SLT-16", "color": "Salted", "size": "Jar 16oz", "stock": 53},
+        {"variant_id": "FOOD-PLT-2003-HON-16", "color": "Honey Roasted", "size": "Jar 16oz", "stock": 9}
+      ]
+    },
+    {
+      "department": "Food",
+      "sku": "FOOD-COC-2004",
+      "name": "Coca-Cola Classic Soda",
+      "brand": "Coca-Cola",
+      "category": "Beverages",
+      "description": "The original sparkling cola with that crisp, refreshing taste. Best served ice cold.",
+      "list_price": 6.99,
+      "sale_price": 5.49,
+      "rating": 4.8,
+      "review_count": 2567,
+      "colors": ["Classic", "Zero Sugar", "Cherry"],
+      "sizes": ["12-pack 12oz cans", "2L bottle"],
+      "material": "Carbonated water, cane sugar, caffeine",
+      "variants": [
+        {"variant_id": "FOOD-COC-2004-CLA-12P", "color": "Classic", "size": "12-pack 12oz cans", "stock": 75},
+        {"variant_id": "FOOD-COC-2004-ZRO-12P", "color": "Zero Sugar", "size": "12-pack 12oz cans", "stock": 60},
+        {"variant_id": "FOOD-COC-2004-CHR-2L", "color": "Cherry", "size": "2L bottle", "stock": 0}
+      ]
+    },
+    {
+      "department": "Food",
+      "sku": "FOOD-CHZ-2005",
+      "name": "Cheez-It Original Baked Snack Crackers",
+      "brand": "Cheez-It",
+      "category": "Snacks",
+      "description": "Baked snack crackers made with 100% real cheese for a bold, crunchy bite.",
+      "list_price": 4.79,
+      "sale_price": 3.49,
+      "rating": 4.8,
+      "review_count": 1356,
+      "colors": ["Original", "White Cheddar", "Extra Toasty"],
+      "sizes": ["Box 12.4oz", "Snack 3oz"],
+      "material": "Enriched flour, cheese, vegetable oil",
+      "variants": [
+        {"variant_id": "FOOD-CHZ-2005-ORG-BOX", "color": "Original", "size": "Box 12.4oz", "stock": 47},
+        {"variant_id": "FOOD-CHZ-2005-WCH-BOX", "color": "White Cheddar", "size": "Box 12.4oz", "stock": 18},
+        {"variant_id": "FOOD-CHZ-2005-ETY-SNK", "color": "Extra Toasty", "size": "Snack 3oz", "stock": 5}
+      ]
+    },
+    {
+      "department": "Food",
+      "sku": "FOOD-KND-2006",
+      "name": "KIND Dark Chocolate Nuts & Sea Salt Bars",
+      "brand": "KIND",
+      "category": "Snacks",
+      "description": "Gluten-free snack bars made with whole almonds and peanuts, drizzled with dark chocolate and a touch of sea salt.",
+      "list_price": 7.99,
+      "sale_price": 6.49,
+      "rating": 4.7,
+      "review_count": 988,
+      "colors": ["Dark Chocolate Nuts & Sea Salt", "Caramel Almond"],
+      "sizes": ["6-bar box", "12-bar box"],
+      "material": "Almonds, peanuts, dark chocolate, sea salt",
+      "variants": [
+        {"variant_id": "FOOD-KND-2006-DCN-6", "color": "Dark Chocolate Nuts & Sea Salt", "size": "6-bar box", "stock": 34},
+        {"variant_id": "FOOD-KND-2006-CAR-12", "color": "Caramel Almond", "size": "12-bar box", "stock": 11}
+      ]
+    }
+  ],
+  "customers": [
+    {
+      "customer_id": "CUST-1001",
+      "email": "demo@goopher.app",
+      "name": "Demo Shopper",
+      "password_hash": "demo",
+      "loyalty_tier": "Gold",
+      "preferred_language": "en"
+    },
+    {
+      "customer_id": "CUST-1002",
+      "email": "maria@example.com",
+      "name": "Maria García",
+      "password_hash": "demo",
+      "loyalty_tier": "Silver",
+      "preferred_language": "es"
+    }
+  ],
+  "orders": [
+    {
+      "order_id": "ORD-50001",
+      "customer_id": "CUST-1001",
+      "status": "Delivered",
+      "order_date": "2026-05-10",
+      "estimated_delivery": "2026-05-15",
+      "delivered_date": "2026-05-14",
+      "tracking_number": "1Z999AA10123456784",
+      "carrier": "UPS",
+      "shipping_address": "123 Demo St, Plano, TX 75024",
+      "items": [
+        {"variant_id": "JCP-ANA-1001-NVY-M", "name": "a.n.a Short Sleeve Tiered Midi Dress", "color": "Navy", "size": "M", "qty": 1, "unit_price": 29.99}
+      ],
+      "total": 29.99
+    },
+    {
+      "order_id": "ORD-50002",
+      "customer_id": "CUST-1001",
+      "status": "Shipped",
+      "order_date": "2026-05-26",
+      "estimated_delivery": "2026-06-02",
+      "delivered_date": null,
+      "tracking_number": "1Z999AA10123456999",
+      "carrier": "UPS",
+      "shipping_address": "123 Demo St, Plano, TX 75024",
+      "items": [
+        {"variant_id": "JCP-WOR-1003-EMR-M", "name": "Worthington Sleeveless Wrap Dress", "color": "Emerald", "size": "M", "qty": 1, "unit_price": 41.99},
+        {"variant_id": "JCP-SJB-1004-GRY-M", "name": "St. John's Bay Short Sleeve T-Shirt Dress", "color": "Heather Gray", "size": "M", "qty": 2, "unit_price": 19.99}
+      ],
+      "total": 81.97
+    },
+    {
+      "order_id": "ORD-50003",
+      "customer_id": "CUST-1001",
+      "status": "Processing",
+      "order_date": "2026-05-30",
+      "estimated_delivery": "2026-06-06",
+      "delivered_date": null,
+      "tracking_number": null,
+      "carrier": null,
+      "shipping_address": "123 Demo St, Plano, TX 75024",
+      "items": [
+        {"variant_id": "JCP-RYE-1006-BLK-L", "name": "Ryegrass Smocked Tiered Maxi Dress", "color": "Black", "size": "L", "qty": 1, "unit_price": 44.99}
+      ],
+      "total": 44.99
+    },
+    {
+      "order_id": "ORD-50004",
+      "customer_id": "CUST-1002",
+      "status": "Cancelled",
+      "order_date": "2026-05-20",
+      "estimated_delivery": null,
+      "delivered_date": null,
+      "tracking_number": null,
+      "carrier": null,
+      "shipping_address": "456 Calle Sol, Miami, FL 33101",
+      "items": [
+        {"variant_id": "FOOD-COC-2004-CLA-12P", "name": "Coca-Cola Classic Soda", "color": "Classic", "size": "12-pack 12oz cans", "qty": 2, "unit_price": 5.49}
+      ],
+      "total": 10.98
+    },
+    {
+      "order_id": "ORD-50005",
+      "customer_id": "CUST-1002",
+      "status": "Shipped",
+      "order_date": "2026-05-28",
+      "estimated_delivery": "2026-06-01",
+      "delivered_date": null,
+      "tracking_number": "1Z999AA10987654321",
+      "carrier": "FedEx",
+      "shipping_address": "456 Calle Sol, Miami, FL 33101",
+      "items": [
+        {"variant_id": "FOOD-LAY-2001-CLA-PTY", "name": "Lay's Classic Potato Chips", "color": "Classic", "size": "Party 13oz", "qty": 3, "unit_price": 3.29},
+        {"variant_id": "FOOD-ORE-2002-ORG-FAM", "name": "Oreo Original Chocolate Sandwich Cookies", "color": "Original", "size": "Family 18.7oz", "qty": 2, "unit_price": 3.99}
+      ],
+      "total": 17.85
+    }
+  ]
+}

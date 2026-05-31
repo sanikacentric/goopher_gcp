@@ -326,6 +326,9 @@ class AgentService:
 
     @staticmethod
     def _parse_filters(lowered: str):
+        # Only clothing colors are treated as a color facet; food "flavors" are
+        # matched through the free-text keyword search instead, so a query like
+        # "barbecue chips" still works without a hard-coded flavor list.
         colors = ["black", "navy", "white", "sage", "emerald", "burgundy", "camel",
                   "olive", "ivory", "cream", "mustard", "terracotta", "charcoal"]
         sizes = ["xxl", "xl", "xs", "s", "m", "l"]
@@ -341,13 +344,15 @@ class AgentService:
     @staticmethod
     def _format_search(data: dict) -> str:
         if not data.get("count"):
-            return "No casual dresses matched that search."
-        lines = [f"Found {data['count']} matching casual dress(es):"]
+            return "No products matched that search."
+        lines = [f"Found {data['count']} matching product(s):"]
         for p in data["products"][:5]:
             stock = sum(v["stock"] for v in p["in_stock_variants"])
+            # "colors" doubles as flavors/variety for food items.
+            options = ", ".join(p["colors"])
             lines.append(f"- {p['name']} by {p['brand']} — ${p['sale_price']:.2f} "
                          f"(was ${p['list_price']:.2f}), {stock} in stock, "
-                         f"colors: {', '.join(p['colors'])}")
+                         f"options: {options}")
         return "\n".join(lines)
 
     @staticmethod

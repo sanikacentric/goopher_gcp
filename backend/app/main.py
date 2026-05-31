@@ -1,13 +1,16 @@
 """
-GOOPHER API (FastAPI) — the cloud service the Chrome extension talks to.
+GOOPHER API (FastAPI) — the cloud service the Chrome extension talks to, plus
+the storefront landing page.
 
 Endpoints:
   POST /auth/login      -> authenticate a customer, return a JWT (T1)
   GET  /auth/me         -> validate token, return the customer
   POST /chat            -> one conversational turn (unified agent)
   POST /orders/bulk     -> high-volume order status (Req 3)
+  GET  /catalog         -> public multi-department catalog (storefront)
   GET  /healthz         -> liveness/readiness for Cloud Run
   GET  /metrics         -> lightweight metrics (T10 observability)
+  GET  /                -> static storefront landing page (clothing + food)
 
 Designed to run on Cloud Run (T14): single container, listens on $PORT,
 stateless except for in-process memory (swap to Firestore memory for multi-
@@ -19,10 +22,11 @@ import os
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .agents.orchestrator import get_agent_service
 from .auth.auth import authenticate, create_access_token, decode_token
-from .config import get_settings
+from .config import BACKEND_DIR, get_settings
 from .db.database import get_repository
 from .mcp.order_tool import bulk_order_status
 from .models.schemas import (
@@ -38,7 +42,8 @@ settings = get_settings()
 configure_logging()
 
 app = FastAPI(title="GOOPHER API", version="0.1.0",
-              description="Unified conversational retail agent for JCPenney casual dresses.")
+              description="Unified conversational retail agent for a multi-department "
+                          "(clothing + food) store, used via the GOOPHER Chrome extension.")
 
 # The extension calls cross-origin; allow it. Tighten allow_origins in prod.
 app.add_middleware(
@@ -88,6 +93,23 @@ def metrics() -> dict:
     return {"metrics": METRICS}
 
 
+@app.get("/catalog")
+def catalog() -> dict:
+    """
+    Public storefront catalog (no auth) used by the GOOPHER landing page.
+
+    Returns every product grouped by department ("Clothing", "Food") with a
+    computed total-stock figure per item so the site can show availability.
+    """
+    repo = get_repository()
+    grouped: dict[str, list[dict]] = {}
+    for p in repo.list_products():
+        item = p.model_dump()
+        item["total_stock"] = sum(v.stock for v in p.variants)
+        grouped.setdefault(p.department, []).append(item)
+    return {"departments": list(grouped.keys()), "catalog": grouped}
+
+
 @app.post("/auth/login", response_model=TokenResponse)
 def login(body: LoginRequest) -> TokenResponse:
     customer = authenticate(body.email, body.password)
@@ -121,6 +143,18 @@ def orders_bulk(body: BulkOrderQuery, claims: dict = Depends(current_customer)) 
     """High-volume order management endpoint (Req 3)."""
     log_event("orders_bulk_request", customer_id=claims["sub"], count=len(body.order_ids))
     return bulk_order_status(body.order_ids)
+
+
+# --------------------------------------------------------------------------- #
+# Storefront landing page (static)
+# --------------------------------------------------------------------------- #
+# Serve the GOOPHER store site at "/" so it has a real http origin that the
+# Chrome extension can operate on. The site is a plain storefront; the
+# conversational assistant is provided by the GOOPHER *extension* (side panel),
+# not embedded here. Mounted last so it never shadows the API routes above.
+_SITE_DIR = BACKEND_DIR.parent / "site"
+if _SITE_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=str(_SITE_DIR), html=True), name="store")
 
 
 # Local dev entry point: `python -m backend.app.main`

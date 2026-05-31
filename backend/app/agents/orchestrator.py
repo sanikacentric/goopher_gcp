@@ -47,6 +47,14 @@ Rules:
   the store sells it — present it. Never refuse an item the tools returned.
 - Use the order tools for any order-status question. The signed-in customer's
   id is given to you; never ask the user for it.
+
+Multi-agent workflow (ALWAYS, so each specialist is invoked and observable):
+1. Call `modality_agent` first to interpret the request and state the intent.
+2. Call `language_agent` to detect the customer's language for the final reply.
+3. Use the inventory/order tools to fetch the real data.
+4. Call `channel_agent` to learn how to format for the active channel (web/phone).
+5. Write the final reply, honoring the language and channel guidance.
+
 - Be concise and proactive. Surface low-stock warnings and the current sale price.
 - Stay on the topic of the store's clothing & food products and order help.
 - Honor the CHANNEL and LANGUAGE directives provided for this turn.
@@ -78,12 +86,24 @@ def build_root_agent():
             os.environ["GOOGLE_API_KEY"] = _settings.google_api_key
 
     from google.adk.agents import LlmAgent
+    from google.adk.tools.agent_tool import AgentTool
 
-    tools = inventory_skill.get_tools() + order_skill.get_tools()
+    # Wrap the three specialist sub-agents as AgentTools. Unlike `sub_agents`
+    # (which only emit a span when the LLM voluntarily *transfers* control — it
+    # usually doesn't), AgentTools are explicit tools the orchestrator CALLS, so
+    # each produces its own `invoke_agent <name>` span in Cloud Trace every turn.
+    model = _settings.gemini_model
+    modality_tool = AgentTool(agent=modality_agent_stub(model))
+    language_tool = AgentTool(agent=language_agent.build_adk_agent(model))
+    channel_tool = AgentTool(agent=channel_agent.build_adk_agent(model))
+
+    # Tools = the specialist agents + the inventory/order (MCP-backed) tools.
+    tools = [modality_tool, language_tool, channel_tool] + \
+        inventory_skill.get_tools() + order_skill.get_tools()
 
     root = LlmAgent(
         name="goopher_orchestrator",
-        model=_settings.gemini_model,
+        model=model,
         description="Unified conversational retail agent for clothing & food.",
         instruction=ROOT_INSTRUCTION
         + "\n\n"
@@ -91,11 +111,6 @@ def build_root_agent():
         + "\n\n"
         + order_skill.INSTRUCTION,
         tools=tools,
-        sub_agents=[
-            channel_agent.build_adk_agent(_settings.gemini_model),
-            language_agent.build_adk_agent(_settings.gemini_model),
-            modality_agent_stub(_settings.gemini_model),
-        ],
     )
     return root
 

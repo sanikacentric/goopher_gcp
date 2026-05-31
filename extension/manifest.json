@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "GOOPHER",
   "version": "0.1.0",
-  "description": "GOOPHER — a unified conversational shopping assistant for JCPenney casual dresses. Inventory, orders, multi-channel, multi-lingual, multi-modal.",
+  "description": "GOOPHER — a unified conversational shopping agent for clothing & food. Inventory, orders, multi-channel, multi-lingual, multi-modal (incl. voice).",
   "permissions": ["storage", "sidePanel", "activeTab"],
   "host_permissions": [
     "http://localhost:8080/*",

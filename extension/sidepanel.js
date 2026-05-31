@@ -132,10 +132,9 @@ async function send(text, attachments) {
     const resp = await sendChat({ message: text, sessionId, channel, language, attachments });
     hideTyping();
     const meta = `${resp.channel} · ${resp.language}${resp.used_tools?.length ? " · " + resp.used_tools.join(",") : ""}`;
-    const bubble = addMessage(resp.reply, "bot", meta);
+    addMessage(resp.reply, "bot", meta);
     // On the phone channel, also speak the answer aloud (voice out).
     if (channel === "phone") speak(resp.reply, resp.language);
-    return bubble;
   } catch (err) {
     hideTyping();
     if (err.message === "UNAUTHORIZED") {
@@ -149,106 +148,58 @@ async function send(text, attachments) {
   }
 }
 
-// ---- voice input (Web Speech API: speech-to-text, free, built into Chrome) ----
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recognition = null;
-let listening = false;
-
+// ---- voice input ----
+// Voice capture runs in a popup WINDOW (mic.html), NOT here, because Chrome MV3
+// side panels can't reliably obtain microphone access (SpeechRecognition throws
+// "not-allowed" even when the mic is allowed in Chrome settings). A normal
+// extension popup window CAN get the mic; it captures speech and relays the
+// transcript back via chrome.runtime messaging, which we handle below.
 const LANG_BCP47 = {
   en: "en-US", es: "es-ES", fr: "fr-FR", de: "de-DE",
   pt: "pt-BR", hi: "hi-IN", zh: "zh-CN",
 };
-
-// Track whether the user has granted microphone access this session, so we only
-// prompt once.
-let micGranted = false;
-
-// Request microphone permission via getUserMedia. In a Chrome extension side
-// panel the SpeechRecognition API will throw "not-allowed" unless the page has
-// been granted mic access first — calling getUserMedia from a user gesture (the
-// click) is what surfaces Chrome's permission prompt. We immediately stop the
-// stream; we only needed it to trigger/confirm the grant.
-async function ensureMicPermission() {
-  if (micGranted) return true;
-  if (!navigator.mediaDevices?.getUserMedia) {
-    throw new Error("no-media-devices");
-  }
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  stream.getTracks().forEach((t) => t.stop());
-  micGranted = true;
-  return true;
-}
-
-function startRecognition() {
-  recognition = new SR();
-  recognition.lang = LANG_BCP47[els.language.value] || "en-US";
-  recognition.interimResults = false;
-  recognition.maxAlternatives = 1;
-
-  recognition.onstart = () => {
-    listening = true;
-    els.micBtn.classList.add("listening");
-    els.messageInput.placeholder = "Listening… speak now";
-  };
-  recognition.onresult = (e) => {
-    const transcript = e.results[0][0].transcript;
-    els.messageInput.value = transcript;
-    send(transcript.trim(), []); // auto-send the spoken question
-  };
-  recognition.onerror = (e) => {
-    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-      micGranted = false;
-      addMessage(
-        "🎤 Microphone access is blocked. Click the 🔒/camera icon in Chrome's " +
-          "address bar (or chrome://settings/content/microphone) and allow the " +
-          "microphone for this extension, then try the mic again.",
-        "bot"
-      );
-    } else if (e.error === "no-speech") {
-      addMessage("🎤 I didn't catch that — tap the mic and speak again.", "bot");
-    } else {
-      addMessage("🎤 Voice error: " + e.error, "bot");
-    }
-  };
-  recognition.onend = () => {
-    listening = false;
-    els.micBtn.classList.remove("listening");
-    els.messageInput.placeholder = "Ask about products or your orders…";
-  };
-  recognition.start();
-}
+let micWindowId = null;
 
 function setupMic() {
-  if (!SR) {
-    // Browser without speech recognition — hide the mic gracefully.
+  if (!chrome.windows) {
     els.micBtn.hidden = true;
     return;
   }
-  els.micBtn.addEventListener("click", async () => {
-    if (listening) {
-      recognition?.stop();
-      return;
-    }
-    try {
-      // Surface Chrome's mic-permission prompt (needed in the extension panel)
-      // before handing off to the Speech API.
-      await ensureMicPermission();
-      startRecognition();
-    } catch (err) {
-      const name = err?.name || err?.message || "error";
-      if (name === "NotAllowedError" || name === "SecurityError") {
-        addMessage(
-          "🎤 Microphone permission was denied. Open Chrome's site settings for " +
-            "this extension and set Microphone to Allow, then click the mic again.",
-          "bot"
-        );
-      } else if (name === "NotFoundError" || name === "no-media-devices") {
-        addMessage("🎤 No microphone was found on this device.", "bot");
-      } else {
-        addMessage("🎤 Couldn't start voice input: " + name, "bot");
-      }
+
+  // Receive the transcript relayed from the mic popup, then send it as a chat.
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg?.type === "goopher_transcript" && msg.transcript) {
+      els.messageInput.value = msg.transcript;
+      send(msg.transcript, []);
     }
   });
+
+  els.micBtn.addEventListener("click", async () => {
+    const langCode = LANG_BCP47[els.language.value] || "en-US";
+    const url = chrome.runtime.getURL(`mic.html?lang=${encodeURIComponent(langCode)}`);
+
+    // If a mic window is already open, just focus it.
+    if (micWindowId !== null) {
+      try {
+        await chrome.windows.update(micWindowId, { focused: true });
+        return;
+      } catch (_) {
+        micWindowId = null;
+      }
+    }
+    try {
+      const win = await chrome.windows.create({ url, type: "popup", width: 360, height: 260 });
+      micWindowId = win.id;
+    } catch (err) {
+      addMessage("🎤 Couldn't open the voice window: " + (err?.message || err), "bot");
+    }
+  });
+
+  if (chrome.windows?.onRemoved) {
+    chrome.windows.onRemoved.addListener((closedId) => {
+      if (closedId === micWindowId) micWindowId = null;
+    });
+  }
 }
 
 // Speak a reply aloud on the phone (voice) channel.

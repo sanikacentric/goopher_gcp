@@ -114,7 +114,7 @@ the thread.
 
 ## 4. Why these choices (free-tier first)
 
-- **Gemini `gemini-2.0-flash`** — fast, natively multimodal (covers image/voice
+- **Gemini `gemini-2.5-flash`** — fast, natively multimodal (covers image/voice
   for the modality subagent), and available on the AI Studio free tier (T6).
 - **Firestore** — the only Google Cloud database with a genuine *always-free*
   tier (1 GiB, 50K reads/day). The `Repository` abstraction lets the identical

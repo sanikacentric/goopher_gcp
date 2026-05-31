@@ -26,7 +26,7 @@ while preserving conversation context.
 | Memory agent — context across switches | [`backend/app/memory/memory_agent.py`](backend/app/memory/memory_agent.py) | T3 |
 | Agent skills (inventory, orders) | [`backend/app/agents/skills/`](backend/app/agents/skills/) | T4 |
 | **MCP tools** (inventory + order status) | [`backend/app/mcp/`](backend/app/mcp/) | T5 / 2A-1,2 |
-| Gemini LLM (free tier) | `gemini-2.0-flash` | T6 |
+| Gemini LLM (free tier) | `gemini-2.5-flash` | T6 |
 | Google Cloud (Firestore + Cloud Run + Trace) | — | T7 / T14 |
 | Multi-channel subagent (phone/web) | [`channel_agent.py`](backend/app/agents/channel_agent.py) | 2A-4 |
 | Multi-lingual subagent | [`language_agent.py`](backend/app/agents/language_agent.py) | 2A-5 |

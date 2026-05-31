@@ -13,6 +13,6 @@ services:
       OTEL_EXPORTER: console
       # Set your Gemini free-tier key to enable the live LLM path:
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
-      GEMINI_MODEL: gemini-2.0-flash
+      GEMINI_MODEL: gemini-2.5-flash
       JWT_SECRET: local-dev-secret
     restart: unless-stopped

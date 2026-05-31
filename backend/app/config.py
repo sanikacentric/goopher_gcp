@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     # Get a free key at https://aistudio.google.com/app/apikey
     google_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"  # free-tier friendly, fast, multimodal
+    # When True, try the ADK multi-agent path first and fall back to the grounded
+    # path if it errors. Default False = always use the grounded "tools + Gemini
+    # phrasing" path: it deterministically routes to the right tool (so it never
+    # refuses or hallucinates) and uses Gemini for the natural-language reply, so
+    # every conversation is still 100% Gemini-powered AND grounded in real data.
+    # The ADK agent tree is always built (Requirement T2); this flag only chooses
+    # which path generates the user-facing reply.
+    use_adk_path: bool = False
 
     # --- Google Cloud (free tier) ---
     google_cloud_project: str = ""

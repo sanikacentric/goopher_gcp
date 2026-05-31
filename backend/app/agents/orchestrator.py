@@ -321,12 +321,37 @@ class AgentService:
                     "Write a helpful reply using only the tool results."
                 )
                 incr("tokens_estimated_total", len(prompt) // 4)
-                resp = self._gemini.generate_content(prompt)
-                return resp.text.strip()
+                # IMPORTANT: gemini-2.5-* models use "thinking" by default, which
+                # consumes output tokens internally. A generous max_output_tokens
+                # ensures budget remains for the visible answer (otherwise the
+                # response finishes as MAX_TOKENS with empty text).
+                resp = self._gemini.generate_content(
+                    prompt, generation_config={"max_output_tokens": 2048}
+                )
+                text = self._extract_text(resp)
+                if text:
+                    return text
+                log_event("gemini_phrasing_empty",
+                          finish=str(getattr(resp.candidates[0], "finish_reason", "?")))
             except Exception as exc:
                 log_event("gemini_phrasing_failed", reason=str(exc))
-        # Template fallback (no LLM): facts are already human-readable.
+        # Template fallback (no LLM / on error): facts are already human-readable.
         return facts
+
+    @staticmethod
+    def _extract_text(resp) -> str:
+        """
+        Safely pull text out of a Gemini response.
+
+        We avoid `resp.text` because that quick-accessor raises if any part is a
+        non-text part (e.g. a function_call) — instead we concatenate the text
+        parts ourselves, which is robust across model/SDK versions.
+        """
+        try:
+            parts = resp.candidates[0].content.parts or []
+        except (AttributeError, IndexError):
+            return ""
+        return "".join(getattr(p, "text", "") or "" for p in parts).strip()
 
     @staticmethod
     def _parse_filters(lowered: str):

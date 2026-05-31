@@ -105,6 +105,7 @@ class AgentService:
         self.memory = get_memory_store()
         self._adk_runner = None
         self._adk_ready = False
+        self._adk_sessions: set[str] = set()  # session_ids already created in ADK
         self._gemini = None
         self._init_backends()
 
@@ -209,8 +210,31 @@ class AgentService:
 
     def _generate_adk(self, session_id: str, text: str, customer_id: str,
                       directives: str) -> tuple[str, list[str]]:
-        """Run the turn through the ADK Runner."""
+        """
+        Run the turn through the ADK Runner.
+
+        ADK's Runner requires a Session to exist before `run()` is called. The
+        session-service API is async in current ADK, so we create the session
+        (idempotently) via asyncio before streaming the turn. If ADK produces no
+        text we raise, so the caller falls back to the deterministic engine
+        rather than returning an empty apology.
+        """
+        import asyncio
+
         from google.genai import types  # ADK uses google-genai content types
+
+        # Ensure the ADK session exists (create once per session_id).
+        if session_id not in self._adk_sessions:
+            try:
+                asyncio.run(
+                    self._adk_runner.session_service.create_session(
+                        app_name="goopher", user_id=customer_id, session_id=session_id
+                    )
+                )
+            except Exception as exc:
+                # Already exists or transient — log and continue to run().
+                log_event("adk_session_create_skipped", reason=str(exc))
+            self._adk_sessions.add(session_id)
 
         history = self.memory.history_text(session_id)
         prompt = f"{directives}\n\nConversation so far:\n{history}\n\nUser: {text}"
@@ -228,7 +252,11 @@ class AgentService:
             if getattr(event, "is_final_response", lambda: False)():
                 if event.content and event.content.parts:
                     final_text = "".join(p.text or "" for p in event.content.parts)
-        return final_text or "I'm sorry, I couldn't generate a response.", used_tools
+
+        if not final_text.strip():
+            # Don't return an empty apology — let _generate fall back.
+            raise RuntimeError("ADK produced no text response")
+        return final_text, used_tools
 
     def _generate_fallback(self, session_id: str, text: str, customer_id: str,
                            directives: str, channel: str, language: str

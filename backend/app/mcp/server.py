@@ -32,7 +32,7 @@ def build_server():
     @mcp.tool()
     def inventory_search(query: str = "", color: str = "", size: str = "",
                          max_price: float | None = None) -> dict:
-        """Search JCPenney casual dresses by text, color, size, and max price."""
+        """Search the store catalog (clothing & food) by text, color/flavor, size, and max price."""
         return search_inventory(query=query, color=color, size=size, max_price=max_price)
 
     @mcp.tool()

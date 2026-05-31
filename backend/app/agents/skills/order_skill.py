@@ -9,7 +9,7 @@ from __future__ import annotations
 from ...mcp.order_tool import bulk_order_status, get_order_status, list_customer_orders
 
 INSTRUCTION = """
-You help customers manage orders for JCPenney casual dresses:
+You help customers manage orders for the store (clothing & food):
 - Use `get_order_status` for a single order number (e.g. ORD-50002). Report the
   status, carrier, tracking number, and estimated/actual delivery date.
 - Use `order_list_for_customer` to show all orders for the signed-in customer

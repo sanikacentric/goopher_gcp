@@ -24,7 +24,7 @@ from ..models.schemas import Customer, Order, Product
 
 
 def load_seed() -> dict:
-    """Read the synthetic JCPenney casual-dress dataset from disk."""
+    """Read the synthetic store catalog (clothing & food) from disk."""
     with open(DATA_FILE, "r", encoding="utf-8") as fh:
         return json.load(fh)
 

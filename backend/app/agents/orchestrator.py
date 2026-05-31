@@ -65,7 +65,7 @@ def build_root_agent():
     root = LlmAgent(
         name="goopher_orchestrator",
         model=_settings.gemini_model,
-        description="Unified conversational retail agent for JCPenney casual dresses.",
+        description="Unified conversational retail agent for clothing & food.",
         instruction=ROOT_INSTRUCTION
         + "\n\n"
         + inventory_skill.INSTRUCTION
@@ -387,7 +387,7 @@ class AgentService:
     @staticmethod
     def _format_stock(data: dict) -> str:
         if not data.get("found"):
-            return "I couldn't find that exact variant in the casual-dress catalog."
+            return "I couldn't find that exact item in the catalog."
         status = "in stock" if data["in_stock"] else "out of stock"
         return (f"{data['product']} ({data['color']}, {data['size']}) is {status} "
                 f"— {data['stock']} unit(s) at ${data['sale_price']:.2f}.")

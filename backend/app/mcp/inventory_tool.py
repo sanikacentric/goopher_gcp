@@ -17,7 +17,7 @@ from ..observability.telemetry import incr, log_event
 def search_inventory(query: str = "", color: str = "", size: str = "",
                      max_price: float | None = None) -> dict:
     """
-    Search the JCPenney casual-dress catalog.
+    Search the store catalog (clothing & food).
 
     Args:
         query: free-text match against name/brand/description/material.
@@ -69,7 +69,7 @@ def check_stock(variant_id: str) -> dict:
     log_event("inventory_check_stock", variant_id=variant_id, found=info is not None)
     if info is None:
         return {"found": False, "variant_id": variant_id,
-                "message": "No such variant in the casual-dress catalog."}
+                "message": "No such variant in the store catalog."}
     return {"found": True, **info}
 
 

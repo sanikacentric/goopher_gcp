@@ -19,6 +19,7 @@ const els = {
   fileInput: document.getElementById("fileInput"),
   attachmentBar: document.getElementById("attachmentBar"),
   micBtn: document.getElementById("micBtn"),
+  speakToggle: document.getElementById("speakToggle"),
 };
 
 // One stable session id per browser profile keeps memory/context continuous.
@@ -133,8 +134,11 @@ async function send(text, attachments) {
     hideTyping();
     const meta = `${resp.channel} · ${resp.language}${resp.used_tools?.length ? " · " + resp.used_tools.join(",") : ""}`;
     addMessage(resp.reply, "bot", meta);
-    // On the phone channel, also speak the answer aloud (voice out).
-    if (channel === "phone") speak(resp.reply, resp.language);
+    // Speak the answer aloud whenever the 🔊 toggle is on, OR on the phone
+    // (voice) channel. Uses Google's text-to-speech voices via the browser.
+    if (els.speakToggle?.checked || channel === "phone") {
+      speak(resp.reply, resp.language);
+    }
   } catch (err) {
     hideTyping();
     if (err.message === "UNAUTHORIZED") {
@@ -202,12 +206,61 @@ function setupMic() {
   }
 }
 
-// Speak a reply aloud on the phone (voice) channel.
+// Strip markdown so the TTS engine doesn't read "asterisk asterisk", URLs, etc.
+function speechCleanup(text) {
+  return text
+    .replace(/\[(.*?)\]\((.*?)\)/g, "$1") // [label](url) -> label
+    .replace(/[*_`#>]+/g, "")             // markdown markers
+    .replace(/^\s*[-•]\s*/gm, ", ")        // bullets -> pauses
+    .replace(/https?:\/\/\S+/g, "")        // bare URLs
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+// Pick the best available voice for a language, preferring Google voices
+// (Chrome ships Google's network TTS voices, e.g. "Google US English").
+function pickVoice(bcp47) {
+  const voices = window.speechSynthesis.getVoices() || [];
+  const base = bcp47.split("-")[0];
+  const byLang = voices.filter((v) => v.lang && v.lang.toLowerCase().startsWith(base));
+  return (
+    byLang.find((v) => /google/i.test(v.name)) || // prefer a Google voice
+    byLang[0] ||
+    voices.find((v) => /google/i.test(v.name)) ||
+    null
+  );
+}
+
+// Speak a reply aloud using the browser's (Google) text-to-speech voices.
 function speak(text, language) {
   if (!window.speechSynthesis) return;
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = LANG_BCP47[language] || "en-US";
-  window.speechSynthesis.speak(u);
+  const clean = speechCleanup(text);
+  if (!clean) return;
+
+  const bcp47 = LANG_BCP47[language] || "en-US";
+  window.speechSynthesis.cancel(); // stop any in-progress utterance
+
+  const utter = () => {
+    const u = new SpeechSynthesisUtterance(clean);
+    u.lang = bcp47;
+    const v = pickVoice(bcp47);
+    if (v) u.voice = v;
+    u.rate = 1.0;
+    u.pitch = 1.0;
+    window.speechSynthesis.speak(u);
+  };
+
+  // Voices load asynchronously; if they aren't ready yet, wait for the event.
+  if ((window.speechSynthesis.getVoices() || []).length === 0) {
+    window.speechSynthesis.onvoiceschanged = () => {
+      window.speechSynthesis.onvoiceschanged = null;
+      utter();
+    };
+    // Fallback in case the event never fires.
+    setTimeout(utter, 300);
+  } else {
+    utter();
+  }
 }
 
 // ---- event handlers ----

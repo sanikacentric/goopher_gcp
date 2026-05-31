@@ -10,7 +10,7 @@ Provides a single `Repository` interface with two interchangeable backends:
 The backend is chosen by `settings.db_backend` ("sqlite" | "firestore") so the
 exact same agent / MCP / API code runs locally and on Cloud Run unchanged.
 
-Both backends are seeded from `backend/data/jcpenney_casual_dresses.json`.
+Both backends are seeded from `backend/data/goopher_catalog.json`.
 """
 from __future__ import annotations
 

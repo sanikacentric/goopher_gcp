@@ -159,42 +159,95 @@ const LANG_BCP47 = {
   pt: "pt-BR", hi: "hi-IN", zh: "zh-CN",
 };
 
+// Track whether the user has granted microphone access this session, so we only
+// prompt once.
+let micGranted = false;
+
+// Request microphone permission via getUserMedia. In a Chrome extension side
+// panel the SpeechRecognition API will throw "not-allowed" unless the page has
+// been granted mic access first — calling getUserMedia from a user gesture (the
+// click) is what surfaces Chrome's permission prompt. We immediately stop the
+// stream; we only needed it to trigger/confirm the grant.
+async function ensureMicPermission() {
+  if (micGranted) return true;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("no-media-devices");
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  stream.getTracks().forEach((t) => t.stop());
+  micGranted = true;
+  return true;
+}
+
+function startRecognition() {
+  recognition = new SR();
+  recognition.lang = LANG_BCP47[els.language.value] || "en-US";
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = () => {
+    listening = true;
+    els.micBtn.classList.add("listening");
+    els.messageInput.placeholder = "Listening… speak now";
+  };
+  recognition.onresult = (e) => {
+    const transcript = e.results[0][0].transcript;
+    els.messageInput.value = transcript;
+    send(transcript.trim(), []); // auto-send the spoken question
+  };
+  recognition.onerror = (e) => {
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+      micGranted = false;
+      addMessage(
+        "🎤 Microphone access is blocked. Click the 🔒/camera icon in Chrome's " +
+          "address bar (or chrome://settings/content/microphone) and allow the " +
+          "microphone for this extension, then try the mic again.",
+        "bot"
+      );
+    } else if (e.error === "no-speech") {
+      addMessage("🎤 I didn't catch that — tap the mic and speak again.", "bot");
+    } else {
+      addMessage("🎤 Voice error: " + e.error, "bot");
+    }
+  };
+  recognition.onend = () => {
+    listening = false;
+    els.micBtn.classList.remove("listening");
+    els.messageInput.placeholder = "Ask about products or your orders…";
+  };
+  recognition.start();
+}
+
 function setupMic() {
   if (!SR) {
     // Browser without speech recognition — hide the mic gracefully.
     els.micBtn.hidden = true;
     return;
   }
-  els.micBtn.addEventListener("click", () => {
+  els.micBtn.addEventListener("click", async () => {
     if (listening) {
       recognition?.stop();
       return;
     }
-    recognition = new SR();
-    recognition.lang = LANG_BCP47[els.language.value] || "en-US";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      listening = true;
-      els.micBtn.classList.add("listening");
-      els.messageInput.placeholder = "Listening… speak now";
-    };
-    recognition.onresult = (e) => {
-      const transcript = e.results[0][0].transcript;
-      els.messageInput.value = transcript;
-      // Auto-send the spoken question.
-      send(transcript.trim(), []);
-    };
-    recognition.onerror = (e) => {
-      addMessage("🎤 Voice error: " + e.error, "bot");
-    };
-    recognition.onend = () => {
-      listening = false;
-      els.micBtn.classList.remove("listening");
-      els.messageInput.placeholder = "Ask about products or your orders…";
-    };
-    recognition.start();
+    try {
+      // Surface Chrome's mic-permission prompt (needed in the extension panel)
+      // before handing off to the Speech API.
+      await ensureMicPermission();
+      startRecognition();
+    } catch (err) {
+      const name = err?.name || err?.message || "error";
+      if (name === "NotAllowedError" || name === "SecurityError") {
+        addMessage(
+          "🎤 Microphone permission was denied. Open Chrome's site settings for " +
+            "this extension and set Microphone to Allow, then click the mic again.",
+          "bot"
+        );
+      } else if (name === "NotFoundError" || name === "no-media-devices") {
+        addMessage("🎤 No microphone was found on this device.", "bot");
+      } else {
+        addMessage("🎤 Couldn't start voice input: " + name, "bot");
+      }
+    }
   });
 }
 

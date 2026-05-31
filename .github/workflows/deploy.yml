@@ -98,7 +98,7 @@ jobs:
             --max-instances 2 \
             --memory 512Mi \
             --cpu 1 \
-            --set-env-vars "ENVIRONMENT=production,DB_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},OTEL_EXPORTER=gcp,GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }},JWT_SECRET=${{ secrets.JWT_SECRET }}"
+            --set-env-vars "ENVIRONMENT=production,DB_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},OTEL_EXPORTER=gcp,LLM_PROVIDER=gemini,USE_ADK_PATH=true,USE_VERTEXAI=true,VERTEX_LOCATION=us-central1,GEMINI_MODEL=gemini-2.5-flash,OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }},JWT_SECRET=${{ secrets.JWT_SECRET }}"
 
       - name: Show service URL
         if: steps.gate.outputs.ready == 'true'

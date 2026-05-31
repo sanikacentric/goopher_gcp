@@ -63,6 +63,20 @@ def build_root_agent():
 
     Imported lazily so the module loads even where google-adk isn't installed.
     """
+    import os
+
+    # Tell ADK / google-genai whether to use Vertex AI (the $300-credit / high
+    # quota path) or the AI Studio API key. ADK reads these from the environment.
+    if _settings.use_vertexai:
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "TRUE"
+        if _settings.google_cloud_project:
+            os.environ["GOOGLE_CLOUD_PROJECT"] = _settings.google_cloud_project
+        os.environ["GOOGLE_CLOUD_LOCATION"] = _settings.vertex_location
+    else:
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "FALSE"
+        if _settings.google_api_key:
+            os.environ["GOOGLE_API_KEY"] = _settings.google_api_key
+
     from google.adk.agents import LlmAgent
 
     tools = inventory_skill.get_tools() + order_skill.get_tools()
@@ -117,14 +131,22 @@ class AgentService:
 
     def _init_backends(self) -> None:
         """
-        Best-effort init of the LLM client used for natural-language phrasing.
+        Best-effort init of the LLM backends used for a conversational turn.
 
-        ALL conversations use OpenAI right now. The ADK (Gemini) multi-agent path
-        and the raw Gemini client are intentionally left commented out below so
-        you can re-enable them in the future without rewriting anything.
+        Provider selection (settings.llm_provider):
+          * "openai" (default) — phrasing via OpenAI; ADK path stays off.
+          * "gemini"           — enables the Google ADK multi-agent orchestrator
+                                  (produces ADK traces) and a raw Gemini phrasing
+                                  client. Use Vertex AI (GOOGLE_GENAI_USE_VERTEXAI
+                                  =true) to get the $300-credit / high quota
+                                  instead of the 20/day AI Studio free tier.
+        Both inits are guarded so a missing key/package degrades gracefully to the
+        deterministic template path rather than crashing.
         """
-        # --- OpenAI client (ACTIVE: used for every conversation) ---
-        if _settings.openai_api_key:
+        provider = _settings.llm_provider.lower()
+
+        # --- OpenAI client (used when llm_provider == "openai") ---
+        if provider == "openai" and _settings.openai_api_key:
             try:
                 from openai import OpenAI
 
@@ -137,29 +159,35 @@ class AgentService:
             except Exception as exc:
                 log_event("openai_unavailable", reason=str(exc))
 
-        # --- GEMINI / ADK (COMMENTED OUT — kept for future use) ---
-        # To switch back to Gemini: set llm_provider="gemini", provide
-        # GOOGLE_API_KEY, and uncomment the blocks below.
-        #
-        # # ADK runner (Gemini multi-agent path).
-        # if _settings.use_adk_path and _settings.google_api_key:
-        #     try:
-        #         from google.adk.runners import InMemoryRunner
-        #         root = build_root_agent()
-        #         self._adk_runner = InMemoryRunner(agent=root, app_name="goopher")
-        #         self._adk_ready = True
-        #         log_event("orchestrator_init", path="adk", model=_settings.gemini_model)
-        #     except Exception as exc:
-        #         log_event("adk_unavailable", reason=str(exc))
-        #
-        # # Raw Gemini client for the phrasing path.
-        # if _settings.google_api_key:
-        #     try:
-        #         import google.generativeai as genai
-        #         genai.configure(api_key=_settings.google_api_key)
-        #         self._gemini = genai.GenerativeModel(_settings.gemini_model)
-        #     except Exception as exc:
-        #         log_event("gemini_unavailable", reason=str(exc))
+        # --- GEMINI / ADK (used when llm_provider == "gemini") ---
+        # Re-enabled per request so the ADK multi-agent orchestrator runs and
+        # emits ADK traces. Point at Vertex AI to use the $300 credit / higher
+        # Gemini quota (see .env: GOOGLE_GENAI_USE_VERTEXAI, GOOGLE_CLOUD_PROJECT).
+        if provider == "gemini":
+            # ADK runner (Gemini multi-agent path) — built when use_adk_path on.
+            if _settings.use_adk_path:
+                try:
+                    from google.adk.runners import InMemoryRunner
+
+                    root = build_root_agent()
+                    self._adk_runner = InMemoryRunner(agent=root, app_name="goopher")
+                    self._adk_ready = True
+                    log_event("orchestrator_init", path="adk",
+                              model=_settings.gemini_model)
+                except Exception as exc:
+                    log_event("adk_unavailable", reason=str(exc))
+
+            # Raw Gemini client for the grounded phrasing path / fallback.
+            if _settings.google_api_key or _settings.use_vertexai:
+                try:
+                    import google.generativeai as genai
+
+                    if _settings.google_api_key:
+                        genai.configure(api_key=_settings.google_api_key)
+                    self._gemini = genai.GenerativeModel(_settings.gemini_model)
+                    log_event("gemini_init", model=_settings.gemini_model)
+                except Exception as exc:
+                    log_event("gemini_unavailable", reason=str(exc))
 
     # ----- public API ----- #
     def run_turn(self, req: ChatRequest, customer_id: str) -> ChatResponse:
@@ -340,12 +368,13 @@ class AgentService:
     # ----- phrasing & formatting helpers ----- #
     def _phrase(self, user_text: str, facts: str, directives: str) -> str:
         """
-        Turn structured tool results into a natural reply using the LLM.
+        Turn structured tool results into a natural reply using the active LLM.
 
-        ALL conversations use OpenAI. The prompt grounds the model in the real
-        tool output ("do not invent beyond this"), so the answer is always
-        accurate. If OpenAI is unavailable/errors, we fall back to the
-        already-human-readable tool facts so the service never hard-fails.
+        Uses OpenAI when llm_provider="openai", or Gemini when "gemini". The
+        prompt grounds the model in the real tool output ("do not invent beyond
+        this"), so the answer is always accurate. If the LLM is unavailable or
+        errors, we fall back to the already-human-readable tool facts so the
+        service never hard-fails.
         """
         system_prompt = f"{ROOT_INSTRUCTION}\n\n{directives}"
         user_prompt = (
@@ -354,7 +383,7 @@ class AgentService:
             "Write a helpful, concise reply using only the tool results."
         )
 
-        # --- OpenAI (ACTIVE) ---
+        # --- OpenAI ---
         if self._openai is not None:
             try:
                 incr("tokens_estimated_total", (len(system_prompt) + len(user_prompt)) // 4)
@@ -374,30 +403,33 @@ class AgentService:
             except Exception as exc:
                 log_event("openai_phrasing_failed", reason=str(exc))
 
-        # --- GEMINI (COMMENTED OUT — kept for future use) ---
-        # if self._gemini is not None:
-        #     try:
-        #         prompt = f"{system_prompt}\n\n{user_prompt}"
-        #         resp = self._gemini.generate_content(
-        #             prompt, generation_config={"max_output_tokens": 2048}
-        #         )
-        #         text = self._extract_text(resp)
-        #         if text:
-        #             return text
-        #     except Exception as exc:
-        #         log_event("gemini_phrasing_failed", reason=str(exc))
+        # --- Gemini (used when llm_provider="gemini") ---
+        if self._gemini is not None:
+            try:
+                prompt = f"{system_prompt}\n\n{user_prompt}"
+                # gemini-2.5-* use "thinking" which eats output tokens; give a
+                # generous budget so the visible answer isn't truncated to empty.
+                resp = self._gemini.generate_content(
+                    prompt, generation_config={"max_output_tokens": 2048}
+                )
+                text = self._extract_text(resp)
+                if text:
+                    return text
+                log_event("gemini_phrasing_empty")
+            except Exception as exc:
+                log_event("gemini_phrasing_failed", reason=str(exc))
 
         # Template fallback (no LLM / on error): facts are already human-readable.
         return facts
 
-    # @staticmethod
-    # def _extract_text(resp) -> str:
-    #     """Safely pull text out of a Gemini response (kept for future use)."""
-    #     try:
-    #         parts = resp.candidates[0].content.parts or []
-    #     except (AttributeError, IndexError):
-    #         return ""
-    #     return "".join(getattr(p, "text", "") or "" for p in parts).strip()
+    @staticmethod
+    def _extract_text(resp) -> str:
+        """Safely pull text out of a Gemini response (avoid resp.text accessor)."""
+        try:
+            parts = resp.candidates[0].content.parts or []
+        except (AttributeError, IndexError):
+            return ""
+        return "".join(getattr(p, "text", "") or "" for p in parts).strip()
 
     @staticmethod
     def _parse_filters(lowered: str):

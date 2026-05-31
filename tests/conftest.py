@@ -15,7 +15,14 @@ os.environ.update(
     {
         "DB_BACKEND": "sqlite",
         "SQLITE_PATH": _tmp_db,
-        "GOOGLE_API_KEY": "",          # no LLM -> deterministic fallback
+        # Clear ALL LLM keys so tests use the deterministic template path and
+        # assert on stable text (not natural OpenAI/Gemini phrasing, which varies
+        # and would otherwise leak in from a developer's real .env).
+        "GOOGLE_API_KEY": "",
+        "OPENAI_API_KEY": "",
+        "LLM_PROVIDER": "none",
+        "USE_ADK_PATH": "false",
+        "USE_VERTEXAI": "false",
         "JWT_SECRET": "test-secret",
         "ENABLE_TRACING": "false",
         "ENVIRONMENT": "test",

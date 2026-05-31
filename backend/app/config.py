@@ -36,11 +36,17 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"     # fast, low-cost, great for phrasing
     openai_base_url: str = ""             # optional override (Azure/proxy); blank = default
 
-    # --- LLM (Gemini) — COMMENTED OUT / kept for future use ---
-    # To switch back to Gemini later: set llm_provider="gemini" and provide a key.
-    # Get a free key at https://aistudio.google.com/app/apikey
+    # --- LLM (Gemini) — set llm_provider="gemini" to use the ADK + Gemini path ---
+    # Two ways to authenticate Gemini:
+    #   1. AI Studio API key (free tier = only 20 req/day): set GOOGLE_API_KEY.
+    #      Get one at https://aistudio.google.com/app/apikey
+    #   2. Vertex AI (recommended; uses your $300 GCP credit / high quota):
+    #      set USE_VERTEXAI=true + GOOGLE_CLOUD_PROJECT + VERTEX_LOCATION, and
+    #      authenticate with `gcloud auth application-default login`.
     google_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"  # free-tier friendly, fast, multimodal
+    gemini_model: str = "gemini-2.5-flash"  # fast, multimodal
+    use_vertexai: bool = False              # True -> route Gemini/ADK via Vertex AI
+    vertex_location: str = "us-central1"
 
     # When True, try the ADK multi-agent path first and fall back to the grounded
     # path if it errors. Default False = always use the grounded "tools + LLM

@@ -12,7 +12,7 @@
         <span class="gp-logo">🛍️</span>
         <div>
           <div class="gp-title">GOOPHER</div>
-          <div class="gp-subtitle">JCPenney casual dresses · live help</div>
+          <div class="gp-subtitle">Your shopping agent</div>
         </div>
       </div>
       <button id="logoutBtn" class="gp-link" hidden>Sign out</button>
@@ -28,7 +28,7 @@
       <div id="loginError" class="gp-error" hidden></div>
     </section>
 
-    <!-- CHAT VIEW -->
+    <!-- CHAT VIEW (shown only after sign-in) -->
     <section id="chatView" class="gp-chat" hidden>
       <div class="gp-controls">
         <label>Channel
@@ -60,7 +60,9 @@
           📎
           <input id="fileInput" type="file" accept="image/*,.csv,.txt,.pdf" hidden multiple />
         </label>
-        <input id="messageInput" type="text" placeholder="Ask about dresses or your orders…" autocomplete="off" />
+        <input id="messageInput" type="text" placeholder="Ask about products or your orders…" autocomplete="off" />
+        <!-- Voice input: click to dictate your question (speech-to-text) -->
+        <button type="button" id="micBtn" class="gp-mic" title="Ask by voice">🎤</button>
         <button type="submit" class="gp-primary">Send</button>
       </form>
     </section>

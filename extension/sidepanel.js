@@ -1,6 +1,6 @@
 // GOOPHER side panel controller: login flow, chat rendering, multi-modal
-// attachments, channel/language switching. Maintains a stable session_id so the
-// backend memory agent preserves context across switches.
+// attachments, channel/language switching, and VOICE input. Maintains a stable
+// session_id so the backend memory agent preserves context across switches.
 import { getCustomer, getToken, login, logout, sendChat } from "./api.js";
 
 const els = {
@@ -18,6 +18,7 @@ const els = {
   language: document.getElementById("language"),
   fileInput: document.getElementById("fileInput"),
   attachmentBar: document.getElementById("attachmentBar"),
+  micBtn: document.getElementById("micBtn"),
 };
 
 // One stable session id per browser profile keeps memory/context continuous.
@@ -34,6 +35,7 @@ async function ensureSession() {
   }
 }
 
+// ---- message rendering ----
 function addMessage(text, who, meta) {
   const div = document.createElement("div");
   div.className = `gp-msg ${who}`;
@@ -61,6 +63,7 @@ function hideTyping() {
   document.getElementById("typing")?.remove();
 }
 
+// ---- attachments (multi-modal) ----
 function renderAttachments() {
   els.attachmentBar.innerHTML = "";
   pendingAttachments.forEach((a, i) => {
@@ -78,7 +81,6 @@ function renderAttachments() {
   });
 }
 
-// Convert a File to the backend Attachment shape (base64) — multi-modal input.
 function fileToAttachment(file) {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -97,13 +99,13 @@ function fileToAttachment(file) {
 
 // ---- view switching ----
 async function showChat() {
-  els.loginView.hidden = true;
+  els.loginView.hidden = true;       // hide the sign-in form after login
   els.chatView.hidden = false;
   els.logoutBtn.hidden = false;
   const customer = await getCustomer();
   if (els.messages.childElementCount === 0) {
     addMessage(
-      `Hi ${customer?.name || "there"}! I'm GOOPHER. Ask me about JCPenney casual dresses or your orders (e.g. "show black midi dresses under $40" or "where is ORD-50002?").`,
+      `Hi, I'm GOOPHER — your shopping agent. Ask me about products or your orders (e.g. "do you have barbecue chips?" or "where is ORD-50002?").`,
       "bot"
     );
   }
@@ -111,11 +113,100 @@ async function showChat() {
 
 function showLogin() {
   els.loginView.hidden = false;
-  els.chatView.hidden = true;
+  els.chatView.hidden = true;        // hide chat while logged out
   els.logoutBtn.hidden = true;
 }
 
-// ---- handlers ----
+// ---- core send ----
+async function send(text, attachments) {
+  const channel = els.channel.value;
+  const language = els.language.value;
+
+  addMessage(text || "(attachment)", "user");
+  els.messageInput.value = "";
+  pendingAttachments = [];
+  renderAttachments();
+  showTyping();
+
+  try {
+    const resp = await sendChat({ message: text, sessionId, channel, language, attachments });
+    hideTyping();
+    const meta = `${resp.channel} · ${resp.language}${resp.used_tools?.length ? " · " + resp.used_tools.join(",") : ""}`;
+    const bubble = addMessage(resp.reply, "bot", meta);
+    // On the phone channel, also speak the answer aloud (voice out).
+    if (channel === "phone") speak(resp.reply, resp.language);
+    return bubble;
+  } catch (err) {
+    hideTyping();
+    if (err.message === "UNAUTHORIZED") {
+      await logout();
+      showLogin();
+      els.loginError.textContent = "Session expired. Please sign in again.";
+      els.loginError.hidden = false;
+    } else {
+      addMessage("⚠️ " + err.message, "bot");
+    }
+  }
+}
+
+// ---- voice input (Web Speech API: speech-to-text, free, built into Chrome) ----
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+let listening = false;
+
+const LANG_BCP47 = {
+  en: "en-US", es: "es-ES", fr: "fr-FR", de: "de-DE",
+  pt: "pt-BR", hi: "hi-IN", zh: "zh-CN",
+};
+
+function setupMic() {
+  if (!SR) {
+    // Browser without speech recognition — hide the mic gracefully.
+    els.micBtn.hidden = true;
+    return;
+  }
+  els.micBtn.addEventListener("click", () => {
+    if (listening) {
+      recognition?.stop();
+      return;
+    }
+    recognition = new SR();
+    recognition.lang = LANG_BCP47[els.language.value] || "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      listening = true;
+      els.micBtn.classList.add("listening");
+      els.messageInput.placeholder = "Listening… speak now";
+    };
+    recognition.onresult = (e) => {
+      const transcript = e.results[0][0].transcript;
+      els.messageInput.value = transcript;
+      // Auto-send the spoken question.
+      send(transcript.trim(), []);
+    };
+    recognition.onerror = (e) => {
+      addMessage("🎤 Voice error: " + e.error, "bot");
+    };
+    recognition.onend = () => {
+      listening = false;
+      els.micBtn.classList.remove("listening");
+      els.messageInput.placeholder = "Ask about products or your orders…";
+    };
+    recognition.start();
+  });
+}
+
+// Speak a reply aloud on the phone (voice) channel.
+function speak(text, language) {
+  if (!window.speechSynthesis) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = LANG_BCP47[language] || "en-US";
+  window.speechSynthesis.speak(u);
+}
+
+// ---- event handlers ----
 els.loginBtn.addEventListener("click", async () => {
   els.loginError.hidden = true;
   try {
@@ -145,38 +236,13 @@ els.composer.addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = els.messageInput.value.trim();
   if (!text && pendingAttachments.length === 0) return;
-
-  const channel = els.channel.value;
-  const language = els.language.value;
-  const attachments = [...pendingAttachments];
-
-  addMessage(text || "(attachment)", "user");
-  els.messageInput.value = "";
-  pendingAttachments = [];
-  renderAttachments();
-  showTyping();
-
-  try {
-    const resp = await sendChat({ message: text, sessionId, channel, language, attachments });
-    hideTyping();
-    const meta = `${resp.channel} · ${resp.language}${resp.used_tools?.length ? " · " + resp.used_tools.join(",") : ""}`;
-    addMessage(resp.reply, "bot", meta);
-  } catch (err) {
-    hideTyping();
-    if (err.message === "UNAUTHORIZED") {
-      await logout();
-      showLogin();
-      els.loginError.textContent = "Session expired. Please sign in again.";
-      els.loginError.hidden = false;
-    } else {
-      addMessage("⚠️ " + err.message, "bot");
-    }
-  }
+  await send(text, [...pendingAttachments]);
 });
 
 // ---- boot ----
 (async function init() {
   await ensureSession();
+  setupMic();
   const token = await getToken();
   if (token) {
     await showChat();

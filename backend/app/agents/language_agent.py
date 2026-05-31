@@ -13,30 +13,75 @@ for anything ambiguous (the orchestrator already has Gemini available).
 """
 from __future__ import annotations
 
+import re
+
 # Tiny stopword fingerprints for common languages — good enough to pick a
 # starting language without a heavyweight dependency. The LLM refines from here.
+#
+# IMPORTANT: matching is done on WHOLE WORDS (see detect_language), so these are
+# only distinctive tokens. We deliberately avoid ultra-short ambiguous tokens
+# (e.g. "je", "o", "wo") because, even with word matching, they collide with
+# product/English text ("Jessica" -> would have matched "je" under substring
+# matching, which caused a French misdetection bug).
 _FINGERPRINTS = {
-    "es": {"hola", "gracias", "pedido", "vestido", "dónde", "está", "cuánto", "tengo", "quiero"},
-    "fr": {"bonjour", "merci", "commande", "robe", "où", "combien", "je", "veux"},
-    "de": {"hallo", "danke", "bestellung", "kleid", "wo", "wieviel", "ich", "möchte"},
-    "pt": {"olá", "obrigado", "pedido", "vestido", "onde", "quanto", "quero"},
-    "hi": {"नमस्ते", "धन्यवाद", "ऑर्डर", "कहाँ", "कितना"},
-    "zh": {"你好", "谢谢", "订单", "连衣裙", "多少", "在哪里"},
+    "es": {"hola", "gracias", "pedido", "vestido", "dónde", "está", "cuánto",
+           "tengo", "quiero", "mi", "el", "la", "para", "cuál", "precio"},
+    "fr": {"bonjour", "merci", "commande", "robe", "où", "combien", "veux",
+           "bonsoir", "prix", "quel", "ma", "mon", "s'il"},
+    "de": {"hallo", "danke", "bestellung", "kleid", "wieviel", "ich", "möchte",
+           "wo", "preis", "mein", "wie"},
+    "pt": {"olá", "obrigado", "pedido", "vestido", "onde", "quanto", "quero",
+           "meu", "preço", "qual"},
+    "hi": {"नमस्ते", "धन्यवाद", "ऑर्डर", "कहाँ", "कितना", "मेरा", "है"},
+    "zh": {"你好", "谢谢", "订单", "连衣裙", "多少", "在哪里", "价格"},
 }
 
 SUPPORTED = ["en", "es", "fr", "de", "pt", "hi", "zh"]
 
+# Unicode script ranges that are an unambiguous signal on their own.
+_DEVANAGARI = re.compile(r"[ऀ-ॿ]")
+_CJK = re.compile(r"[一-鿿]")
+# Word tokenizer that keeps accented Latin letters together as one word.
+_WORD_RE = re.compile(r"[a-zA-ZÀ-ÿऀ-ॿ一-鿿']+")
+
 
 def detect_language(text: str, default: str = "en") -> str:
-    """Heuristically detect language from a short message."""
+    """
+    Heuristically detect the language of a short message.
+
+    Strategy:
+      1. Non-Latin scripts (Devanagari, CJK) are decisive — return immediately.
+      2. Otherwise tokenize into WHOLE words and count distinctive-word hits per
+         language. Whole-word matching avoids false positives like "je" inside
+         "Jessica" or "o"/"wo" inside ordinary English.
+      3. A single hit isn't enough to override English unless it's an accented
+         word (a strong signal), to keep plain-English product queries as "en".
+    """
     if not text:
         return default
+
+    # 1) Script-based shortcuts.
+    if _DEVANAGARI.search(text):
+        return "hi"
+    if _CJK.search(text):
+        return "zh"
+
     lowered = text.lower()
+    words = set(_WORD_RE.findall(lowered))
+    has_accent = bool(re.search(r"[à-ÿ]", lowered))
+
     scores: dict[str, int] = {}
-    for lang, words in _FINGERPRINTS.items():
-        scores[lang] = sum(1 for w in words if w in lowered)
+    for lang, vocab in _FINGERPRINTS.items():
+        scores[lang] = len(words & vocab)
+
     best = max(scores, key=scores.get) if scores else default
-    return best if scores.get(best, 0) > 0 else default
+    best_score = scores.get(best, 0)
+
+    # Require either 2+ matching words, or 1 match that carries an accent — a
+    # lone common token shouldn't flip an English sentence to another language.
+    if best_score >= 2 or (best_score == 1 and has_accent):
+        return best
+    return default
 
 
 def language_directive(language: str) -> str:

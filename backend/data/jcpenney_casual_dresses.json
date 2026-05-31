@@ -201,6 +201,84 @@
         {"variant_id": "JCP-SJB-1010-STR-M", "color": "Stripe", "size": "M", "stock": 12},
         {"variant_id": "JCP-SJB-1010-MUS-S", "color": "Mustard", "size": "S", "stock": 4}
       ]
+    },
+    {
+      "sku": "JCP-JSS-1011",
+      "name": "JS Jessica Simpson Womens Midi Sleeveless A-Line Dress",
+      "brand": "Jessica Simpson",
+      "category": "Casual Dress",
+      "description": "Sleeveless A-line midi dress with a button-front bodice, self-tie waist, and roll-tab detail. A relaxed denim-inspired look for everyday casual wear.",
+      "list_price": 99.5,
+      "sale_price": 47.76,
+      "rating": 4.5,
+      "review_count": 2,
+      "colors": ["Medium Wash", "Chambray Blue"],
+      "sizes": ["XS", "S", "M", "L", "XL"],
+      "material": "100% Cotton",
+      "variants": [
+        {"variant_id": "JCP-JSS-1011-MDW-S", "color": "Medium Wash", "size": "S", "stock": 12},
+        {"variant_id": "JCP-JSS-1011-MDW-M", "color": "Medium Wash", "size": "M", "stock": 8},
+        {"variant_id": "JCP-JSS-1011-MDW-L", "color": "Medium Wash", "size": "L", "stock": 3},
+        {"variant_id": "JCP-JSS-1011-CHB-M", "color": "Chambray Blue", "size": "M", "stock": 5},
+        {"variant_id": "JCP-JSS-1011-CHB-XL", "color": "Chambray Blue", "size": "XL", "stock": 0}
+      ]
+    },
+    {
+      "sku": "JCP-SJB-1012",
+      "name": "St. John's Bay Womens Sleeveless Striped A-Line Dress",
+      "brand": "St. John's Bay",
+      "category": "Casual Dress",
+      "description": "Breezy sleeveless A-line dress in a soft multi-color stripe with a tiered skirt. New arrival for warm-weather casual days.",
+      "list_price": 68.0,
+      "sale_price": 31.99,
+      "rating": 5.0,
+      "review_count": 1,
+      "colors": ["Pastel Stripe", "Blue Stripe"],
+      "sizes": ["S", "M", "L", "XL", "XXL"],
+      "material": "65% Cotton, 35% Rayon",
+      "variants": [
+        {"variant_id": "JCP-SJB-1012-PST-S", "color": "Pastel Stripe", "size": "S", "stock": 17},
+        {"variant_id": "JCP-SJB-1012-PST-M", "color": "Pastel Stripe", "size": "M", "stock": 9},
+        {"variant_id": "JCP-SJB-1012-BLS-L", "color": "Blue Stripe", "size": "L", "stock": 6},
+        {"variant_id": "JCP-SJB-1012-BLS-XL", "color": "Blue Stripe", "size": "XL", "stock": 2}
+      ]
+    },
+    {
+      "sku": "JCP-SJB-1013",
+      "name": "St. John's Bay Womens Short Sleeve Striped Shift Dress",
+      "brand": "St. John's Bay",
+      "category": "Casual Dress",
+      "description": "Easy short-sleeve shift dress in a vertical stripe with a relaxed, throw-on-and-go fit and side pockets.",
+      "list_price": 50.0,
+      "sale_price": 27.99,
+      "rating": 4.4,
+      "review_count": 38,
+      "colors": ["Multi Stripe", "Navy Stripe"],
+      "sizes": ["S", "M", "L", "XL"],
+      "material": "95% Rayon, 5% Spandex",
+      "variants": [
+        {"variant_id": "JCP-SJB-1013-MLT-M", "color": "Multi Stripe", "size": "M", "stock": 14},
+        {"variant_id": "JCP-SJB-1013-NVS-L", "color": "Navy Stripe", "size": "L", "stock": 7}
+      ]
+    },
+    {
+      "sku": "JCP-RYE-1014",
+      "name": "Ryegrass Womens Short Sleeve Floral Midi Dress",
+      "brand": "Ryegrass",
+      "category": "Casual Dress",
+      "description": "Romantic floral-print midi dress with short sleeves, a smocked waist, and a flowy skirt. Lightweight for spring and summer.",
+      "list_price": 60.0,
+      "sale_price": 36.99,
+      "rating": 4.6,
+      "review_count": 54,
+      "colors": ["Pink Floral", "Yellow Floral"],
+      "sizes": ["XS", "S", "M", "L", "XL"],
+      "material": "100% Polyester",
+      "variants": [
+        {"variant_id": "JCP-RYE-1014-PKF-S", "color": "Pink Floral", "size": "S", "stock": 11},
+        {"variant_id": "JCP-RYE-1014-PKF-M", "color": "Pink Floral", "size": "M", "stock": 4},
+        {"variant_id": "JCP-RYE-1014-YLF-L", "color": "Yellow Floral", "size": "L", "stock": 0}
+      ]
     }
   ],
   "customers": [

@@ -86,13 +86,4 @@ async function load() {
   }
 }
 
-// Floating reminder that GOOPHER lives in the extension.
-function addFab() {
-  const fab = document.createElement("div");
-  fab.className = "goopher-fab";
-  fab.innerHTML = `🛍️ GOOPHER <small>— open the side panel to ask</small>`;
-  document.body.appendChild(fab);
-}
-
 load();
-addFab();

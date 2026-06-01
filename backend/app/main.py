@@ -27,6 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from .agents.orchestrator import get_agent_service
 from .auth.auth import authenticate, create_access_token, decode_token
 from .config import BACKEND_DIR, get_settings
+from .middleware import RateLimitMiddleware
 from .db.database import get_repository
 from .tools.order_tool import bulk_order_status
 from .models.schemas import (
@@ -44,6 +45,10 @@ configure_logging()
 app = FastAPI(title="GOOPHER API", version="0.1.0",
               description="Unified conversational retail agent for a multi-department "
                           "(clothing + food) store, used via the GOOPHER Chrome extension.")
+
+# Abuse protection: request-size + per-client rate limiting (DoS / cost-DoS).
+# Added before CORS so limits apply to every request.
+app.add_middleware(RateLimitMiddleware)
 
 # The extension calls cross-origin; allow it. Tighten allow_origins in prod.
 app.add_middleware(
@@ -134,6 +139,13 @@ def chat(req: ChatRequest, claims: dict = Depends(current_customer)) -> ChatResp
     subagent auto-detects it (and falls back to the session's remembered
     language) inside the orchestrator.
     """
+    # Cap a single message's length so one request can't balloon LLM cost even
+    # if it slipped under the body-size limit.
+    if len(req.message or "") > settings.max_chat_message_chars:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Message too long (max {settings.max_chat_message_chars} characters).",
+        )
     service = get_agent_service()
     return service.run_turn(req, customer_id=claims["sub"])
 

@@ -85,6 +85,19 @@ class Settings(BaseSettings):
     # --- High-volume / batch order management ---
     bulk_max_orders: int = 500  # safety cap for a single high-volume request
 
+    # --- Abuse protection / DoS limits ---
+    rate_limit_enabled: bool = True
+    # Per-client request budgets (sliding window). The LLM /chat path is the
+    # expensive one, so it gets a tighter limit than cheap endpoints.
+    rate_limit_chat_per_min: int = 20     # /chat requests per client per minute
+    rate_limit_global_per_min: int = 120  # all requests per client per minute
+    rate_limit_login_per_min: int = 10    # /auth/login attempts per client per min
+    # Max request body size (bytes). Blocks oversized payloads (e.g. huge base64
+    # attachments) before they reach the app. 2 MB default.
+    max_request_bytes: int = 2 * 1024 * 1024
+    # Max characters in a single chat message (separate from body size).
+    max_chat_message_chars: int = 4000
+
 
 @lru_cache
 def get_settings() -> Settings:

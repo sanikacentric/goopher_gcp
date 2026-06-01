@@ -14,7 +14,9 @@ Both backends are seeded from `backend/data/goopher_catalog.json`.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 import sqlite3
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -22,11 +24,21 @@ from typing import Optional
 from ..config import DATA_FILE, get_settings
 from ..models.schemas import Customer, Order, Product
 
+logger = logging.getLogger(__name__)
+
 
 def load_seed() -> dict:
     """Read the synthetic store catalog (clothing & food) from disk."""
     with open(DATA_FILE, "r", encoding="utf-8") as fh:
         return json.load(fh)
+
+
+def catalog_fingerprint(data: Optional[dict] = None) -> str:
+    """Stable hash of the catalog's products, used to detect when the on-disk
+    catalog has changed so a persistent backend (Firestore) can auto-resync."""
+    data = data or load_seed()
+    blob = json.dumps(data.get("products", []), sort_keys=True)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
 # --------------------------------------------------------------------------- #
@@ -305,6 +317,50 @@ class FirestoreRepository(Repository):
         for c in data["customers"]:
             batch.set(self.db.collection("customers").document(c["email"]), c)
         batch.commit()
+        self._stamp_catalog(data)
+
+    # --- Auto-sync ---------------------------------------------------------- #
+    def _stamp_catalog(self, data: Optional[dict] = None) -> None:
+        """Record the catalog fingerprint so we can detect future changes."""
+        data = data or load_seed()
+        self.db.collection("_meta").document("catalog").set(
+            {"fingerprint": catalog_fingerprint(data), "product_count": len(data["products"])}
+        )
+
+    def _sync_products(self, data: dict) -> None:
+        """Make the `products` collection exactly match the on-disk catalog:
+        upsert every current product and delete any stale SKUs. Runtime data
+        (orders, customers) is left untouched."""
+        catalog_skus = {p["sku"] for p in data["products"]}
+        batch = self.db.batch()
+        for p in data["products"]:
+            batch.set(self.db.collection("products").document(p["sku"]), p)
+        for doc in self.db.collection("products").stream():
+            if doc.id not in catalog_skus:
+                batch.delete(doc.reference)
+        batch.commit()
+
+    def sync_catalog_if_changed(self) -> bool:
+        """If the on-disk catalog differs from what Firestore was last seeded
+        with, re-sync. Returns True if a re-sync happened.
+
+        * Fresh database (no fingerprint): full seed (products + demo orders +
+          demo customers).
+        * Existing database, catalog changed: re-sync products only, preserving
+          any orders/customers created at runtime.
+        """
+        data = load_seed()
+        fp = catalog_fingerprint(data)
+        snap = self.db.collection("_meta").document("catalog").get()
+        if snap.exists:
+            if snap.to_dict().get("fingerprint") == fp:
+                return False  # already up to date
+            self._sync_products(data)
+        else:
+            self.seed()
+            return True  # seed() already stamped the catalog
+        self._stamp_catalog(data)
+        return True
 
     def list_products(self) -> list[Product]:
         return [Product(**d.to_dict()) for d in self.db.collection("products").stream()]
@@ -351,6 +407,16 @@ def get_repository() -> Repository:
     settings = get_settings()
     if settings.db_backend == "firestore":
         _repo = FirestoreRepository(settings.google_cloud_project, settings.firestore_database)
+        # Firestore is persistent, so we don't re-seed on every boot. But if the
+        # on-disk catalog changed (e.g. a new department was added), re-sync the
+        # products collection automatically so deploys don't require a manual
+        # seed. Runtime orders/customers are preserved.
+        if settings.auto_seed_firestore:
+            try:
+                if _repo.sync_catalog_if_changed():
+                    logger.info("Firestore catalog re-synced from goopher_catalog.json")
+            except Exception as exc:  # never let a sync failure block startup
+                logger.warning("Firestore catalog auto-sync skipped: %s", exc)
     else:
         _repo = SQLiteRepository(settings.sqlite_path)
         _repo.seed()  # SQLite is ephemeral in containers, so seed on boot.

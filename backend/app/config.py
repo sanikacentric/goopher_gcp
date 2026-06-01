@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     db_backend: str = "sqlite"
     sqlite_path: str = str(BACKEND_DIR / "goopher.db")
     firestore_database: str = "(default)"
+    # Keep Firestore's product catalog in sync with goopher_catalog.json on boot.
+    # When the catalog file changes (e.g. a new department is added), the service
+    # re-syncs the `products` collection automatically — runtime orders/customers
+    # are preserved. Set False to manage Firestore data manually.
+    auto_seed_firestore: bool = True
 
     # --- Auth ---
     jwt_secret: str = "change-me-in-production"

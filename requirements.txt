@@ -13,6 +13,10 @@ openai>=1.59
 
 # --- LLM (Gemini) — used when LLM_PROVIDER=gemini ---
 google-generativeai>=0.8.3
+# Unified SDK — powers the Vision subagent (Gemini Vision over Vertex AI in the
+# cloud, AI Studio locally). Also a transitive dep of google-adk; pinned here so
+# the vision path never breaks if that changes.
+google-genai>=1.0
 
 # --- ADK orchestrator (T2) — Gemini multi-agent path; tools registered in-process ---
 google-adk>=1.2

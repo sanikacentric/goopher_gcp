@@ -7,7 +7,7 @@ import { getCustomer, getToken, getMyOrders, login, logout, sendChat, sendVision
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.4.0 — + camera Vision subagent (see it, shop it)");
+console.log("GOOPHER side panel v0.4.1 — camera Vision subagent (Gemini Vision via Vertex)");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -400,7 +400,9 @@ function setupCamera() {
     lastVisionId = msg.id || null;
 
     const question = (msg.question || "").trim();
-    addMessage(`📷 (camera) ${question || "What is this — and the price?"}`, "user");
+    // Show exactly what the customer typed (if anything) — don't fabricate a
+    // question. With no text, the backend defaults to "identify + price".
+    addMessage(question ? `📷 ${question}` : "📷 (sent a photo)", "user");
     showTyping();
     try {
       const resp = await sendVision({

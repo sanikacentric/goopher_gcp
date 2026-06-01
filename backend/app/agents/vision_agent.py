@@ -55,35 +55,52 @@ def _clean_label(text: str) -> str:
     return line[:60]
 
 
-def _gemini_text(resp) -> str:
-    try:
-        parts = resp.candidates[0].content.parts or []
-    except (AttributeError, IndexError):
-        return ""
-    return "".join(getattr(p, "text", "") or "" for p in parts).strip()
+def _gemini_vision_label(image_b64: str, mime_type: str, settings) -> str:
+    """
+    Recognize the product with Gemini Vision via the unified `google.genai` SDK,
+    which supports BOTH backends:
+      * Vertex AI (cloud) — authenticated by the Cloud Run service account
+        (USE_VERTEXAI=true, no API key needed). This is what production uses.
+      * AI Studio (local) — when GOOGLE_API_KEY is set.
+    Returns "" if no usable backend or the call fails.
+    """
+    from google import genai
+    from google.genai import types
+
+    if settings.use_vertexai:
+        client = genai.Client(
+            vertexai=True,
+            project=settings.google_cloud_project,
+            location=settings.vertex_location,
+        )
+    elif settings.google_api_key:
+        client = genai.Client(api_key=settings.google_api_key)
+    else:
+        return ""  # no Gemini credentials available
+
+    resp = client.models.generate_content(
+        model=settings.gemini_model,
+        contents=[
+            types.Part.from_bytes(data=base64.b64decode(image_b64), mime_type=mime_type),
+            _RECOGNIZE_PROMPT,
+        ],
+        config=types.GenerateContentConfig(max_output_tokens=64, temperature=0.0),
+    )
+    return _clean_label(getattr(resp, "text", "") or "")
 
 
 def _recognize(image_b64: str, mime_type: str) -> tuple[str, str]:
     """Return (product_label, engine). Empty label means recognition failed."""
     settings = get_settings()
 
-    # --- GEMINI VISION (primary) ---
-    if settings.google_api_key or settings.use_vertexai:
+    # --- GEMINI VISION (primary) — unified SDK, Vertex AI or AI Studio ---
+    if settings.use_vertexai or settings.google_api_key:
         try:
-            import google.generativeai as genai
-
-            if settings.google_api_key:
-                genai.configure(api_key=settings.google_api_key)
-            model = genai.GenerativeModel(settings.gemini_model)
-            part = {"mime_type": mime_type, "data": base64.b64decode(image_b64)}
-            resp = model.generate_content(
-                [_RECOGNIZE_PROMPT, part],
-                generation_config={"max_output_tokens": 64, "temperature": 0.0},
-            )
-            label = _clean_label(_gemini_text(resp))
+            label = _gemini_vision_label(image_b64, mime_type, settings)
             if label:
                 log_event("vision_recognized", engine="gemini", label=label)
                 return label, "gemini-vision"
+            log_event("vision_gemini_empty")
         except Exception as exc:  # noqa: BLE001 - degrade gracefully
             log_event("vision_gemini_failed", reason=str(exc))
 

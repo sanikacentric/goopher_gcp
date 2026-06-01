@@ -20,14 +20,19 @@ from __future__ import annotations
 
 import os
 
+import asyncio
+import json
+
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .agents.orchestrator import get_agent_service
 from .auth.auth import authenticate, create_access_token, decode_token
-from .config import BACKEND_DIR, get_settings
+from .config import APP_DIR, BACKEND_DIR, get_settings
 from .middleware import RateLimitMiddleware
+from .observability.flow_recorder import get_recorder, record_login
 from .db.database import get_repository
 from .tools.order_tool import bulk_order_status
 from .models.schemas import (
@@ -119,8 +124,11 @@ def catalog() -> dict:
 def login(body: LoginRequest) -> TokenResponse:
     customer = authenticate(body.email, body.password)
     if not customer:
+        record_login(customer_id="", email=body.email, ok=False)  # dev portal
+        log_event("login_rejected", email=body.email)
         raise HTTPException(status_code=401, detail="Invalid credentials.")
     token = create_access_token(customer)
+    record_login(customer_id=customer.customer_id, email=body.email, ok=True)
     log_event("login", customer_id=customer.customer_id)
     return TokenResponse(access_token=token, customer=customer)
 
@@ -155,6 +163,62 @@ def orders_bulk(body: BulkOrderQuery, claims: dict = Depends(current_customer)) 
     """High-volume order management endpoint (Req 3)."""
     log_event("orders_bulk_request", customer_id=claims["sub"], count=len(body.order_ids))
     return bulk_order_status(body.order_ids)
+
+
+# --------------------------------------------------------------------------- #
+# Developer Portal — live end-to-end flow visualizer
+# --------------------------------------------------------------------------- #
+# A passive observer that shows, in real time, the full pipeline of every
+# conversation turn (auth → session → sub-agents → tools → memory → reply).
+# Built for a CTO-friendly walkthrough. Gated by settings.dev_portal_enabled.
+_DEV_HTML = APP_DIR / "static" / "dev_portal.html"
+
+
+@app.get("/dev", response_class=HTMLResponse)
+def dev_portal() -> HTMLResponse:
+    """Serve the developer portal page."""
+    if not settings.dev_portal_enabled:
+        raise HTTPException(status_code=404, detail="Not found.")
+    try:
+        return HTMLResponse(_DEV_HTML.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Dev portal page missing.")
+
+
+@app.get("/dev/recent")
+def dev_recent(limit: int = 50) -> dict:
+    """Return the most recent captured flow records (for initial page load)."""
+    if not settings.dev_portal_enabled:
+        raise HTTPException(status_code=404, detail="Not found.")
+    return {"records": get_recorder().recent(limit=limit)}
+
+
+@app.get("/dev/stream")
+async def dev_stream() -> StreamingResponse:
+    """
+    Server-Sent-Events stream of new flow records as turns happen live.
+    The portal opens this once and renders each record as it arrives.
+    """
+    if not settings.dev_portal_enabled:
+        raise HTTPException(status_code=404, detail="Not found.")
+
+    async def event_gen():
+        recorder = get_recorder()
+        # Start after whatever already exists so we only stream NEW turns.
+        last = max((r["id"] for r in recorder.recent(limit=1)), default=0)
+        # Greeting comment so the connection opens immediately.
+        yield ": connected\n\n"
+        while True:
+            for rec in recorder.since(last):
+                last = rec["id"]
+                yield f"data: {json.dumps(rec)}\n\n"
+            await asyncio.sleep(1.0)
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # --------------------------------------------------------------------------- #

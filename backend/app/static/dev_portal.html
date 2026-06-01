@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GOOPHER — Developer Portal</title>
+    <style>
+      :root {
+        --bg: #0d1117; --panel: #161b22; --border: #30363d; --text: #e6edf3;
+        --muted: #8b949e; --accent: #c8102e; --green: #2ea043; --blue: #1f6feb;
+        --amber: #d29922; --purple: #8957e5;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; background: var(--bg); color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        height: 100vh; display: flex; flex-direction: column;
+      }
+      header {
+        padding: 14px 22px; background: var(--panel); border-bottom: 1px solid var(--border);
+        display: flex; align-items: center; justify-content: space-between;
+      }
+      .brand { display: flex; align-items: center; gap: 12px; }
+      .brand .logo { font-size: 26px; }
+      .brand h1 { font-size: 18px; margin: 0; letter-spacing: .5px; }
+      .brand .sub { font-size: 12px; color: var(--muted); }
+      .status { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+      .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+      .dot.live { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 1.4s infinite; }
+      @keyframes pulse { 50% { opacity: .4; } }
+
+      .legend { display: flex; gap: 14px; flex-wrap: wrap; padding: 10px 22px;
+        background: var(--panel); border-bottom: 1px solid var(--border); font-size: 12px; }
+      .chip { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+      .chip i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+      main { flex: 1; overflow-y: auto; padding: 18px 22px; }
+      .empty { color: var(--muted); text-align: center; margin-top: 60px; font-size: 15px; }
+
+      .turn {
+        background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+        margin-bottom: 18px; overflow: hidden; animation: slidein .25s ease;
+      }
+      @keyframes slidein { from { opacity: 0; transform: translateY(8px); } }
+      .turn-head {
+        padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 10px 18px;
+        align-items: center; border-bottom: 1px solid var(--border); background: #1c2230;
+      }
+      .turn-head .kind {
+        font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+        background: var(--blue); color: #fff; text-transform: uppercase;
+      }
+      .turn-head .kind.login { background: var(--purple); }
+      .meta { font-size: 12px; color: var(--muted); }
+      .meta b { color: var(--text); font-weight: 600; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+      .qa { padding: 12px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+      @media (max-width: 800px) { .qa { grid-template-columns: 1fr; } }
+      .bubble { border-radius: 10px; padding: 10px 12px; font-size: 14px; line-height: 1.45; white-space: pre-wrap; }
+      .bubble.user { background: #21262d; border: 1px solid var(--border); }
+      .bubble.bot { background: #0f2417; border: 1px solid #1d3a28; }
+      .bubble .lbl { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .5px; }
+
+      .pipeline { padding: 6px 16px 16px; }
+      .pipeline h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 10px 0 8px; }
+      .steps { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+      .step {
+        position: relative; border: 1px solid var(--border); border-radius: 9px;
+        padding: 8px 11px; min-width: 130px; background: #11151c;
+      }
+      .step .stage { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; font-weight: 700; margin-bottom: 3px; }
+      .step .name { font-size: 13px; font-weight: 600; }
+      .step .detail { font-size: 11px; color: var(--muted); margin-top: 3px; }
+      .step .ms { position: absolute; top: 7px; right: 9px; font-size: 10px; color: var(--muted); }
+      .arrow { align-self: center; color: var(--muted); font-size: 16px; }
+
+      /* stage colors */
+      .stage.auth { color: var(--purple); } .step.auth { border-left: 3px solid var(--purple); }
+      .stage.session { color: var(--amber); } .step.session { border-left: 3px solid var(--amber); }
+      .stage.subagent { color: var(--blue); } .step.subagent { border-left: 3px solid var(--blue); }
+      .stage.tool { color: var(--green); } .step.tool { border-left: 3px solid var(--green); }
+      .stage.llm { color: var(--accent); } .step.llm { border-left: 3px solid var(--accent); }
+      .stage.memory { color: var(--amber); } .step.memory { border-left: 3px solid var(--amber); }
+
+      .mem { padding: 0 16px 16px; }
+      .mem pre {
+        background: #11151c; border: 1px solid var(--border); border-radius: 8px;
+        padding: 10px; font-size: 12px; color: var(--muted); overflow-x: auto; margin: 6px 0 0;
+        white-space: pre-wrap;
+      }
+      .tools-row { padding: 0 16px 14px; font-size: 12px; color: var(--muted); }
+      .tag { display: inline-block; background: #0f2417; border: 1px solid #1d3a28; color: #6fd18f;
+             border-radius: 8px; padding: 2px 8px; margin-right: 6px; font-size: 11px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <span class="logo">🛰️</span>
+        <div>
+          <h1>GOOPHER — Developer Portal</h1>
+          <div class="sub">Live end-to-end agent flow · auth → sub-agents → tools → memory</div>
+        </div>
+      </div>
+      <div class="status"><span id="dot" class="dot"></span><span id="statusText">connecting…</span></div>
+    </header>
+
+    <div class="legend">
+      <span class="chip"><i style="background:#8957e5"></i> Auth</span>
+      <span class="chip"><i style="background:#d29922"></i> Session / Memory</span>
+      <span class="chip"><i style="background:#1f6feb"></i> Sub-agent (modality / language / channel)</span>
+      <span class="chip"><i style="background:#2ea043"></i> Tool (inventory / order)</span>
+      <span class="chip"><i style="background:#c8102e"></i> LLM (Gemini / OpenAI)</span>
+    </div>
+
+    <main id="feed">
+      <div class="empty" id="empty">
+        Waiting for activity… open the GOOPHER extension or storefront, sign in, and ask a question.
+        Every turn will appear here in real time.
+      </div>
+    </main>
+
+    <script>
+      const feed = document.getElementById("feed");
+      const empty = document.getElementById("empty");
+      const dot = document.getElementById("dot");
+      const statusText = document.getElementById("statusText");
+
+      const STAGE_LABEL = {
+        auth: "AUTH", session: "SESSION", subagent: "SUB-AGENT",
+        tool: "TOOL", llm: "LLM", memory: "MEMORY",
+      };
+
+      function esc(s) {
+        return (s ?? "").toString().replace(/[&<>]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;" }[c]));
+      }
+
+      function stepEl(step, isLast) {
+        const wrap = document.createElement("div");
+        wrap.style.display = "contents";
+        const el = document.createElement("div");
+        el.className = `step ${step.stage}`;
+        el.innerHTML = `
+          <div class="stage ${step.stage}">${STAGE_LABEL[step.stage] || step.stage}</div>
+          <div class="name">${esc(step.name)}</div>
+          ${step.detail ? `<div class="detail">${esc(step.detail)}</div>` : ""}
+          ${step.ms ? `<div class="ms">${step.ms} ms</div>` : ""}`;
+        wrap.appendChild(el);
+        if (!isLast) {
+          const a = document.createElement("div");
+          a.className = "arrow"; a.textContent = "→";
+          wrap.appendChild(a);
+        }
+        return wrap;
+      }
+
+      function render(rec) {
+        empty.style.display = "none";
+        const card = document.createElement("div");
+        card.className = "turn";
+        const when = new Date(rec.ts * 1000).toLocaleTimeString();
+
+        const tools = (rec.used_tools || []).map(t => `<span class="tag">${esc(t)}</span>`).join("");
+        const memJson = rec.memory && Object.keys(rec.memory).length
+          ? JSON.stringify(rec.memory, null, 2) : "";
+
+        card.innerHTML = `
+          <div class="turn-head">
+            <span class="kind ${rec.kind}">${rec.kind}</span>
+            <span class="meta">🕐 <b>${when}</b></span>
+            <span class="meta">session <b class="mono">${esc(rec.session_id || "—")}</b></span>
+            <span class="meta">customer <b class="mono">${esc(rec.customer_id || "—")}</b></span>
+            ${rec.channel ? `<span class="meta">channel <b>${esc(rec.channel)}</b></span>` : ""}
+            ${rec.language ? `<span class="meta">lang <b>${esc(rec.language)}</b></span>` : ""}
+            ${rec.modality ? `<span class="meta">modality <b>${esc(rec.modality)}</b></span>` : ""}
+            ${rec.trace_id ? `<span class="meta">trace <b class="mono">${esc((rec.trace_id||"").slice(0,12))}…</b></span>` : ""}
+          </div>
+          ${rec.kind === "turn" ? `
+          <div class="qa">
+            <div class="bubble user"><span class="lbl">Customer asked</span>${esc(rec.user_message)}</div>
+            <div class="bubble bot"><span class="lbl">GOOPHER replied</span>${esc(rec.reply)}</div>
+          </div>` : `
+          <div class="qa"><div class="bubble user"><span class="lbl">Event</span>${esc(rec.user_message)} → ${esc(rec.reply)}</div></div>`}
+          ${tools ? `<div class="tools-row">Tools executed: ${tools}</div>` : ""}
+          <div class="pipeline"><h3>Execution pipeline</h3><div class="steps"></div></div>
+          ${memJson ? `<div class="mem"><h3 style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:0 0 6px">Session memory (after turn)</h3><pre>${esc(memJson)}</pre></div>` : ""}
+        `;
+        const stepsHost = card.querySelector(".steps");
+        (rec.steps || []).forEach((s, i, arr) => stepsHost.appendChild(stepEl(s, i === arr.length - 1)));
+
+        feed.insertBefore(card, feed.firstChild === empty ? null : feed.firstChild);
+      }
+
+      // Load recent history, then stream live.
+      fetch("/dev/recent?limit=30").then(r => r.json()).then(d => {
+        (d.records || []).forEach(render);
+      }).catch(() => {});
+
+      const es = new EventSource("/dev/stream");
+      es.onopen = () => { dot.classList.add("live"); statusText.textContent = "live"; };
+      es.onerror = () => { dot.classList.remove("live"); statusText.textContent = "reconnecting…"; };
+      es.onmessage = (e) => { try { render(JSON.parse(e.data)); } catch (_) {} };
+    </script>
+  </body>
+</html>

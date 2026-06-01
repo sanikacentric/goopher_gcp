@@ -99,9 +99,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 except ValueError:
                     pass
 
-        # --- 2) Per-client rate limits (skip health/metrics + static assets) ---
+        # --- 2) Per-client rate limits (skip health/metrics/dev + static) ---
         if _settings.rate_limit_enabled and not (
-            path in ("/healthz", "/metrics") or _is_static(path)
+            path in ("/healthz", "/metrics") or path.startswith("/dev") or _is_static(path)
         ):
             client = _client_id(request)
 

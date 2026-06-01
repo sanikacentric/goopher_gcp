@@ -27,6 +27,7 @@ from __future__ import annotations
 from ..config import BACKEND_DIR, get_settings
 from ..memory.memory_agent import Turn, get_memory_store
 from ..models.schemas import ChatRequest, ChatResponse
+from ..observability.flow_recorder import TurnTrace
 from ..observability.telemetry import incr, log_event, span
 from . import channel_agent, language_agent, modality_agent
 from .skills import inventory_skill, order_skill
@@ -216,26 +217,46 @@ class AgentService:
         Process one conversational turn end-to-end, preserving context across
         channel/language/modality switches via shared session memory.
         """
+        import time as _time
+
         incr("chat_requests_total")
+        # Dev-portal flow capture for this turn (full end-to-end pipeline).
+        ft = TurnTrace(kind="turn")
+        ft.record.session_id = req.session_id
+        ft.record.customer_id = customer_id
+        ft.record.user_message = req.message
+
         with span("chat_turn", session=req.session_id, channel=req.channel,
                   customer=customer_id) as trace_id:
-            mem = self.memory.get(req.session_id, customer_id)
+            ft.record.trace_id = trace_id
+            ft.step("auth", "JWT verified", f"customer={customer_id}")
+            ft.step("session", "memory.get",
+                    f"session_id={req.session_id} (backend={_settings.db_backend})")
 
             # 1) MODALITY subagent: fold any attachments into text.
+            _t0 = _time.perf_counter()
+            mem = self.memory.get(req.session_id, customer_id)
             modality = modality_agent.classify_modality(req.message, req.attachments)
             text = modality_agent.normalize_to_text(
                 req.message, req.attachments, _settings.gemini_model
             )
+            ft.step("subagent", "modality_agent",
+                    f"modality={modality}; normalized {len(req.attachments)} attachment(s)",
+                    ms=(_time.perf_counter() - _t0) * 1000, modality=modality)
 
             # 2) LANGUAGE subagent: detect or honor preferred language.
+            _t0 = _time.perf_counter()
             language = req.language or language_agent.detect_language(
                 text, default=self.memory.recall(req.session_id, "language", "en")
             )
             self.memory.remember(req.session_id, "language", language)
+            ft.step("subagent", "language_agent", f"language={language}",
+                    ms=(_time.perf_counter() - _t0) * 1000, language=language)
 
             # 3) CHANNEL subagent: build a style directive.
             channel = req.channel
             self.memory.remember(req.session_id, "channel", channel)
+            ft.step("subagent", "channel_agent", f"channel={channel}", channel=channel)
 
             # Record the user turn BEFORE answering (memory / context).
             self.memory.add_turn(
@@ -245,12 +266,20 @@ class AgentService:
             )
 
             # 4) Generate the reply (ADK path or fallback), with tools.
+            _t0 = _time.perf_counter()
             reply, used_tools = self._generate(req.session_id, text, customer_id,
                                                channel, language)
+            gen_ms = (_time.perf_counter() - _t0) * 1000
+            for tool in used_tools:
+                ft.step("tool", tool, "inventory/order tool executed", tool=tool)
+            ft.step("llm", f"generate ({_settings.llm_provider})",
+                    "natural-language reply from tool results", ms=gen_ms)
 
             # 5) CHANNEL post-processing for phone (voice-safe text).
             if channel == "phone":
                 reply = channel_agent.adapt_for_phone(reply)
+                ft.step("subagent", "channel_agent: adapt_for_phone",
+                        "stripped markdown for voice output")
 
             # Record the assistant turn.
             self.memory.add_turn(
@@ -258,10 +287,29 @@ class AgentService:
                 Turn(role="assistant", content=reply, channel=channel,
                      language=language, modality=modality),
             )
+            ft.step("memory", "add_turn x2",
+                    "persisted user + assistant turns to session memory")
 
             log_event("chat_reply", session=req.session_id, language=language,
                       channel=channel, modality=modality, used_tools=used_tools,
                       trace_id=trace_id)
+
+            # Commit the captured flow for the dev portal.
+            ft.record.channel = channel
+            ft.record.language = language
+            ft.record.modality = modality
+            ft.record.reply = reply
+            ft.record.used_tools = used_tools
+            try:
+                ft.record.memory = {
+                    "history_preview": self.memory.history_text(req.session_id, limit=6),
+                    "language": self.memory.recall(req.session_id, "language"),
+                    "channel": self.memory.recall(req.session_id, "channel"),
+                }
+            except Exception:
+                pass
+            ft.commit()
+
             return ChatResponse(
                 reply=reply, session_id=req.session_id, language=language,
                 channel=channel, used_tools=used_tools, trace_id=trace_id,

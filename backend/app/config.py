@@ -98,6 +98,11 @@ class Settings(BaseSettings):
     # Max characters in a single chat message (separate from body size).
     max_chat_message_chars: int = 4000
 
+    # --- Developer portal ---
+    # Live end-to-end flow visualizer at /dev (sub-agents, tools, memory, logs).
+    # Exposes session/customer ids + message content; set False to disable.
+    dev_portal_enabled: bool = True
+
 
 @lru_cache
 def get_settings() -> Settings:

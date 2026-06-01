@@ -207,6 +207,51 @@ independent issues. Each is a useful lesson on its own:
 - **Lesson:** Observability must reflect *what actually did the work*, not every
   code path that touched the data.
 
+### 3.13 Hierarchy inversion — orchestrator demoted to "step 4"
+- **Symptom:** The portal listed the pipeline as `memory → modality → language →
+  goopher_orchestrator (step 4) → channel`, so the **main agent looked like a
+  middle step**, not the root.
+- **Root cause:** I wrapped everything in a `SequentialAgent` as the *root*,
+  which made the orchestrator just one item in its `sub_agents` list — inverting
+  the intended hierarchy (orchestrator should be ON TOP, others under it).
+- **Fix (`8cdcc8d`):** Make `goopher_orchestrator` the **root LlmAgent**; all
+  others are sub-agents exposed as AgentTools *under* it.
+- **Lesson:** In a hierarchy, the coordinator is the root that *owns* the
+  sub-agents — not a peer inside a sequence.
+
+### 3.14 SequentialAgent cannot be wrapped as an AgentTool
+- **Symptom (caught in Cloud Trace):** `execute_tool context_pipeline` showed a
+  **red error**, and every turn silently fell back to the deterministic backup —
+  even though memory_agent/modality_agent were visibly starting to run.
+- **Root cause:** To keep "memory → modality → language always run in order"
+  while keeping the orchestrator on top, I exposed a `SequentialAgent`
+  (`context_pipeline`) to the orchestrator as an `AgentTool`. **That's an invalid
+  combination** — an AgentTool expects a single agent that returns one response,
+  but a SequentialAgent emits multiple sub-agent outputs, breaking the tool-call
+  contract. The tool call crashed → whole turn fell back.
+- **How Cloud Trace nailed it:** the waterfall showed the orchestrator on top,
+  the sub-agents nesting correctly, AND the red `execute_tool context_pipeline`
+  span — pinpointing the exact failing node. (The dev portal alone only showed
+  "(backup) ran"; the trace showed *why*.)
+- **Fix (`70206c9`):** Expose memory/modality/language as **individual**
+  AgentTools (plain LlmAgents that return cleanly); enforce ordering via the
+  orchestrator instruction instead of a wrapper.
+- **The deeper trade-off (unresolved tension):** There is a genuine conflict
+  between two goals:
+    * *Orchestrator on top + flexible* → AgentTools, but the LLM may skip a
+      sub-agent it deems unneeded (ordering is instruction-enforced, not forced).
+    * *All sub-agents guaranteed in fixed order* → a `SequentialAgent` as ROOT,
+      but then the orchestrator is a step inside it, not the parent.
+  You cannot have both with one simple structure. We chose orchestrator-as-root
+  with instruction-enforced ordering.
+- **Lessons:**
+  1. Not every ADK agent type composes with every wrapper — `SequentialAgent`
+     ≠ `AgentTool`-compatible. Check the contract before nesting.
+  2. **Cloud Trace is the diagnostic of record** for multi-agent failures: a
+     red span on the exact node beats guessing from a fallback symptom.
+  3. "Guaranteed order" and "smart, on-top orchestrator" are in tension; pick
+     deliberately rather than assuming one structure gives both.
+
 ---
 
 ## 4. Key trade-offs and decisions
@@ -329,3 +374,9 @@ developer portal, 53 unit tests + 8 evals.
 6. **Verify edits and secrets actually applied** before declaring success.
 7. **Never paste secrets into chat**; fail-closed everywhere; rotate on leak.
 8. **Observability should reflect what truly executed**, not every code path.
+9. **Agent types don't all compose** — a `SequentialAgent` can't be an
+   `AgentTool`; verify the contract before nesting ADK agents.
+10. **"Guaranteed order" vs "smart orchestrator-on-top" is a real tension** —
+    one simple structure won't give both; choose deliberately.
+11. **Cloud Trace is the multi-agent diagnostic of record** — a red span on the
+    exact failing node beats guessing from a fallback symptom.

@@ -87,13 +87,23 @@ def _gemini_vision_label(image_b64: str, mime_type: str, settings) -> str:
     else:
         return ""  # no Gemini credentials available
 
+    # gemini-2.5-flash uses "thinking", which spends output tokens BEFORE the
+    # visible answer. A tiny max_output_tokens (e.g. 64) gets fully consumed by
+    # thinking → empty text. So DISABLE thinking (thinking_budget=0) for this
+    # short classification, and give a comfortable token budget anyway.
+    cfg_kwargs = {"max_output_tokens": 256, "temperature": 0.0}
+    try:
+        cfg_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+    except Exception:  # older SDKs: no ThinkingConfig — the larger budget still helps
+        pass
+
     resp = client.models.generate_content(
         model=settings.gemini_model,
         contents=[
             types.Part.from_bytes(data=base64.b64decode(image_b64), mime_type=mime_type),
             _RECOGNIZE_PROMPT,
         ],
-        config=types.GenerateContentConfig(max_output_tokens=64, temperature=0.0),
+        config=types.GenerateContentConfig(**cfg_kwargs),
     )
     return _clean_label(getattr(resp, "text", "") or "")
 

@@ -363,7 +363,11 @@ class AgentService:
             # extension needs), regardless of whether the ADK path is on. Leaving
             # a purchase to free-form ADK/LLM phrasing drops the cart and the
             # structured fields, which is exactly what was happening in the cloud.
-            checkout = self._try_checkout(text, customer_id)
+            # An uploaded order FILE ("order these items") → structured bulk order
+            # from the file's contents. Checked first since the file content (not
+            # the chat text) holds the items. Falls back to normal checkout.
+            checkout = (self._try_file_bulk_order(req.message, req.attachments, customer_id)
+                        or self._try_checkout(text, customer_id))
             if checkout is not None:
                 reply, used_tools = checkout
                 ft.step("orchestrator", "checkout (deterministic · structured)",
@@ -552,6 +556,99 @@ class AgentService:
                                       "i would like ", "wanna ")):
             return True
         return False
+
+    @staticmethod
+    def _parse_order_file(raw: str) -> list[tuple[str, int]]:
+        """Parse an uploaded order file into [(product_query, qty), ...].
+
+        Tolerant of common formats, one item per line:
+          "2 soccer balls", "soccer ball x3", "3x oreos", "lego, 2",
+          "TOY-SPL-3001", or just "oreos". CSV "item,qty" is handled too.
+        """
+        import re
+        out: list[tuple[str, int]] = []
+        for line in (raw or "").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            qty, item = 1, line
+            m = re.match(r"^(\d{1,3})\s*[xX]\s+(.+)$", line)        # "3x item"
+            if m:
+                qty, item = int(m.group(1)), m.group(2)
+            elif re.match(r"^\d{1,3}\s+\S", line):                  # "3 item"
+                m = re.match(r"^(\d{1,3})\s+(.+)$", line)
+                qty, item = int(m.group(1)), m.group(2)
+            else:                                                   # "item x3" / "item, 3"
+                m = re.match(r"^(.+?)[\s,]+[xX]?(\d{1,3})$", line)
+                if m:
+                    item, qty = m.group(1), int(m.group(2))
+            item = item.strip(" ,:-\t")
+            if item:
+                out.append((item, max(1, min(qty, 500))))
+        return out
+
+    def _resolve_order_line(self, query: str):
+        """Resolve one order-file line to (variant_id, product_name) or None.
+        Accepts a SKU/variant token or a free-text product name; never substitutes."""
+        import re
+        from ..tools.checkout_tool import resolve_variant_by_name
+        token = query.strip()
+        if re.match(r"(?i)^(JCP|FOOD|TOY)-[A-Z0-9\-]+$", token):
+            vid = self._resolve_id_to_variant(token.upper())
+            if vid:
+                from ..db.database import get_repository
+                info = get_repository().check_stock(vid)
+                return vid, (info["product"] if info else token)
+            return None
+        res = resolve_variant_by_name(token)
+        return (res["variant_id"], res["product"]) if res.get("ok") else None
+
+    def _try_file_bulk_order(self, message: str, attachments, customer_id: str):
+        """If the customer attached a file AND asked to order it, parse the file
+        and place a structured BULK order for the items it lists. Returns
+        (reply, used_tools) or None when it doesn't apply."""
+        import base64
+        from ..tools.checkout_tool import place_bulk_order
+
+        atts = attachments or []
+        file_att = next((a for a in atts
+                         if getattr(a, "kind", "") == "file" and getattr(a, "content_b64", None)),
+                        None)
+        if file_att is None:
+            return None
+        low = (message or "").lower()
+        # Only act on an order-ish request (or a bare "order this file").
+        if not (self._is_order_intent(low) or "order" in low or "checkout" in low):
+            return None
+        try:
+            raw = base64.b64decode(file_att.content_b64).decode("utf-8", errors="ignore")
+        except Exception:
+            return None
+        lines = self._parse_order_file(raw)
+        if not lines:
+            return None
+
+        variant_ids, quantities, names, not_found = [], [], [], []
+        for query, qty in lines:
+            hit = self._resolve_order_line(query)
+            if hit:
+                variant_ids.append(hit[0]); quantities.append(qty); names.append(hit[1])
+            else:
+                not_found.append(query)
+
+        if not variant_ids:
+            msg = ("I read your file but couldn't match any of its items to the "
+                   f"catalog: {', '.join(not_found[:10])}. No order was placed.")
+            self._last_checkout = self._checkout_payload({"ok": False, "message": msg}, bulk=True)
+            return msg, ["checkout_agent"]
+
+        data = place_bulk_order(customer_id, variant_ids=variant_ids, quantities=quantities)
+        self._last_checkout = self._checkout_payload(data, bulk=True)
+        reply = self._format_bulk_checkout(data)
+        if not_found:
+            reply += ("\n\n⚠️ Not found in the catalog (skipped, not substituted): "
+                      + ", ".join(not_found[:10]))
+        return reply, ["checkout_agent"]
 
     def _try_checkout(self, text: str, customer_id: str):
         """
@@ -833,6 +930,9 @@ class AgentService:
         """
         import re
         low = text.strip().lower()
+        # Drop modality placeholders the pipeline injects (e.g. "[file 'order.txt'
+        # uploaded]", "[image ...]") so they're never mistaken for a product name.
+        low = re.sub(r"\[[^\]]*\]", " ", low).strip()
         patterns = [
             r"place\s+(?:an?\s+)?(?:bulk\s+)?order\s+(?:of|for)\s+(.+)",
             r"order\s+(?:of|for)\s+(.+)",

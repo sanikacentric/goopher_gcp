@@ -139,6 +139,29 @@ def test_typed_product_sku_resolves_not_substitutes():
     assert "lego" in resp.reply.lower()
 
 
+def test_order_from_uploaded_file_places_structured_bulk_order():
+    """Attaching an order file + asking to order it parses the file into a
+    structured bulk order with per-line quantities; unknown items are skipped,
+    never substituted."""
+    import base64
+    from backend.app.models.schemas import Attachment
+    svc = AgentService()
+    order_txt = "2 soccer balls\n3 oreos\nlego x1\nTOY-NRF-3003\n1 unicorn statue"
+    att = Attachment(kind="file", filename="order.txt", mime_type="text/plain",
+                     content_b64=base64.b64encode(order_txt.encode()).decode())
+    out = svc._try_file_bulk_order("please check the attachment and order", [att], "CUST-1001")
+    assert out is not None
+    pay = svc._last_checkout
+    assert pay and pay.get("ok") is True
+    cart = {c["name"].split()[0].lower(): c["qty"] for c in pay["cart"]}
+    assert pay["cart"] and len(pay["cart"]) == 4          # 4 matched, unicorn skipped
+    # Per-line quantities honored.
+    soccer = next(c for c in pay["cart"] if "soccer" in c["name"].lower())
+    oreo = next(c for c in pay["cart"] if "oreo" in c["name"].lower())
+    assert soccer["qty"] == 2 and oreo["qty"] == 3
+    assert "unicorn" in out[0].lower()                     # reported as not found
+
+
 def test_place_bulk_order_persists_multi_item_order():
     res = place_bulk_order("CUST-1001")
     assert res["ok"] is True

@@ -227,7 +227,7 @@ def _run_fulfillment_safe(order_id: str, customer_id: str) -> dict:
 
 
 def place_bulk_order(customer_id: str, variant_ids: list[str] | None = None,
-                     qty_each: int = 1) -> dict:
+                     qty_each: int = 1, quantities: list[int] | None = None) -> dict:
     """
     High-volume checkout: place ONE order containing MULTIPLE line items.
 
@@ -236,7 +236,9 @@ def place_bulk_order(customer_id: str, variant_ids: list[str] | None = None,
         variant_ids: specific variants to buy. If empty, a basket of several
                      popular in-stock items (one per product) is chosen so a bare
                      "place bulk order" still demonstrates the flow.
-        qty_each: quantity for each line (default 1).
+        qty_each: quantity applied to every line when `quantities` is not given.
+        quantities: optional PER-LINE quantities, parallel to `variant_ids`
+                    (used by the "order from an uploaded file" flow).
 
     Returns a confirmation listing all line items, the combined total, the
     (simulated) payment, and the new order id.
@@ -247,18 +249,23 @@ def place_bulk_order(customer_id: str, variant_ids: list[str] | None = None,
     repo = get_repository()
 
     # Resolve the requested variants, or build a default multi-item basket.
+    # Keep each resolved variant paired with its requested quantity.
     resolved: list[dict] = []
+    qtys: list[int] = []
     if variant_ids:
-        for vid in variant_ids:
+        for i, vid in enumerate(variant_ids):
             info = repo.check_stock(vid)
             if info and info.get("in_stock"):
                 resolved.append(info)
+                q = quantities[i] if quantities and i < len(quantities) else qty_each
+                qtys.append(max(1, int(q)))
     if not resolved:
         # Default basket: one in-stock variant from each of the first few products.
         for p in repo.list_products():
             for v in p.variants:
                 if v.stock > 0:
                     resolved.append(repo.check_stock(v.variant_id))
+                    qtys.append(max(1, int(qty_each)))
                     break
             if len(resolved) >= 3:   # a small representative bulk basket
                 break
@@ -266,15 +273,14 @@ def place_bulk_order(customer_id: str, variant_ids: list[str] | None = None,
     if not resolved:
         return {"ok": False, "message": "No in-stock items available for a bulk order."}
 
-    qty_each = max(1, int(qty_each))
     items, total = [], 0.0
-    for info in resolved:
-        line_total = round(info["sale_price"] * qty_each, 2)
+    for info, q in zip(resolved, qtys):
+        line_total = round(info["sale_price"] * q, 2)
         total += line_total
         items.append(OrderItem(
             variant_id=info["variant_id"], name=info["product"],
             color=info["color"], size=info["size"],
-            qty=qty_each, unit_price=info["sale_price"],
+            qty=q, unit_price=info["sale_price"],
         ))
     total = round(total, 2)
 

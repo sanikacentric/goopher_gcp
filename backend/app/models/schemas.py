@@ -126,6 +126,10 @@ class ChatResponse(BaseModel):
     # Surfaced for observability / debugging in the extension dev console.
     used_tools: list[str] = Field(default_factory=list)
     trace_id: Optional[str] = None
+    # Populated on a checkout turn so the extension can show the staged
+    # confirmation: payment success -> "placement in progress" -> "ORDER PLACED
+    # SUCCESSFULLY". None for non-checkout turns.
+    checkout: Optional[dict] = None
 
 
 # --------------------------------------------------------------------------- #

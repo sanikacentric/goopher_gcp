@@ -52,6 +52,46 @@ function addMessage(text, who, meta) {
   return div;
 }
 
+const _delay = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Staged checkout confirmation shown to the customer:
+//   1) "✅ Payment successful" (+ details)
+//   2) "⏳ Order placement is in progress…"
+//   3) "🎉 ORDER PLACED SUCCESSFULLY" (only if the backend wrote ORDER_PLACED)
+async function renderCheckout(c, meta) {
+  const items = (c.items || []).join("; ");
+  addMessage(
+    `✅ Payment successful — $${Number(c.total).toFixed(2)} charged` +
+      (c.transaction_id ? ` (txn ${c.transaction_id}).` : "."),
+    "bot"
+  );
+  await _delay(700);
+
+  const progress = addMessage("⏳ Order placement is in progress…", "bot");
+  await _delay(1100);
+
+  if (c.order_placed) {
+    progress.firstChild.nodeValue = "⏳ Order placement is in progress… done.";
+    addMessage(
+      `🎉 ORDER PLACED SUCCESSFULLY\n` +
+        `• Order: ${c.order_id}\n` +
+        (items ? `• Item(s): ${items}\n` : "") +
+        (c.tracking_number ? `• Tracking: UPS ${c.tracking_number}\n` : "") +
+        (c.estimated_delivery ? `• Est. delivery: ${c.estimated_delivery}` : ""),
+      "bot",
+      meta
+    );
+  } else {
+    // Payment ok but the order record wasn't confirmed — be honest about it.
+    addMessage(
+      `⚠️ Payment succeeded, but order placement could not be confirmed. ` +
+        `Order id ${c.order_id || "—"}. Please check your orders shortly.`,
+      "bot",
+      meta
+    );
+  }
+}
+
 function showTyping() {
   const t = document.createElement("div");
   t.className = "gp-typing";
@@ -135,11 +175,20 @@ async function send(text, attachments, viaVoice = false) {
     const resp = await sendChat({ message: text, sessionId, channel, language, attachments, voice: viaVoice });
     hideTyping();
     const meta = `${resp.channel} · ${resp.language}${resp.used_tools?.length ? " · " + resp.used_tools.join(",") : ""}`;
-    addMessage(resp.reply, "bot", meta);
-    // Speak ONLY when the question was asked by voice (mic) and the 🔊 toggle is
-    // on. Typed questions on the web channel are never spoken aloud.
-    if (viaVoice && els.speakToggle?.checked) {
-      speak(resp.reply, resp.language);
+
+    // Staged checkout confirmation: payment success → placement in progress →
+    // ORDER PLACED SUCCESSFULLY. Shown only on a successful checkout turn.
+    if (resp.checkout && resp.checkout.ok) {
+      await renderCheckout(resp.checkout, meta);
+      if (viaVoice && els.speakToggle?.checked) {
+        speak(`Payment successful. Order ${resp.checkout.order_id} placed successfully.`, resp.language);
+      }
+    } else {
+      addMessage(resp.reply, "bot", meta);
+      // Speak ONLY when the question was asked by voice (mic) and 🔊 is on.
+      if (viaVoice && els.speakToggle?.checked) {
+        speak(resp.reply, resp.language);
+      }
     }
   } catch (err) {
     hideTyping();

@@ -220,6 +220,7 @@ class AgentService:
         self._adk_sessions: set[str] = set()  # session_ids already created in ADK
         self._openai = None   # active LLM client (OpenAI)
         self._gemini = None   # kept for future use (see commented init below)
+        self._last_checkout = None  # structured checkout result for the last turn
         self._init_backends()
 
     def _init_backends(self) -> None:
@@ -291,6 +292,7 @@ class AgentService:
         import time as _time
 
         incr("chat_requests_total")
+        self._last_checkout = None  # reset per turn; set only on a checkout turn
         # Dev-portal flow capture for this turn (full end-to-end pipeline).
         ft = TurnTrace(kind="turn")
         ft.record.session_id = req.session_id
@@ -426,6 +428,7 @@ class AgentService:
             return ChatResponse(
                 reply=reply, session_id=req.session_id, language=language,
                 channel=channel, used_tools=used_tools, trace_id=trace_id,
+                checkout=self._last_checkout,
             )
 
     # ----- generation paths (called by run_turn after pre-processing) ----- #
@@ -509,6 +512,7 @@ class AgentService:
                                       "multiple items", "many items")):
             data = place_bulk_order(customer_id, variant_ids=variant_ids or None, qty_each=1)
             used_tools.append("checkout_agent")
+            self._last_checkout = self._checkout_payload(data, bulk=True)
             facts = self._format_bulk_checkout(data)
             return self._phrase(text, facts, directives), used_tools
 
@@ -519,6 +523,7 @@ class AgentService:
             data = place_order(customer_id,
                                variant_id=variant_ids[0] if variant_ids else "", qty=1)
             used_tools.append("checkout_agent")
+            self._last_checkout = self._checkout_payload(data, bulk=False)
             facts = self._format_checkout(data)
             return self._phrase(text, facts, directives), used_tools
 
@@ -709,6 +714,31 @@ class AgentService:
             f"- Status: {data['status']} · Est. delivery {data['estimated_delivery']}\n"
             + AgentService._fulfillment_line(data)
         )
+
+    @staticmethod
+    def _checkout_payload(data: dict, bulk: bool) -> dict:
+        """
+        Structured checkout result for the extension's staged confirmation UI:
+        payment success → "placement in progress" → "ORDER PLACED SUCCESSFULLY".
+        """
+        if not data.get("ok"):
+            return {"ok": False, "message": data.get("message", "Checkout failed.")}
+        pay = data.get("payment", {})
+        f = data.get("fulfillment") or {}
+        return {
+            "ok": True,
+            "bulk": bulk,
+            "order_id": data.get("order_id"),
+            "total": data.get("total"),
+            "payment_status": pay.get("status", "SUCCESS"),
+            "transaction_id": pay.get("transaction_id"),
+            # True once the ORDER_PLACED insert happened (order management ran).
+            "order_placed": bool(f.get("ok")),
+            "tracking_number": f.get("tracking_number"),
+            "inventory_ok": f.get("inventory_ok"),
+            "estimated_delivery": data.get("estimated_delivery"),
+            "items": data.get("items") or ([data["item"]] if data.get("item") else []),
+        }
 
     @staticmethod
     def _fulfillment_line(data: dict) -> str:

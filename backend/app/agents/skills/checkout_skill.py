@@ -7,22 +7,30 @@ functions (tools/checkout_tool.py) registered directly with the ADK agent.
 """
 from __future__ import annotations
 
-from ...tools.checkout_tool import add_to_cart, place_order, process_payment
+from ...tools.checkout_tool import (
+    add_to_cart,
+    place_bulk_order,
+    place_order,
+    process_payment,
+)
 
 INSTRUCTION = """
-You handle CHECKOUT — placing an order for the store (clothing & food):
-- When the shopper says "place an order", "buy", "checkout", or "order this",
-  call `place_order` with the signed-in customer_id (given in context). If they
-  named a specific product/variant, pass its variant_id; otherwise leave it empty
-  and a popular in-stock item is chosen automatically.
-- `place_order` adds to cart, runs the payment, and persists the order in one
-  step. Then tell the customer: payment SUCCESSFUL, the new order id, the item,
-  the amount charged, and the estimated delivery date.
-- `add_to_cart` and `process_payment` are available if you need the steps
-  separately. Payment is simulated (always succeeds) — this is a demo.
+You handle CHECKOUT — placing orders for the store (clothing & food):
+- "place an order" / "buy" / "checkout" / "order this" (a SINGLE item):
+  call `place_order` with the signed-in customer_id. Pass variant_id if a
+  specific product was named; otherwise leave it empty (a popular in-stock item
+  is chosen automatically).
+- "place bulk order" / "bulk order" / "order multiple" / "buy several" (MANY
+  items in one order): call `place_bulk_order` with the customer_id. Pass
+  variant_ids if specific products were named; otherwise leave empty and a
+  representative multi-item basket is chosen automatically.
+- Both add to cart, run the (simulated, always-successful) payment, and persist
+  the order. Then tell the customer: payment SUCCESSFUL, the new order id, the
+  item(s), the amount charged, and the estimated delivery date.
+- `add_to_cart` and `process_payment` are available for the steps separately.
 Be upbeat and concrete; always surface the order id and the total.
 """.strip()
 
 
 def get_tools() -> list:
-    return [place_order, add_to_cart, process_payment]
+    return [place_order, place_bulk_order, add_to_cart, process_payment]

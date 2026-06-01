@@ -60,8 +60,10 @@ For every turn:
   -> delegate to `inventory_agent` (it owns the inventory tools).
 - order status / tracking / "where is my order" / bulk orders
   -> delegate to `order_agent` (it owns the order tools).
-- "place an order" / "buy" / "checkout" / "order this"
-  -> delegate to `checkout_agent` (it adds to cart, takes payment, places it).
+- "place an order" / "buy" / "checkout" / "order this" (single item), OR
+  "place bulk order" / "order multiple" / "buy several" (many items at once)
+  -> delegate to `checkout_agent` (it adds to cart, takes payment, places it;
+     use place_bulk_order for the bulk variants).
 
 The customer's language and channel formatting directive are provided to you in
 context (detected during pre-processing) — honor them in your reply. You are the
@@ -472,25 +474,33 @@ class AgentService:
         answer (via Gemini if available, else a clean template). This keeps the
         service fully functional with no ADK and is what unit tests exercise.
         """
-        from ..tools.checkout_tool import place_order
+        from ..tools.checkout_tool import place_bulk_order, place_order
         from ..tools.inventory_tool import check_stock, search_inventory
         from ..tools.order_tool import bulk_order_status, get_order_status, list_customer_orders
 
+        import re
         used_tools: list[str] = []
         lowered = text.lower()
+        variant_ids = re.findall(r"JCP-[A-Z0-9\-]+|FOOD-[A-Z0-9\-]+", text.upper())
 
-        # --- intent: PLACE AN ORDER (checkout) — checked first ---
+        # --- intent: PLACE A BULK ORDER (many items) — checked before single ---
+        if any(k in lowered for k in ("bulk order", "place bulk", "order multiple",
+                                      "buy several", "buy multiple", "order several",
+                                      "multiple items", "many items")):
+            data = place_bulk_order(customer_id, variant_ids=variant_ids or None, qty_each=1)
+            used_tools.append("checkout_agent")
+            facts = self._format_bulk_checkout(data)
+            return self._phrase(text, facts, directives), used_tools
+
+        # --- intent: PLACE AN ORDER (single item) ---
         if any(k in lowered for k in ("place an order", "place order", "checkout",
                                       "check out", "buy this", "buy it", "order this",
                                       "place my order", "complete my order")):
-            import re
-            vid = re.search(r"JCP-[A-Z0-9\-]+|FOOD-[A-Z0-9\-]+", text.upper())
             data = place_order(customer_id,
-                               variant_id=vid.group(0) if vid else "", qty=1)
+                               variant_id=variant_ids[0] if variant_ids else "", qty=1)
             used_tools.append("checkout_agent")
             facts = self._format_checkout(data)
-            reply = self._phrase(text, facts, directives)
-            return reply, used_tools
+            return self._phrase(text, facts, directives), used_tools
 
         # --- intent: bulk orders (high volume) ---
         order_ids = modality_agent.extract_order_ids_from_text(text)
@@ -678,6 +688,23 @@ class AgentService:
             f"- Total: ${data['total']:.2f}\n"
             f"- Status: {data['status']} · Est. delivery {data['estimated_delivery']}"
         )
+
+    @staticmethod
+    def _format_bulk_checkout(data: dict) -> str:
+        if not data.get("ok"):
+            return data.get("message", "Couldn't place the bulk order right now.")
+        pay = data.get("payment", {})
+        lines = [
+            f"🛒 Added {data['line_count']} item(s) to cart → 💳 processing payment…",
+            f"✅ Payment {pay.get('status', 'SUCCESS')} "
+            f"(txn {pay.get('transaction_id', '—')}, ${data['total']:.2f}).",
+            f"🎉 Bulk order {data['order_id']} placed!",
+        ]
+        for it in data.get("items", []):
+            lines.append(f"- {it}")
+        lines.append(f"- Total: ${data['total']:.2f}  ·  Status: {data['status']}  "
+                     f"·  Est. delivery {data['estimated_delivery']}")
+        return "\n".join(lines)
 
 
 # Process-wide singleton.

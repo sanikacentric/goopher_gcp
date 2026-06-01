@@ -158,3 +158,83 @@ def place_order(customer_id: str, variant_id: str = "", qty: int = 1) -> dict:
         "message": (f"Payment successful — order {order_id} placed! "
                     f"${total:.2f} charged. Estimated delivery 2026-06-08."),
     }
+
+
+def place_bulk_order(customer_id: str, variant_ids: list[str] | None = None,
+                     qty_each: int = 1) -> dict:
+    """
+    High-volume checkout: place ONE order containing MULTIPLE line items.
+
+    Args:
+        customer_id: the signed-in customer (provided in context).
+        variant_ids: specific variants to buy. If empty, a basket of several
+                     popular in-stock items (one per product) is chosen so a bare
+                     "place bulk order" still demonstrates the flow.
+        qty_each: quantity for each line (default 1).
+
+    Returns a confirmation listing all line items, the combined total, the
+    (simulated) payment, and the new order id.
+    """
+    incr("tool_calls_total")
+    from ..models.schemas import Order, OrderItem  # local import to avoid cycles
+
+    repo = get_repository()
+
+    # Resolve the requested variants, or build a default multi-item basket.
+    resolved: list[dict] = []
+    if variant_ids:
+        for vid in variant_ids:
+            info = repo.check_stock(vid)
+            if info and info.get("in_stock"):
+                resolved.append(info)
+    if not resolved:
+        # Default basket: one in-stock variant from each of the first few products.
+        for p in repo.list_products():
+            for v in p.variants:
+                if v.stock > 0:
+                    resolved.append(repo.check_stock(v.variant_id))
+                    break
+            if len(resolved) >= 3:   # a small representative bulk basket
+                break
+
+    if not resolved:
+        return {"ok": False, "message": "No in-stock items available for a bulk order."}
+
+    qty_each = max(1, int(qty_each))
+    items, total = [], 0.0
+    for info in resolved:
+        line_total = round(info["sale_price"] * qty_each, 2)
+        total += line_total
+        items.append(OrderItem(
+            variant_id=info["variant_id"], name=info["product"],
+            color=info["color"], size=info["size"],
+            qty=qty_each, unit_price=info["sale_price"],
+        ))
+    total = round(total, 2)
+
+    payment = process_payment(total, method="card")
+    order_id = _next_order_id()
+    order = Order(
+        order_id=order_id, customer_id=customer_id, status="Processing",
+        order_date="2026-06-01", estimated_delivery="2026-06-08",
+        delivered_date=None, tracking_number=None, carrier=None,
+        shipping_address="123 Demo St, Plano, TX 75024",
+        items=items, total=total,
+    )
+    repo.save_order(order)
+    log_event("bulk_order_placed", order_id=order_id, customer_id=customer_id,
+              lines=len(items), total=total)
+
+    return {
+        "ok": True,
+        "order_id": order_id,
+        "status": "Processing",
+        "items": [f'{it.name} ({it.color}, {it.size}) x{it.qty} '
+                  f'@ ${it.unit_price:.2f}' for it in items],
+        "line_count": len(items),
+        "total": total,
+        "payment": payment,
+        "estimated_delivery": "2026-06-08",
+        "message": (f"Payment successful — bulk order {order_id} placed with "
+                    f"{len(items)} item(s), ${total:.2f} charged."),
+    }

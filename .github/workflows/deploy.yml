@@ -109,9 +109,35 @@ jobs:
 
       - name: Deploy to Cloud Run (free tier)
         if: steps.gate.outputs.ready == 'true'
+        env:
+          # Pass secrets through env so special characters (colons, commas) in a
+          # value can't break gcloud's --set-env-vars dict parser. We then write
+          # a YAML env-vars file, which is immune to that parsing entirely.
+          PROJ: ${{ secrets.GCP_PROJECT_ID }}
+          OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          JWT: ${{ secrets.JWT_SECRET }}
         run: |
+          # Build a YAML env-vars file (handles special chars safely). Each value
+          # is quoted; we strip any stray surrounding spaces from the project id.
+          PROJ_CLEAN="$(echo "$PROJ" | tr -d '[:space:]')"
+          cat > /tmp/envvars.yaml <<EOF
+          ENVIRONMENT: "production"
+          DB_BACKEND: "firestore"
+          GOOGLE_CLOUD_PROJECT: "${PROJ_CLEAN}"
+          OTEL_EXPORTER: "gcp"
+          LLM_PROVIDER: "gemini"
+          USE_ADK_PATH: "true"
+          USE_VERTEXAI: "true"
+          USE_MCP_TOOLS: "true"
+          VERTEX_LOCATION: "us-central1"
+          GEMINI_MODEL: "gemini-2.5-flash"
+          OPENAI_API_KEY: "${OPENAI_KEY}"
+          GOOGLE_API_KEY: "${GOOGLE_KEY}"
+          JWT_SECRET: "${JWT}"
+          EOF
           gcloud run deploy "$SERVICE" \
-            --image "gcr.io/${{ secrets.GCP_PROJECT_ID }}/$SERVICE:${{ github.sha }}" \
+            --image "gcr.io/${PROJ_CLEAN}/$SERVICE:${{ github.sha }}" \
             --region "$REGION" \
             --platform managed \
             --allow-unauthenticated \
@@ -119,7 +145,7 @@ jobs:
             --max-instances 2 \
             --memory 1Gi \
             --cpu 1 \
-            --set-env-vars "ENVIRONMENT=production,DB_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},OTEL_EXPORTER=gcp,LLM_PROVIDER=gemini,USE_ADK_PATH=true,USE_VERTEXAI=true,USE_MCP_TOOLS=true,VERTEX_LOCATION=us-central1,GEMINI_MODEL=gemini-2.5-flash,OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }},JWT_SECRET=${{ secrets.JWT_SECRET }}"
+            --env-vars-file /tmp/envvars.yaml
 
       - name: Allow public access (run.invoker for allUsers)
         if: steps.gate.outputs.ready == 'true'

@@ -42,8 +42,14 @@ _RECOGNIZE_PROMPT = (
     "ONLY its short, common product name (2-5 words) — no sentence, no "
     "punctuation. Examples: 'soccer ball', 'Oreo cookies', 'LEGO bricks', "
     "'potato chips', 'NERF blaster', 'Play-Doh', 'toy car', 'soda can', "
-    "'midi dress'. If it is clearly a toy or a food item, name that item."
+    "'midi dress'. If it is clearly a toy or a food item, name that item. Give "
+    "your single best guess even if you are not fully sure. Only answer 'none' "
+    "if the image is blank/black or shows no product at all."
 )
+
+# Model replies that mean "I couldn't identify anything" — treat as no match.
+_NON_ANSWERS = {"none", "unknown", "n/a", "na", "nothing", "no item", "not sure",
+                "unidentified", "no product", "unclear", "cannot tell", "idk"}
 
 
 def _clean_label(text: str) -> str:
@@ -52,6 +58,9 @@ def _clean_label(text: str) -> str:
     line = line.strip().strip("\"'`.").strip()
     # Drop a leading "It's a / This is a" if the model added one anyway.
     line = re.sub(r"^(it'?s|this is|that'?s|a|an|the)\s+", "", line, flags=re.IGNORECASE).strip()
+    # A model "I don't know" answer is NOT a product label.
+    if line.lower().strip(".!?") in _NON_ANSWERS:
+        return ""
     return line[:60]
 
 
@@ -89,20 +98,37 @@ def _gemini_vision_label(image_b64: str, mime_type: str, settings) -> str:
     return _clean_label(getattr(resp, "text", "") or "")
 
 
+# Captured reason for the most recent recognition failure (for diagnostics).
+_LAST_ERROR = ""
+
+
 def _recognize(image_b64: str, mime_type: str) -> tuple[str, str]:
     """Return (product_label, engine). Empty label means recognition failed."""
+    global _LAST_ERROR
+    _LAST_ERROR = ""
     settings = get_settings()
+
+    # Guard against an empty/blank capture before spending an LLM call.
+    if not image_b64 or len(image_b64) < 500:
+        _LAST_ERROR = "image was empty or too small (blank camera frame?)"
+        log_event("vision_blank_image", size=len(image_b64 or ""))
+        return "", "none"
 
     # --- GEMINI VISION (primary) — unified SDK, Vertex AI or AI Studio ---
     if settings.use_vertexai or settings.google_api_key:
-        try:
-            label = _gemini_vision_label(image_b64, mime_type, settings)
-            if label:
-                log_event("vision_recognized", engine="gemini", label=label)
-                return label, "gemini-vision"
-            log_event("vision_gemini_empty")
-        except Exception as exc:  # noqa: BLE001 - degrade gracefully
-            log_event("vision_gemini_failed", reason=str(exc))
+        # Retry once: Vertex can throw transient 429/503s, especially after idle.
+        for attempt in (1, 2):
+            try:
+                label = _gemini_vision_label(image_b64, mime_type, settings)
+                if label:
+                    log_event("vision_recognized", engine="gemini", label=label,
+                              attempt=attempt)
+                    return label, "gemini-vision"
+                _LAST_ERROR = "gemini returned no text"
+                log_event("vision_gemini_empty", attempt=attempt)
+            except Exception as exc:  # noqa: BLE001 - degrade gracefully
+                _LAST_ERROR = f"gemini error: {type(exc).__name__}: {str(exc)[:200]}"
+                log_event("vision_gemini_failed", reason=str(exc), attempt=attempt)
 
     # --- OpenAI vision (fallback so the demo always works) ---
     if settings.openai_api_key:
@@ -130,8 +156,11 @@ def _recognize(image_b64: str, mime_type: str) -> tuple[str, str]:
                 log_event("vision_recognized", engine="openai", label=label)
                 return label, "openai-vision"
         except Exception as exc:  # noqa: BLE001
+            _LAST_ERROR = f"openai error: {type(exc).__name__}: {str(exc)[:200]}"
             log_event("vision_openai_failed", reason=str(exc))
 
+    if not _LAST_ERROR:
+        _LAST_ERROR = "no vision backend available (no Vertex/Gemini/OpenAI)"
     return "", "none"
 
 
@@ -182,6 +211,9 @@ def handle_vision(question: str, image_b64: str, mime_type: str, customer_id: st
     if not label:
         reply = ("I couldn't make out the item in the photo. Try again with the "
                  "item centered and well-lit, or just type the product name.")
+        if _LAST_ERROR:
+            reply += f"\n\n_(diagnostic: {_LAST_ERROR})_"
+        ft.step("vision", "recognize FAILED", _LAST_ERROR or "no label")
         ft.record.reply = reply
         ft.record.used_tools = used_tools
         ft.commit()
@@ -209,10 +241,12 @@ def handle_vision(question: str, image_b64: str, mime_type: str, customer_id: st
 
     # 3a) ORDER intent → delegate to the SAME deterministic transactional gate.
     if _wants_order(question):
-        # Passing the SKU routes through _try_checkout's SKU resolution, so the
-        # cart + staged receipt + ORDER_PLACED write are identical to a typed
-        # order. (Vision recognized the item; the gate executes the purchase.)
-        gate = svc._try_checkout(f"place an order of {sku}", customer_id)
+        # Honor a spoken/typed quantity ("order 10 balls" → 10). Passing the SKU
+        # routes through _try_checkout's SKU resolution, so the cart + staged
+        # receipt + ORDER_PLACED write are identical to a typed order. (Vision
+        # recognized the item; the gate executes the purchase.)
+        qty = svc._extract_qty(question)
+        gate = svc._try_checkout(f"place an order of {qty} {sku}", customer_id)
         if gate is not None:
             reply, _ = gate
             checkout = svc._last_checkout

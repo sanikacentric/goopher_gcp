@@ -132,6 +132,12 @@ async function run() {
 // Capture one frame (downscaled), bundle it with the spoken/typed question.
 captureBtn.addEventListener("click", () => {
   if (!stream) return;
+  // Guard against capturing before the camera has painted a real frame (a black
+  // frame makes Gemini answer "none"). videoWidth is 0 until the first frame.
+  if (!video.videoWidth || !video.videoHeight) {
+    setStatus("Camera still warming up — wait a moment and capture again.");
+    return;
+  }
   const vw = video.videoWidth || 1280;
   const vh = video.videoHeight || 960;
   const scale = Math.min(1, 768 / Math.max(vw, vh)); // cap longest side at 768px

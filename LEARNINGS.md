@@ -296,6 +296,62 @@ independent issues. Each is a useful lesson on its own:
      LLM classifier that only extracts `(intent, product, qty)` as constrained
      JSON — execution still stays deterministic.
 
+### 3.16 Gemini Vision returned empty — wrong SDK, then "thinking" ate the budget
+Building the camera Vision subagent surfaced THREE distinct failures, each with a
+different root cause — a good lesson in not stopping at the first hypothesis.
+- **"couldn't make out the item" in the cloud, but fine locally.** The cloud runs
+  `USE_VERTEXAI=true` with `GOOGLE_API_KEY=""`/`OPENAI_API_KEY=""`. The first
+  implementation used the legacy `google.generativeai` SDK, which **cannot reach
+  Vertex AI** — so with no API key it errored and there was no fallback. Fix: use
+  the unified `google.genai` client (`genai.Client(vertexai=True, project=…,
+  location=…)`), authenticated by the Cloud Run service account — the same Vertex
+  setup the ADK chat path already used.
+- **"gemini returned no text" even after it reached Vertex.** `gemini-2.5-flash`
+  spends output tokens on internal *thinking* before the visible answer; the
+  64-then-256 token cap was fully consumed by thinking → empty text. It was
+  INTERMITTENT (clear shots answered fast and worked; harder shots thought more
+  and returned empty), which read as "it suddenly broke." Fix:
+  `thinking_config=ThinkingConfig(thinking_budget=0)` **and** `max_output_tokens
+  =2048` (the orchestrator's proven value).
+- **Diagnosis was blind until we surfaced the reason.** A generic failure message
+  hid the cause. Adding a captured `_LAST_ERROR` + extracting the response
+  `finish_reason` turned "no text" into an actionable signal, and a `/version`
+  build endpoint ended "is the fix even deployed?" guessing.
+- **Lessons:** (1) match the SDK to the runtime — AI-Studio vs Vertex are
+  different clients. (2) For 2.5 models, disable thinking (or budget generously)
+  on short/structured calls. (3) Intermittent ≠ random — a token-budget race
+  looks like flakiness. (4) Build the diagnostic *into* the failure path early.
+
+### 3.17 "Failed to fetch" on a file attachment — size limit + missing CORS
+- **Symptom:** attaching a file and ordering it returned a bare "⚠️ Failed to
+  fetch" — a client-side fetch rejection, not an HTTP error.
+- **Root cause:** the 2 MB request-size middleware rejected the larger base64
+  body, and the `413` (a) fired *before draining the upload* (browser sees a
+  connection reset) and (b) carried **no CORS headers**, so the cross-origin
+  extension couldn't read it — surfacing as the opaque "Failed to fetch."
+- **Fix:** raise the limit to 12 MB (real attachments need room), drain the body
+  before returning the 413, and add `Access-Control-Allow-Origin` to the
+  middleware's 413/429 responses. The extension also detects network errors and
+  shows a clearer message.
+- **Lesson:** middleware-generated error responses must be CORS-safe and must not
+  reject mid-upload, or legitimate 4xx errors masquerade as network failures.
+
+### 3.18 Transactional intent kept slipping past the gate
+Two follow-ups to §3.15 — the gate must catch *real* purchase phrasings, in every
+modality:
+- **Natural phrasing.** "hi can you please order balls for me" didn't match the
+  keyword list, so it fell to the ADK agent and produced no cart. Added
+  `_is_order_intent` (purchase verb / polite request, EXCLUDING status/tracking
+  queries). Showed up most clearly on the Phone channel.
+- **File & camera quantities.** "bulk order of 10 balls" via camera ordered 1; a
+  file's per-line counts were ignored. The vision path now extracts the qty, and
+  `place_bulk_order` gained per-line `quantities`. A stray modality placeholder
+  (`[file 'order.txt' uploaded]`) was also being looked up as a product — now
+  stripped before extraction.
+- **Lesson:** an intent gate is only as good as its phrasing coverage; test it
+  with how people actually talk, across every input channel, and keep the
+  exclusions (status vs purchase) explicit.
+
 ---
 
 ## 4. Key trade-offs and decisions
@@ -437,6 +493,15 @@ developer portal, 53 unit tests + 8 evals.
     local-only green suite (ADK off); keep behavioral parity across paths.
 16. **Ship a `/version` build marker early** — it ends "is it even deployed?"
     guessing in one HTTP call.
+17. **Match the SDK to the runtime** — `google.generativeai` can't reach Vertex;
+    use the unified `google.genai` client (`vertexai=True`) in the cloud.
+18. **For 2.5 models, mind the "thinking" budget** — it spends output tokens
+    before the answer; disable it (`thinking_budget=0`) or budget generously, or
+    short calls return empty. Intermittent emptiness ≠ random.
+19. **Middleware errors must be CORS-safe and drain the body** — otherwise a
+    legitimate 413/429 shows up as an opaque "Failed to fetch."
+20. **Build the diagnostic into the failure path** — capture the reason
+    (`finish_reason`, last error) so the next failed attempt tells you why.
 
 ---
 

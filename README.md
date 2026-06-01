@@ -31,6 +31,12 @@ while preserving conversation context.
 | Multi-channel subagent (phone/web) | [`channel_agent.py`](backend/app/agents/channel_agent.py) | 2A-4 |
 | Multi-lingual subagent | [`language_agent.py`](backend/app/agents/language_agent.py) | 2A-5 |
 | Multi-modal subagent | [`modality_agent.py`](backend/app/agents/modality_agent.py) | 2A-6 |
+| **Vision subagent** — camera "see it, shop it" (Gemini Vision) | [`vision_agent.py`](backend/app/agents/vision_agent.py) + `/vision` | 2A-6 |
+| **Checkout** — single + bulk, structured transactional gate | [`checkout_tool.py`](backend/app/tools/checkout_tool.py) | 4 |
+| **Order management** — 9-stage fulfillment → `ORDER_PLACED` | [`order_mgmt_tool.py`](backend/app/tools/order_mgmt_tool.py) | 5 |
+| **Bulk order from an uploaded file** | [`orchestrator.py`](backend/app/agents/orchestrator.py) `_try_file_bulk_order` | 3 |
+| **Cart / orders panel** in the extension | [`extension/`](extension/) + `/orders/mine` | 2A |
+| **Phone channel = mobile-device simulator** | [`extension/sidepanel.*`](extension/) | 2A-4 |
 | Individual **& high-volume** orders | [`order_tool.py`](backend/app/mcp/order_tool.py) + `/orders/bulk` | 3 |
 | Evals | [`evals/`](evals/) | T8 |
 | Unit tests | [`tests/`](tests/) | T9 |
@@ -38,6 +44,29 @@ while preserving conversation context.
 | Architecture writeup | [`ARCHITECTURE.md`](ARCHITECTURE.md) | T12 |
 | Dockerized + Cloud Run | [`Dockerfile`](Dockerfile), [`docker-compose.yml`](docker-compose.yml) | T14 / T16 |
 | CI/CD (GitHub Actions) | [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) | T17 |
+
+---
+
+## 🎥 Multimodal & multi-channel highlights
+
+- **Camera "see it, shop it" (Gemini Vision).** Point the camera at a real toy or
+  food item and **say** or type your request. The [vision subagent](backend/app/agents/vision_agent.py)
+  recognizes it with **Gemini Vision on Vertex AI**, resolves it to a real catalog
+  product (never substitutes), and either answers the price or **places the
+  order** — through the same structured checkout gate as a typed order.
+- **Voice in + speaker out.** Speak the command; GOOPHER reads the answer aloud.
+- **Phone (Voice) channel renders a mobile-device simulator** (bezel, status bar,
+  home indicator) with all the same features as Web.
+- **Cart / orders panel.** A 🛒 button in the extension header shows everything
+  already ordered (`GET /orders/mine`); the badge updates after each checkout.
+- **Bulk order from an uploaded file.** Attach an `order.txt`
+  (`order - 15 oreo cookies`, `order -20 balls`, SKUs, `lego x1`, …) and GOOPHER
+  parses it into **one structured bulk order with per-line quantities**; unknown
+  items are skipped and reported, never substituted.
+- **The transactional gate.** Checkout is always handled deterministically
+  (structured cart → simulated payment → `ORDER_PLACED` → staged receipt) in
+  *every* path — the LLM orchestrates and converses, but never executes the
+  purchase. See [`ARCHITECTURE.md` §5b](ARCHITECTURE.md).
 
 ---
 
@@ -179,9 +208,12 @@ goopher/
 |---|---|---|---|
 | POST | `/auth/login` | — | Authenticate, get JWT |
 | GET | `/auth/me` | Bearer | Current customer |
-| POST | `/chat` | Bearer | One conversational turn |
+| POST | `/chat` | Bearer | One conversational turn (text/voice/file) |
+| POST | `/vision` | Bearer | Camera "see it, shop it" — Gemini Vision recognize → price/order |
+| GET | `/orders/mine` | Bearer | The customer's orders (cart/orders panel) |
 | POST | `/orders/bulk` | Bearer | High-volume order status |
 | GET | `/healthz` | — | Liveness |
+| GET | `/version` | — | Build marker (which code is deployed) |
 | GET | `/metrics` | — | Metrics (observability) |
 
 Interactive docs at `/docs` when running.

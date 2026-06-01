@@ -103,6 +103,10 @@ the thread.
 | Channel subagent (phone/web) | `backend/app/agents/channel_agent.py` | **2A-4** |
 | Language subagent | `backend/app/agents/language_agent.py` | **2A-5** |
 | Modality subagent | `backend/app/agents/modality_agent.py` | **2A-6** |
+| Vision subagent (camera, Gemini Vision) | `backend/app/agents/vision_agent.py`, `/vision` | **2A-6** |
+| Checkout (single + bulk, transactional gate) | `backend/app/tools/checkout_tool.py`, `_try_checkout` | **4** |
+| Order management (9-stage fulfillment) | `backend/app/tools/order_mgmt_tool.py` | **5** |
+| Cart / orders panel | `extension/`, `/orders/mine` | **2A** |
 | Individual + high-volume orders | `order_tool.bulk_order_status`, `/orders/bulk` | **3** |
 | Self-service GenAI front end | extension + `/chat` | **4** |
 | Evals | `evals/` | **T8** |
@@ -242,6 +246,58 @@ constrained JSON**, while **execution stays in the deterministic handler**. This
 is the same idea as constrained tool/function calling: the model proposes
 parameters; deterministic, validated code performs the transaction. The LLM
 never decides, on its own, to charge a card.
+
+---
+
+## 5c. The Vision subagent — camera "see it, shop it" (Gemini Vision)
+
+A dedicated, self-contained subagent (`vision_agent.py`) that is **separate from
+the existing `modality_agent.py` pipeline** (left untouched). It powers the
+`POST /vision` endpoint, which the extension calls from a camera popup window.
+
+```
+camera popup (extension)
+   capture frame + spoken/typed question
+   ▼  POST /vision { image_b64, question }
+vision_agent.handle_vision()
+   1) RECOGNIZE  — Gemini Vision via the unified google.genai SDK on VERTEX AI
+                   (service-account auth; no API key). thinking_budget=0 +
+                   max_output_tokens=2048 so 2.5-flash "thinking" can't starve
+                   the answer. OpenAI vision is a local fallback.
+   2) RESOLVE    — map the recognized name to a real catalog product
+                   (resolve_variant_by_name); if we don't carry it → say so,
+                   never substitute.
+   3) ACT        — order intent → delegate to the SAME transactional gate
+                   (_try_checkout) → structured cart + ORDER_PLACED; else →
+                   answer the price + availability.
+```
+
+Design notes that proved important (see `LEARNINGS.md §3.16`):
+- **Vertex, not AI Studio.** The cloud runs `USE_VERTEXAI=true` with *no* API
+  key, and the legacy `google.generativeai` SDK cannot reach Vertex — recognition
+  must use the unified `google.genai` client (`vertexai=True`).
+- **Disable thinking.** `gemini-2.5-flash` spends output tokens "thinking" before
+  the visible answer; a small token cap returns empty. `thinking_budget=0` +
+  2048 tokens fixes it.
+- **Recognition recognizes; the gate transacts.** Ordering by camera flows
+  through `_try_checkout`, so the cart/receipt/`ORDER_PLACED` are identical to a
+  typed order — the LLM never executes the purchase.
+
+Vision turns are recorded to the `/dev` portal as a distinct `vision` flow kind.
+
+---
+
+## 5d. Ordering by file & natural language
+
+- **Bulk order from an uploaded file.** `_try_file_bulk_order` parses an attached
+  `order.txt` (`_parse_order_file` is tolerant of `order - 15 oreo cookies`,
+  `lego x1`, `3x oreos`, `TOY-NRF-3003`, …), resolves each line to a catalog
+  variant, and places ONE structured bulk order with **per-line quantities**.
+  Unknown lines are skipped and reported, never substituted.
+- **Natural order phrasing.** `_is_order_intent` recognizes conversational orders
+  ("order balls for me", "get me a lego", "i want to buy oreos") while excluding
+  status/tracking queries — so they hit the structured gate (and produce a cart)
+  instead of falling through to free-form LLM phrasing.
 
 ---
 

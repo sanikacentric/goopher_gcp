@@ -88,10 +88,11 @@ def _gemini_vision_label(image_b64: str, mime_type: str, settings) -> str:
         return ""  # no Gemini credentials available
 
     # gemini-2.5-flash uses "thinking", which spends output tokens BEFORE the
-    # visible answer. A tiny max_output_tokens (e.g. 64) gets fully consumed by
-    # thinking → empty text. So DISABLE thinking (thinking_budget=0) for this
-    # short classification, and give a comfortable token budget anyway.
-    cfg_kwargs = {"max_output_tokens": 256, "temperature": 0.0}
+    # visible answer. A tiny max_output_tokens gets fully consumed by thinking →
+    # empty text. DISABLE thinking (thinking_budget=0) AND give a large budget
+    # (the orchestrator's proven fix for the same issue) so neither can starve
+    # the answer.
+    cfg_kwargs = {"max_output_tokens": 2048, "temperature": 0.0}
     try:
         cfg_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
     except Exception:  # older SDKs: no ThinkingConfig — the larger budget still helps
@@ -105,7 +106,28 @@ def _gemini_vision_label(image_b64: str, mime_type: str, settings) -> str:
         ],
         config=types.GenerateContentConfig(**cfg_kwargs),
     )
-    return _clean_label(getattr(resp, "text", "") or "")
+    text, detail = _extract_and_explain(resp)
+    if text:
+        return _clean_label(text)
+    # Surface WHY it was empty (finish_reason / safety) instead of a blank.
+    raise RuntimeError(detail or "empty response")
+
+
+def _extract_and_explain(resp) -> tuple[str, str]:
+    """Pull the answer text out of a google.genai response; if empty, return a
+    short reason (finish_reason, part count, safety) for diagnostics."""
+    cands = getattr(resp, "candidates", None) or []
+    if not cands:
+        pf = getattr(resp, "prompt_feedback", None)
+        return "", f"no candidates (prompt_feedback={pf})"
+    c = cands[0]
+    fr = getattr(c, "finish_reason", None)
+    content = getattr(c, "content", None)
+    parts = (getattr(content, "parts", None) or []) if content else []
+    text = "".join(getattr(p, "text", "") or "" for p in parts).strip()
+    if text:
+        return text, ""
+    return "", f"finish_reason={fr}, parts={len(parts)}"
 
 
 # Captured reason for the most recent recognition failure (for diagnostics).

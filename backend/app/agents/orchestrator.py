@@ -358,7 +358,21 @@ class AgentService:
                 + language_agent.language_directive(language)
                 + f"\nThe signed-in customer_id is {customer_id}."
             )
-            if self._adk_ready and _settings.use_adk_path:
+            # CHECKOUT is transactional → always handle it deterministically with
+            # structured output (cart + staged receipt + the checkout payload the
+            # extension needs), regardless of whether the ADK path is on. Leaving
+            # a purchase to free-form ADK/LLM phrasing drops the cart and the
+            # structured fields, which is exactly what was happening in the cloud.
+            checkout = self._try_checkout(text, customer_id)
+            if checkout is not None:
+                reply, used_tools = checkout
+                ft.step("orchestrator", "checkout (deterministic · structured)",
+                        "placed order with cart + staged receipt")
+                for name in used_tools:
+                    ft.step("subagent", f"↳ {name}",
+                            "checkout worker (structured)", tool=name)
+                path = "checkout"
+            elif self._adk_ready and _settings.use_adk_path:
                 try:
                     _t0 = _time.perf_counter()
                     reply, used_tools = self._generate_adk(
@@ -490,6 +504,93 @@ class AgentService:
             raise RuntimeError("ADK produced no text response")
         return reply, used_tools
 
+    @staticmethod
+    def _resolve_id_to_variant(token: str):
+        """Resolve a typed token to a concrete in-stock variant_id. Accepts a
+        full variant_id OR a product SKU. Returns None if neither matches an
+        in-stock item (caller must NOT substitute)."""
+        from ..db.database import get_repository
+        repo = get_repository()
+        info = repo.check_stock(token)            # exact variant match?
+        if info is not None:
+            return token if info.get("in_stock") else None
+        product = repo.get_product(token)         # product SKU? -> first in-stock variant
+        if product is not None:
+            for v in product.variants:
+                if v.stock > 0:
+                    return v.variant_id
+        return None
+
+    def _try_checkout(self, text: str, customer_id: str):
+        """
+        Handle checkout intents ("place an order" / bulk) DETERMINISTICALLY with
+        structured output: it sets self._last_checkout (cart + staged payload for
+        the extension UI) and returns a deterministic receipt as the reply.
+
+        Used by BOTH the ADK and deterministic paths (called before either): a
+        purchase is transactional and must be grounded and structured — never
+        left to free-form LLM phrasing, which drops the cart and the fields the
+        staged extension UI needs. Returns (reply, used_tools) or None if `text`
+        is not a checkout intent.
+        """
+        import re
+        from ..tools.checkout_tool import (place_bulk_order, place_order,
+                                           resolve_variant_by_name)
+
+        lowered = text.lower()
+        # Accept clothing (JCP-), food (FOOD-) and toys (TOY-) SKUs.
+        variant_ids = re.findall(r"JCP-[A-Z0-9\-]+|FOOD-[A-Z0-9\-]+|TOY-[A-Z0-9\-]+",
+                                 text.upper())
+
+        # --- PLACE A BULK ORDER (many items) — checked before single ---
+        if any(k in lowered for k in ("bulk order", "place bulk", "order multiple",
+                                      "buy several", "buy multiple", "order several",
+                                      "multiple items", "many items")):
+            data = place_bulk_order(customer_id, variant_ids=variant_ids or None, qty_each=1)
+            self._last_checkout = self._checkout_payload(data, bulk=True)
+            return self._format_bulk_checkout(data), ["checkout_agent"]
+
+        # --- PLACE AN ORDER (single item) ---
+        if any(k in lowered for k in ("place an order", "place order", "checkout",
+                                      "check out", "buy this", "buy it", "order this",
+                                      "place my order", "complete my order", "buy ",
+                                      "purchase ", "order of", "order for")):
+            qty = self._extract_qty(text)
+            if variant_ids:
+                # Explicit SKU/variant token in the message. It may be a full
+                # variant_id OR a product SKU — resolve to a real in-stock
+                # variant; refuse (no substitution) if it matches neither.
+                vid = self._resolve_id_to_variant(variant_ids[0])
+                if vid is None:
+                    msg = (f'Sorry, "{variant_ids[0]}" isn\'t available, so no '
+                           f'order was placed and nothing was substituted.')
+                    self._last_checkout = self._checkout_payload(
+                        {"ok": False, "message": msg}, bulk=False)
+                    return msg, ["checkout_agent"]
+                data = place_order(customer_id, variant_id=vid, qty=qty)
+            else:
+                # Did the shopper NAME a product (e.g. "place an order of oreo
+                # cookies")? Resolve it by name and order THAT product. We must
+                # never substitute a different item.
+                product = self._extract_order_product(text)
+                if product:
+                    res = resolve_variant_by_name(product)
+                    if not res.get("ok"):
+                        # Not found / out of stock -> refuse cleanly, no substitution.
+                        self._last_checkout = self._checkout_payload(
+                            {"ok": False, "message": res["message"]}, bulk=False)
+                        return res["message"], ["checkout_agent"]
+                    data = place_order(customer_id, variant_id=res["variant_id"], qty=qty)
+                else:
+                    # Bare "place an order" with no product named -> default demo item.
+                    data = place_order(customer_id, variant_id="", qty=qty)
+            self._last_checkout = self._checkout_payload(data, bulk=False)
+            # Deterministic receipt (NOT via LLM) so the cart + staged lines
+            # always appear verbatim, in every path.
+            return self._format_checkout(data), ["checkout_agent"]
+
+        return None
+
     def _generate_fallback(self, session_id: str, text: str, customer_id: str,
                            directives: str, channel: str, language: str
                            ) -> tuple[str, list[str]]:
@@ -498,58 +599,18 @@ class AgentService:
         answer (via Gemini if available, else a clean template). This keeps the
         service fully functional with no ADK and is what unit tests exercise.
         """
-        from ..tools.checkout_tool import place_bulk_order, place_order, resolve_variant_by_name
         from ..tools.inventory_tool import check_stock, search_inventory
         from ..tools.order_tool import bulk_order_status, get_order_status, list_customer_orders
 
         import re
         used_tools: list[str] = []
         lowered = text.lower()
-        variant_ids = re.findall(r"JCP-[A-Z0-9\-]+|FOOD-[A-Z0-9\-]+", text.upper())
 
-        # --- intent: PLACE A BULK ORDER (many items) — checked before single ---
-        if any(k in lowered for k in ("bulk order", "place bulk", "order multiple",
-                                      "buy several", "buy multiple", "order several",
-                                      "multiple items", "many items")):
-            data = place_bulk_order(customer_id, variant_ids=variant_ids or None, qty_each=1)
-            used_tools.append("checkout_agent")
-            self._last_checkout = self._checkout_payload(data, bulk=True)
-            # Return the deterministic receipt directly (NOT via the LLM) so the
-            # cart + staged lines always appear verbatim — even on a stale
-            # extension that shows resp.reply instead of the staged bubbles.
-            return self._format_bulk_checkout(data), used_tools
-
-        # --- intent: PLACE AN ORDER (single item) ---
-        if any(k in lowered for k in ("place an order", "place order", "checkout",
-                                      "check out", "buy this", "buy it", "order this",
-                                      "place my order", "complete my order", "buy ",
-                                      "purchase ", "order of", "order for")):
-            used_tools.append("checkout_agent")
-            qty = self._extract_qty(text)
-            if variant_ids:
-                # Explicit SKU/variant in the message — use it directly.
-                data = place_order(customer_id, variant_id=variant_ids[0], qty=qty)
-            else:
-                # Did the shopper NAME a product (e.g. "place an order of oreo
-                # cookies")? If so, resolve it by name and order THAT product.
-                # We must never substitute a different item.
-                product = self._extract_order_product(text)
-                if product:
-                    res = resolve_variant_by_name(product)
-                    if not res.get("ok"):
-                        # Not found / out of stock -> refuse cleanly, no substitution.
-                        data = {"ok": False, "message": res["message"]}
-                        self._last_checkout = self._checkout_payload(data, bulk=False)
-                        return self._phrase(text, res["message"], directives), used_tools
-                    data = place_order(customer_id, variant_id=res["variant_id"], qty=qty)
-                else:
-                    # Bare "place an order" with no product named -> default demo item.
-                    data = place_order(customer_id, variant_id="", qty=qty)
-            self._last_checkout = self._checkout_payload(data, bulk=False)
-            # Return the deterministic receipt directly (NOT via the LLM) so the
-            # cart + staged lines always appear verbatim — even on a stale
-            # extension that shows resp.reply instead of the staged bubbles.
-            return self._format_checkout(data), used_tools
+        # Checkout is transactional → always handled by the shared structured
+        # handler (works for both the ADK and deterministic paths).
+        checkout = self._try_checkout(text, customer_id)
+        if checkout is not None:
+            return checkout
 
         # --- intent: bulk orders (high volume) ---
         order_ids = modality_agent.extract_order_ids_from_text(text)

@@ -89,6 +89,37 @@ def test_named_order_unknown_product_does_not_place_order():
     assert resp.checkout.get("order_id") is None
 
 
+def test_checkout_is_structured_even_with_adk_path_on(monkeypatch):
+    """In the cloud the ADK path is on, but checkout must STILL be handled
+    deterministically: the reply is the cart receipt and resp.checkout is set.
+    (Regression: previously checkout went through the ADK agent, which phrased
+    its own reply and never populated the cart/checkout payload.)"""
+    import backend.app.agents.orchestrator as orch
+    monkeypatch.setattr(orch._settings, "use_adk_path", True, raising=False)
+    svc = AgentService()
+    resp = svc.run_turn(
+        ChatRequest(message="place an order of oreo cookies", session_id="adk-chk"),
+        customer_id="CUST-1001",
+    )
+    assert "checkout_agent" in resp.used_tools
+    assert resp.checkout and resp.checkout.get("ok") is True
+    assert resp.checkout.get("cart")                      # structured cart present
+    assert "🛒 Your cart" in resp.reply                   # deterministic receipt
+    assert "oreo" in resp.reply.lower()
+
+
+def test_typed_product_sku_resolves_not_substitutes():
+    """Typing a product SKU (not a full variant_id) orders that product, never
+    a fallback item."""
+    svc = AgentService()
+    resp = svc.run_turn(
+        ChatRequest(message="place an order of TOY-LEG-3002", session_id="sku-chk"),
+        customer_id="CUST-1001",
+    )
+    assert resp.checkout and resp.checkout.get("ok") is True
+    assert "lego" in resp.reply.lower()
+
+
 def test_place_bulk_order_persists_multi_item_order():
     res = place_bulk_order("CUST-1001")
     assert res["ok"] is True

@@ -7,7 +7,7 @@ import { getCustomer, getToken, getMyOrders, login, logout, sendChat, sendVision
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.4.2 — camera Vision + spoken question (show it & say it)");
+console.log("GOOPHER side panel v0.4.3 — camera Vision (demo-safe: typed cmd = camera-only)");
 
 const els = {
   loginView: document.getElementById("loginView"),

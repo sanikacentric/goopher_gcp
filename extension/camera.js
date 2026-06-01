@@ -77,29 +77,52 @@ function startSpeech() {
   try { recognition.start(); } catch (_) {}
 }
 
+// If the customer ALREADY typed a question in GOOPHER, we use camera ONLY (no
+// mic, no speech). This is the demo-safe path: when presenting on a call (e.g.
+// Google Meet), it avoids competing for the mic and prevents the popup from
+// transcribing your narration as the command. With no typed question, we also
+// listen so you can simply speak it.
+const useVoice = !typedQuestion;
+
 async function run() {
   retryBtn.hidden = true;
   captureBtn.disabled = true;
   finalTranscript = "";
   liveTranscript = "";
   try {
-    setStatus("Requesting camera & mic…");
-    // One prompt for BOTH camera and mic. Keep video for the preview; stop the
-    // audio track immediately (SpeechRecognition uses the default mic, now
-    // granted, so it won't prompt again).
-    stream = await navigator.mediaDevices.getUserMedia({
+    setStatus(useVoice ? "Requesting camera & mic…" : "Requesting camera…");
+    const constraints = {
       video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 960 } },
-      audio: true,
-    });
+      audio: useVoice,   // only request the mic when we actually listen
+    };
+    stream = await navigator.mediaDevices.getUserMedia(constraints);
+    // We keep the video track for the preview; the audio track was only needed
+    // to grant the mic for SpeechRecognition, so stop it now.
     stream.getAudioTracks().forEach((t) => t.stop());
     video.srcObject = stream;
     await video.play().catch(() => {});
-    setStatus("Point at a toy or food item, say your question, then capture.");
-    setTranscript("🎤 Say your question, e.g. “place an order” or “what’s the price?”", true);
     captureBtn.disabled = false;
-    startSpeech();
+
+    if (useVoice) {
+      setStatus("Point at a toy or food item, say your question, then capture.");
+      setTranscript("🎤 Say your question, e.g. “place an order” or “what’s the price?”", true);
+      startSpeech();
+    } else {
+      setStatus("Point at the item, then capture.");
+      setTranscript(`Your question: “${typedQuestion}”`, false);
+    }
   } catch (err) {
-    setStatus("Camera/mic blocked: " + (err?.name || err) + ". Allow it in Chrome settings.");
+    const name = err?.name || String(err);
+    let msg = "Camera blocked: " + name + ". Allow it in Chrome settings.";
+    if (name === "NotReadableError" || name === "TrackStartError" || name === "AbortError") {
+      msg = "Camera is in use by another app (e.g. Google Meet). Turn OFF your " +
+            "camera there, then click Try again.";
+    } else if (name === "NotAllowedError" || name === "SecurityError") {
+      msg = "Camera permission denied. Allow it in Chrome settings, then Try again.";
+    } else if (name === "NotFoundError") {
+      msg = "No camera found on this device.";
+    }
+    setStatus(msg);
     retryBtn.hidden = false;
   }
 }
@@ -116,8 +139,9 @@ captureBtn.addEventListener("click", () => {
   const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
   const b64 = dataUrl.split(",")[1] || "";
 
-  // Prefer what the customer SAID; fall back to what they typed in GOOPHER.
-  const question = (liveTranscript || typedQuestion || "").trim();
+  // A TYPED question always wins (demo-safe: your spoken narration can't
+  // override it). Only when nothing was typed do we use the spoken question.
+  const question = (typedQuestion || liveTranscript || "").trim();
 
   stopAll();
   setStatus("Sending to GOOPHER…");

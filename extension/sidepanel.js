@@ -1,13 +1,13 @@
 // GOOPHER side panel controller: login flow, chat rendering, multi-modal
 // attachments, channel/language switching, and VOICE input. Maintains a stable
 // session_id so the backend memory agent preserves context across switches.
-import { getCustomer, getToken, getMyOrders, login, logout, sendChat } from "./api.js";
+import { getCustomer, getToken, getMyOrders, login, logout, sendChat, sendVision } from "./api.js";
 
 // Version marker — confirms which build of the side panel Chrome has loaded.
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.3.0 — cart + staged checkout + orders panel");
+console.log("GOOPHER side panel v0.4.0 — + camera Vision subagent (see it, shop it)");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -25,6 +25,7 @@ const els = {
   fileInput: document.getElementById("fileInput"),
   attachmentBar: document.getElementById("attachmentBar"),
   micBtn: document.getElementById("micBtn"),
+  camBtn: document.getElementById("camBtn"),
   speakToggle: document.getElementById("speakToggle"),
   cartBtn: document.getElementById("cartBtn"),
   cartCount: document.getElementById("cartCount"),
@@ -130,6 +131,25 @@ async function renderCheckout(c, meta) {
       "bot",
       meta
     );
+  }
+}
+
+// Render an agent response (from /chat OR /vision) the same way: staged checkout
+// when an order was placed, otherwise a plain reply. Speaks the reply only when
+// the turn came via voice and 🔊 is on.
+async function deliverResponse(resp, viaVoice = false) {
+  const meta = `${resp.channel} · ${resp.language}${resp.used_tools?.length ? " · " + resp.used_tools.join(",") : ""}`;
+  if (resp.checkout && resp.checkout.ok) {
+    await renderCheckout(resp.checkout, meta);
+    refreshOrders();   // new order placed → update the cart badge/panel
+    if (viaVoice && els.speakToggle?.checked) {
+      speak(`Payment successful. Order ${resp.checkout.order_id} placed successfully.`, resp.language);
+    }
+  } else {
+    addMessage(resp.reply, "bot", meta);
+    if (viaVoice && els.speakToggle?.checked) {
+      speak(resp.reply, resp.language);
+    }
   }
 }
 
@@ -287,23 +307,7 @@ async function send(text, attachments, viaVoice = false) {
   try {
     const resp = await sendChat({ message: text, sessionId, channel, language, attachments, voice: viaVoice });
     hideTyping();
-    const meta = `${resp.channel} · ${resp.language}${resp.used_tools?.length ? " · " + resp.used_tools.join(",") : ""}`;
-
-    // Staged checkout confirmation: payment success → placement in progress →
-    // ORDER PLACED SUCCESSFULLY. Shown only on a successful checkout turn.
-    if (resp.checkout && resp.checkout.ok) {
-      await renderCheckout(resp.checkout, meta);
-      refreshOrders();   // new order placed → update the cart badge/panel
-      if (viaVoice && els.speakToggle?.checked) {
-        speak(`Payment successful. Order ${resp.checkout.order_id} placed successfully.`, resp.language);
-      }
-    } else {
-      addMessage(resp.reply, "bot", meta);
-      // Speak ONLY when the question was asked by voice (mic) and 🔊 is on.
-      if (viaVoice && els.speakToggle?.checked) {
-        speak(resp.reply, resp.language);
-      }
-    }
+    await deliverResponse(resp, viaVoice);
   } catch (err) {
     hideTyping();
     if (err.message === "UNAUTHORIZED") {
@@ -373,6 +377,68 @@ function setupMic() {
   if (chrome.windows?.onRemoved) {
     chrome.windows.onRemoved.addListener((closedId) => {
       if (closedId === micWindowId) micWindowId = null;
+    });
+  }
+}
+
+// ---- camera input (Vision subagent) ----
+// Like the mic, camera capture runs in a popup WINDOW (camera.html) because MV3
+// side panels can't reliably prompt for camera access. The popup relays a single
+// JPEG frame back here; we POST it to /vision with the customer's question.
+let camWindowId = null;
+
+function setupCamera() {
+  if (!chrome.windows || !els.camBtn) {
+    if (els.camBtn) els.camBtn.hidden = true;
+    return;
+  }
+
+  let lastVisionId = null;
+  chrome.runtime.onMessage.addListener(async (msg) => {
+    if (msg?.type !== "goopher_vision_image" || !msg.image_b64) return;
+    if (msg.id && msg.id === lastVisionId) return; // de-dupe broadcast
+    lastVisionId = msg.id || null;
+
+    const question = (msg.question || "").trim();
+    addMessage(`📷 (camera) ${question || "What is this — and the price?"}`, "user");
+    showTyping();
+    try {
+      const resp = await sendVision({
+        question,
+        image_b64: msg.image_b64,
+        mime_type: msg.mime_type || "image/jpeg",
+        sessionId,
+        channel: els.channel.value,
+        language: els.language.value,
+      });
+      hideTyping();
+      await deliverResponse(resp, false);
+    } catch (err) {
+      hideTyping();
+      if (err.message === "UNAUTHORIZED") { await logout(); showLogin(); }
+      else addMessage("📷 " + err.message, "bot");
+    }
+  });
+
+  els.camBtn.addEventListener("click", async () => {
+    // Pass whatever the customer typed as the question (e.g. "place an order").
+    const q = els.messageInput.value.trim();
+    const url = chrome.runtime.getURL(`camera.html?q=${encodeURIComponent(q)}`);
+    if (camWindowId !== null) {
+      try { await chrome.windows.update(camWindowId, { focused: true }); return; }
+      catch (_) { camWindowId = null; }
+    }
+    try {
+      const win = await chrome.windows.create({ url, type: "popup", width: 420, height: 520 });
+      camWindowId = win.id;
+    } catch (err) {
+      addMessage("📷 Couldn't open the camera window: " + (err?.message || err), "bot");
+    }
+  });
+
+  if (chrome.windows?.onRemoved) {
+    chrome.windows.onRemoved.addListener((closedId) => {
+      if (closedId === camWindowId) camWindowId = null;
     });
   }
 }
@@ -474,6 +540,7 @@ els.composer.addEventListener("submit", async (e) => {
 (async function init() {
   await ensureSession();
   setupMic();
+  setupCamera();
   const token = await getToken();
   if (token) {
     await showChat();

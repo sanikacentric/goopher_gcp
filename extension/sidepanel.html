@@ -81,6 +81,9 @@
           <input id="fileInput" type="file" accept="image/*,.csv,.txt,.pdf" hidden multiple />
         </label>
         <input id="messageInput" type="text" placeholder="Ask about products or your orders…" autocomplete="off" />
+        <!-- Camera (Vision subagent): show a toy/food item to the camera and ask
+             its price or say "place an order". -->
+        <button type="button" id="camBtn" class="gp-mic" title="Show an item to the camera">📷</button>
         <!-- Voice input: click to dictate your question (speech-to-text) -->
         <button type="button" id="micBtn" class="gp-mic" title="Ask by voice">🎤</button>
         <button type="submit" class="gp-primary">Send</button>

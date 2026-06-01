@@ -41,6 +41,7 @@ from .models.schemas import (
     ChatResponse,
     LoginRequest,
     TokenResponse,
+    VisionRequest,
 )
 from .observability.telemetry import METRICS, configure_logging, log_event
 
@@ -99,7 +100,7 @@ def healthz() -> dict:
 
 # Build marker — bump when verifying a deploy actually rolled out. Hit
 # GET /version on the live service to confirm which code Cloud Run is running.
-BUILD_VERSION = "2026-06-01-orders-panel"
+BUILD_VERSION = "2026-06-01-vision-agent"
 
 
 @app.get("/version")
@@ -173,6 +174,32 @@ def orders_bulk(body: BulkOrderQuery, claims: dict = Depends(current_customer)) 
     """High-volume order management endpoint (Req 3)."""
     log_event("orders_bulk_request", customer_id=claims["sub"], count=len(body.order_ids))
     return bulk_order_status(body.order_ids)
+
+
+@app.post("/vision", response_model=ChatResponse)
+def vision(req: VisionRequest, claims: dict = Depends(current_customer)) -> ChatResponse:
+    """
+    Vision subagent (camera "see it, shop it"). The customer points the camera at
+    a toy/food item and either asks its price or says "place an order"; Gemini
+    Vision recognizes it and the request is answered or ordered. Separate from
+    /chat so the existing pipeline is untouched.
+    """
+    if not req.image_b64:
+        raise HTTPException(status_code=400, detail="No image provided.")
+    from .agents.vision_agent import handle_vision
+    lang = req.language or "en"
+    result = handle_vision(
+        question=req.question, image_b64=req.image_b64, mime_type=req.mime_type,
+        customer_id=claims["sub"], session_id=req.session_id,
+        channel=req.channel, language=lang,
+    )
+    log_event("vision_request", customer_id=claims["sub"],
+              recognized=bool(result.get("recognized")))
+    return ChatResponse(
+        reply=result["reply"], session_id=req.session_id, language=lang,
+        channel=req.channel, used_tools=result.get("used_tools", []),
+        checkout=result.get("checkout"),
+    )
 
 
 @app.get("/orders/mine")

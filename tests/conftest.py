@@ -30,6 +30,11 @@ os.environ.update(
         "FULFILLMENT_STAGE_DELAY": "0",   # no demo delays in tests
         "ENABLE_TRACING": "false",
         "ENVIRONMENT": "test",
+        # The whole suite logs in many times within one minute; a low login
+        # budget made tests order-dependent (a later login would 429). Raise it
+        # here — the abuse test sets its own low limits locally when needed.
+        "RATE_LIMIT_LOGIN_PER_MIN": "1000",
+        "RATE_LIMIT_GLOBAL_PER_MIN": "100000",
     }
 )
 

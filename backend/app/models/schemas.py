@@ -118,6 +118,20 @@ class ChatRequest(BaseModel):
     attachments: list[Attachment] = Field(default_factory=list)
 
 
+class VisionRequest(BaseModel):
+    """Camera "see it, shop it" request for the vision subagent (POST /vision).
+
+    Separate from ChatRequest so the new capability doesn't touch the existing
+    chat / multi-modal pipeline.
+    """
+    question: str = ""                       # e.g. "what's the price?" / "place an order"
+    image_b64: str = Field(..., description="Base64 JPEG/PNG frame from the camera.")
+    mime_type: str = "image/jpeg"
+    session_id: str
+    channel: Literal["web", "phone"] = "web"
+    language: Optional[str] = None
+
+
 class ChatResponse(BaseModel):
     reply: str
     session_id: str

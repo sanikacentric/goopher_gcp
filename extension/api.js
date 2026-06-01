@@ -56,6 +56,28 @@ export async function sendChat({ message, sessionId, channel, language, attachme
   return res.json();
 }
 
+// Vision subagent: send a captured camera frame + the customer's question to
+// the dedicated /vision endpoint. Returns the same shape as a chat response
+// (reply + optional checkout), so the side panel renders it identically.
+export async function sendVision({ question, image_b64, mime_type, sessionId, channel, language }) {
+  const token = await getToken();
+  const res = await fetch(`${CONFIG.API_BASE}/vision`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      question: question || "",
+      image_b64,
+      mime_type: mime_type || "image/jpeg",
+      session_id: sessionId,
+      channel,
+      language: language || null,
+    }),
+  });
+  if (res.status === 401) throw new Error("UNAUTHORIZED");
+  if (!res.ok) throw new Error(`Server error ${res.status}`);
+  return res.json();
+}
+
 // The signed-in customer's orders — backs the header cart/orders panel.
 export async function getMyOrders() {
   const token = await getToken();

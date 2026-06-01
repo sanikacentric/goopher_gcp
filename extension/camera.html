@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GOOPHER Camera</title>
+    <style>
+      body {
+        margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #1a1a1a; color: #fff; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; height: 100vh; gap: 12px;
+        text-align: center; padding: 14px;
+      }
+      #preview {
+        width: 100%; max-width: 380px; border-radius: 12px; background: #000;
+        aspect-ratio: 4 / 3; object-fit: cover;
+      }
+      #status { font-size: 13px; color: #ccc; min-height: 18px; }
+      .row { display: flex; gap: 10px; }
+      button {
+        padding: 10px 16px; border: none; border-radius: 10px; cursor: pointer;
+        font-weight: 600; font-size: 14px;
+      }
+      .primary { background: #c8102e; color: #fff; }
+      .ghost { background: #333; color: #fff; }
+      button:disabled { opacity: .5; cursor: default; }
+    </style>
+  </head>
+  <body>
+    <video id="preview" autoplay playsinline muted></video>
+    <canvas id="canvas" hidden></canvas>
+    <div id="status">Starting camera…</div>
+    <div class="row">
+      <button id="capture" class="primary" disabled>📸 Capture &amp; ask GOOPHER</button>
+      <button id="retry" class="ghost" hidden>Try again</button>
+    </div>
+    <script src="camera.js"></script>
+  </body>
+</html>

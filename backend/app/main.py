@@ -23,7 +23,7 @@ import os
 import asyncio
 import json
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -66,6 +66,26 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+async def _start_guardian_probe() -> None:
+    """Background self-healing probe: periodically lets Guardian heal forward
+    (restore to primary once a fault clears). Isolated from all real flows."""
+    if not settings.dev_portal_enabled:
+        return
+    from .agents.guardian import get_guardian
+
+    async def _loop():
+        g = get_guardian()
+        while True:
+            await asyncio.sleep(4.0)
+            try:
+                g.tick()
+            except Exception:  # never let the probe crash the app
+                pass
+
+    asyncio.create_task(_loop())
+
+
 # --------------------------------------------------------------------------- #
 # Auth dependency
 # --------------------------------------------------------------------------- #
@@ -100,7 +120,7 @@ def healthz() -> dict:
 
 # Build marker — bump when verifying a deploy actually rolled out. Hit
 # GET /version on the live service to confirm which code Cloud Run is running.
-BUILD_VERSION = "2026-06-01-file-order-fix"
+BUILD_VERSION = "2026-06-01-guardian"
 
 
 @app.get("/version")
@@ -243,6 +263,49 @@ def dev_recent(limit: int = 50) -> dict:
     if not settings.dev_portal_enabled:
         raise HTTPException(status_code=404, detail="Not found.")
     return {"records": get_recorder().recent(limit=limit)}
+
+
+# --------------------------------------------------------------------------- #
+# Self-healing Guardian — ISOLATED. Drives synthetic transactions through its
+# own resilience policy; touches NO real flow (/chat, /vision, checkout). Powers
+# the live health strip + chaos buttons in the dev portal.
+# --------------------------------------------------------------------------- #
+@app.get("/dev/health")
+def dev_health() -> dict:
+    """Guardian's component health (for the /dev health strip)."""
+    if not settings.dev_portal_enabled:
+        raise HTTPException(status_code=404, detail="Not found.")
+    from .agents.guardian import get_guardian
+    return get_guardian().health()
+
+
+@app.post("/dev/chaos")
+async def dev_chaos(request: Request) -> dict:
+    """Inject or clear a chaos fault on a component (demo control)."""
+    if not settings.dev_portal_enabled:
+        raise HTTPException(status_code=404, detail="Not found.")
+    from .agents.guardian import get_guardian
+    body = await request.json()
+    component = body.get("component", "")
+    action = body.get("action", "inject")
+    g = get_guardian()
+    if action == "clear":
+        g.chaos.clear(component)
+        g.tick()  # immediately probe → heal forward when the fault is gone
+    else:
+        g.chaos.inject(component, body.get("fault", "outage"))
+    return g.health()
+
+
+@app.post("/dev/heal-demo")
+async def dev_heal_demo(request: Request) -> dict:
+    """Run a synthetic transaction through a component so the self-healing is
+    visible on demand (the heal streams to /dev/stream as a 'heal' record)."""
+    if not settings.dev_portal_enabled:
+        raise HTTPException(status_code=404, detail="Not found.")
+    from .agents.guardian import get_guardian
+    body = await request.json()
+    return get_guardian().simulate(body.get("component", "vertex"))
 
 
 @app.get("/dev/stream")

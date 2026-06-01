@@ -34,6 +34,33 @@
       .chip { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
       .chip i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 
+      /* Guardian self-healing panel */
+      .guardian { background: #14101a; border-bottom: 1px solid var(--border); padding: 10px 22px; }
+      .g-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+      .g-title { font-weight: 700; color: #e9d5ff; font-size: 13px; }
+      .g-overall { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 10px;
+        text-transform: uppercase; background: var(--green); color: #fff; }
+      .g-overall.degraded { background: var(--accent); }
+      .g-overall.healing { background: var(--amber); }
+      .g-hint { font-size: 11px; color: var(--muted); }
+      .g-strip { display: flex; gap: 10px; flex-wrap: wrap; margin: 9px 0; }
+      .g-comp { display: flex; align-items: center; gap: 8px; background: var(--panel);
+        border: 1px solid var(--border); border-radius: 9px; padding: 6px 12px; font-size: 12px; min-width: 180px; }
+      .g-comp .led { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+      .g-comp .led.healthy { background: var(--green); box-shadow: 0 0 8px var(--green); }
+      .g-comp .led.healing { background: var(--amber); box-shadow: 0 0 9px var(--amber); animation: pulse 1s infinite; }
+      .g-comp .led.down { background: var(--accent); box-shadow: 0 0 9px var(--accent); animation: pulse .7s infinite; }
+      .g-comp .c-name { font-weight: 600; }
+      .g-comp .c-detail { color: var(--muted); font-size: 10.5px; }
+      .g-controls { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+      .g-ctl-label { font-size: 11px; color: var(--muted); }
+      .g-btn { border: 1px solid var(--border); background: #21262d; color: var(--text);
+        border-radius: 7px; padding: 5px 10px; font-size: 12px; cursor: pointer; }
+      .g-btn:hover { filter: brightness(1.2); }
+      .g-btn.chaos { border-color: #7d2230; color: #ffb3b3; }
+      .g-btn.sim { border-color: #1f6feb; color: #9cc4ff; }
+      .g-btn.restore { border-color: #2ea043; color: #9be8a8; }
+
       main { flex: 1; overflow-y: auto; padding: 18px 22px; }
       .empty { color: var(--muted); text-align: center; margin-top: 60px; font-size: 15px; }
 
@@ -53,6 +80,7 @@
       .turn-head .kind.login { background: var(--purple); }
       .turn-head .kind.fulfillment { background: #0d8a6a; }
       .turn-head .kind.vision { background: #b8338a; }
+      .turn-head .kind.heal { background: #8957e5; }
       .meta { font-size: 12px; color: var(--muted); }
       .meta b { color: var(--text); font-weight: 600; }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -124,7 +152,29 @@
       <span class="chip"><i style="background:#1f6feb"></i> Worker sub-agent (inventory / order / checkout)</span>
       <span class="chip"><i style="background:#2ea043"></i> Tool (called by the worker)</span>
       <span class="chip"><i style="background:#1abc9c"></i> Order-management / fulfillment stage</span>
+      <span class="chip"><i style="background:#b8338a"></i> Self-healing (Guardian)</span>
     </div>
+
+    <!-- Self-healing Guardian: live health strip + chaos controls (isolated). -->
+    <section id="guardian" class="guardian">
+      <div class="g-row">
+        <span class="g-title">🛡️ Guardian — self-healing</span>
+        <span id="gOverall" class="g-overall">—</span>
+        <span class="g-hint">isolated synthetic monitor · does not touch live flows</span>
+      </div>
+      <div id="gStrip" class="g-strip"></div>
+      <div class="g-controls">
+        <span class="g-ctl-label">💥 Inject fault:</span>
+        <button class="g-btn chaos" data-comp="vertex">Kill Vertex</button>
+        <button class="g-btn chaos" data-comp="catalog">Corrupt catalog</button>
+        <button class="g-btn chaos" data-comp="fulfillment">Fail fulfillment</button>
+        <span class="g-ctl-label" style="margin-left:10px">▶ Run request:</span>
+        <button class="g-btn sim" data-comp="vertex">Vertex</button>
+        <button class="g-btn sim" data-comp="catalog">Catalog</button>
+        <button class="g-btn sim" data-comp="fulfillment">Fulfillment</button>
+        <button class="g-btn restore" id="gRestore" style="margin-left:10px">✅ Restore all</button>
+      </div>
+    </section>
 
     <main id="feed">
       <div class="empty" id="empty">
@@ -143,7 +193,51 @@
         auth: "AUTH", session: "SESSION", preprocess: "PRE-PROCESS",
         orchestrator: "ORCHESTRATOR", subagent: "WORKER SUB-AGENT",
         tool: "TOOL", llm: "LLM", memory: "MEMORY", fulfillment: "FULFILLMENT",
+        heal: "SELF-HEAL",
       };
+
+      // ---- Guardian self-healing: health strip + chaos controls ----
+      const COMP_EMOJI = { vertex: "🧠", catalog: "🗄️", fulfillment: "📦" };
+      async function refreshHealth() {
+        try {
+          const h = await (await fetch("/dev/health")).json();
+          const ov = document.getElementById("gOverall");
+          ov.textContent = h.overall;
+          ov.className = "g-overall " + (h.overall === "healthy" ? "" : h.overall);
+          const strip = document.getElementById("gStrip");
+          strip.innerHTML = "";
+          for (const [c, v] of Object.entries(h.components)) {
+            const div = document.createElement("div");
+            div.className = "g-comp";
+            div.innerHTML =
+              `<span class="led ${v.state}"></span>` +
+              `<span><span class="c-name">${COMP_EMOJI[c] || ""} ${esc(h.labels[c] || c)}</span>` +
+              `<br><span class="c-detail">${esc(v.detail)}${v.heals ? " · " + v.heals + " heals" : ""}</span></span>`;
+            strip.appendChild(div);
+          }
+        } catch (_) {}
+      }
+      async function chaos(component, action) {
+        try { await fetch("/dev/chaos", { method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ component, action }) }); } catch (_) {}
+        refreshHealth();
+      }
+      async function simulate(component) {
+        try { await fetch("/dev/heal-demo", { method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ component }) }); } catch (_) {}
+        refreshHealth();
+      }
+      document.querySelectorAll(".g-btn.chaos").forEach(b =>
+        b.addEventListener("click", () => chaos(b.dataset.comp, "inject")));
+      document.querySelectorAll(".g-btn.sim").forEach(b =>
+        b.addEventListener("click", () => simulate(b.dataset.comp)));
+      document.getElementById("gRestore").addEventListener("click", async () => {
+        for (const c of ["vertex", "catalog", "fulfillment"]) await chaos(c, "clear");
+      });
+      refreshHealth();
+      setInterval(refreshHealth, 2500);  // also catches background heal-forward
 
       function esc(s) {
         return (s ?? "").toString().replace(/[&<>]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;" }[c]));

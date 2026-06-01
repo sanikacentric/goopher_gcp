@@ -16,33 +16,41 @@
                 │  HTTPS (Bearer JWT)
                 ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│  FastAPI SERVICE  (Cloud Run, free tier)                                       │
-│  /auth/login  /auth/me  /chat  /orders/bulk  /healthz  /metrics                 │
+│  FastAPI SERVICE  (Cloud Run)                                                  │
+│  Middleware: rate limiting + request-size limits (DoS guard)                    │
+│  Auth: single-user lockdown — email allowlist + master password (fail-closed)  │
+│  /auth/login  /auth/me  /chat  /orders/bulk  /catalog  /healthz  /metrics  /dev │
 │                                                                                │
 │   ┌────────────────────────────────────────────────────────────────────────┐ │
-│   │  ADK ORCHESTRATOR  (root LlmAgent, Gemini)            [T2]               │ │
-│   │   ├─ Agent Skills:  inventory_skill · order_skill     [T4]               │ │
-│   │   ├─ Subagent: channel_agent   (web / phone)          [2A-4]             │ │
-│   │   ├─ Subagent: language_agent  (multi-lingual)        [2A-5]             │ │
-│   │   └─ Subagent: modality_agent  (text/voice/image/file)[2A-6]            │ │
+│   │  ADK ORCHESTRATOR  goopher_orchestrator (root LlmAgent, Gemini) [T2]      │ │
+│   │  SELECTS a worker sub-agent and DELEGATES — owns NO retail tools itself.  │ │
 │   │                                                                          │ │
-│   │  Memory Agent (session context across switches)        [T3 / global]    │ │
-│   │  Observability (traces, structured logs, metrics)      [T10]            │ │
+│   │   ├─ delegates → inventory_agent ──owns──► search_inventory / check_stock│ │
+│   │   │                                        / get_product_details   [2A-1]│ │
+│   │   ├─ delegates → order_agent     ──owns──► get_order_status /            │ │
+│   │   │                                        list_customer_orders /        │ │
+│   │   │                                        bulk_order_status   [2A-2, R3] │ │
+│   │   ├─ delegates → language_agent  (multi-lingual localization)    [2A-5]  │ │
+│   │   └─ delegates → channel_agent   (web / phone formatting)        [2A-4]  │ │
+│   │                                                                          │ │
+│   │  Modality routing (text/voice/image/file)               [2A-6]          │ │
+│   │  Memory (session context across switches)               [T3 / global]   │ │
+│   │  Deterministic fallback engine (no-LLM backup path)                     │ │
+│   │  Observability: Cloud Trace + structured logs + /metrics [T10]          │ │
+│   │  Dev portal /dev — live end-to-end flow visualizer (SSE)                │ │
 │   └───────────────┬──────────────────────────────────────────────────────────┘ │
-│                   │ tool calls (MCP) [T5]                                       │
+│                   │ worker sub-agents call ADK function tools (in-process) [T5] │
 └───────────────────┼──────────────────────────────────────────────────────────┘
                     ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│  MCP TOOLS  (inventory + order)                                                │
-│   inventory_search · inventory_check_stock · inventory_product_details         │
-│   order_status · order_list_for_customer · order_bulk_status                    │
-└───────────────────┬──────────────────────────────────────────────────────────┘
-                    ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
 │  DATA LAYER  (Repository abstraction)                                          │
-│   SQLite  (local/dev/CI)   ◀──same code──▶   Firestore (GCP free tier) [T7]     │
+│   SQLite (local/dev/CI)  ◀──same code──▶  Firestore (GCP free tier) [T7]         │
+│   Collections: products · orders · customers · sessions (conversation memory)  │
 │   Seeded from backend/data/goopher_catalog.json  (mock clothing + food data)  │
 └──────────────────────────────────────────────────────────────────────────────┘
+
+LLM: Gemini 2.5-flash on Vertex AI ($300 credit) [T6] · OpenAI gpt-4o-mini (toggle)
+CI/CD: push to main → GitHub Actions → test+eval → Cloud Build → Cloud Run [T17]
 ```
 
 ---
@@ -53,24 +61,28 @@
 User types/【uploads】 in the side panel
    │
    ▼
-POST /chat  { message, session_id, channel, language, attachments }  + Bearer JWT
+POST /chat  { message, session_id, channel, language, voice, attachments } + JWT
    │
-   ▼ auth.decode_token  ────────────────► 401 if invalid          [T1]
+   ▼ rate-limit + size-limit middleware  ─► 429 / 413 if abused
+   ▼ auth.decode_token (allowlist+master pw) ─► 401 if invalid     [T1]
    │
    ▼ AgentService.run_turn()  (opens a trace span)                 [T10]
    │
    ├─ 1. Memory.get(session_id)            ← recall prior context  [T3]
-   ├─ 2. modality_agent.normalize_to_text  ← image→desc, file→IDs  [2A-6]
-   ├─ 3. language_agent.detect_language     ← detect/honor language [2A-5]
-   ├─ 4. channel_agent.channel_directive    ← web vs phone style    [2A-4]
+   ├─ 2. modality_agent  (text/voice/image/file → text + intent)   [2A-6]
+   ├─ 3. language_agent  (detect/honor language)                   [2A-5]
+   ├─ 4. channel_agent   (web vs phone style)                      [2A-4]
    ├─ 5. record user turn in memory
    │
-   ├─ 6. Generate reply:
-   │      ADK path:  Runner → Gemini → MCP tools → final text
-   │      Fallback:  intent router → MCP tools → Gemini/template phrasing
+   ├─ 6. Generate reply via the ADK delegation hierarchy:
+   │        invoke_agent goopher_orchestrator   (root — selects worker)
+   │          └─ invoke_agent inventory_agent   (or order_agent)
+   │               └─ execute_tool search_inventory   (worker owns the tool)
+   │          └─ generate_content gemini-2.5-flash    (compose reply)
+   │      Fallback (no LLM): deterministic intent router → tools → template
    │
    ├─ 7. channel_agent.adapt_for_phone (if phone)  ← strip markdown [2A-4]
-   ├─ 8. record assistant turn in memory
+   ├─ 8. record assistant turn in memory (Firestore in cloud)
    │
    ▼ ChatResponse { reply, language, channel, used_tools, trace_id }
 ```

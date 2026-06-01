@@ -41,25 +41,32 @@ with TWO departments: women's casual Clothing and Food/Snacks. You help
 customers discover products in EITHER department, check live inventory, and
 manage their orders (single or in bulk).
 
-Rules:
-- The store sells BOTH clothing (dresses) AND food/snacks (chips, cookies, soda,
-  peanuts, crackers, snack bars). NEVER say you only sell dresses/clothing.
-- Use the inventory tools for any availability/price/product question, in either
-  department. TRUST the tool results: if a product appears in the tool results,
-  the store sells it — present it. Never refuse an item the tools returned.
-- Use the order tools for any order-status question. The signed-in customer's
-  id is given to you; never ask the user for it.
+The store sells BOTH clothing (dresses) AND food/snacks (chips, cookies, soda,
+peanuts, crackers, snack bars). NEVER say you only sell one category.
+Be concise and proactive. Surface low-stock warnings and the current sale price.
+Stay on the topic of the store's clothing & food products and order help.
+""".strip()
 
-Multi-agent workflow (ALWAYS, so each specialist is invoked and observable):
-1. Call `modality_agent` first to interpret the request and state the intent.
-2. Call `language_agent` to detect the customer's language for the final reply.
-3. Use the inventory/order tools to fetch the real data.
-4. Call `channel_agent` to learn how to format for the active channel (web/phone).
-5. Write the final reply, honoring the language and channel guidance.
 
-- Be concise and proactive. Surface low-stock warnings and the current sale price.
-- Stay on the topic of the store's clothing & food products and order help.
-- Honor the CHANNEL and LANGUAGE directives provided for this turn.
+# How the ROOT orchestrator must DELEGATE. It owns no retail tools itself — it
+# picks a worker sub-agent for the task; the worker calls the tools.
+ORCHESTRATOR_DELEGATION = """
+You are the ORCHESTRATOR. You do NOT call inventory or order tools yourself.
+You SELECT and DELEGATE to a specialist sub-agent, which owns and calls the
+tools, then you compose the final reply from what it returns.
+
+Routing rules — for every turn:
+- Product availability / price / stock / "do you have…" / "show me…" questions
+  -> delegate to `inventory_agent` (it owns the inventory tools).
+- Order status / tracking / "where is my order" / bulk order questions
+  -> delegate to `order_agent` (it owns the order tools).
+- If the customer's language is not English, you MAY call `language_agent` to
+  localize the final reply.
+- You MAY call `channel_agent` to format for the active channel (web vs phone).
+
+Always delegate to the right worker sub-agent first to get the real data, then
+write a concise, grounded reply. Never invent product or order facts; only use
+what the sub-agent returned.
 """.strip()
 
 
@@ -68,8 +75,19 @@ Multi-agent workflow (ALWAYS, so each specialist is invoked and observable):
 # --------------------------------------------------------------------------- #
 def build_root_agent():
     """
-    Construct the ADK orchestrator: a root LlmAgent that owns the skill tools
-    and delegates to the channel/language/modality subagents.
+    Construct the ADK multi-agent tree with a true delegation hierarchy:
+
+        goopher_orchestrator (root, Gemini)
+          ├─ delegates to → inventory_agent  ──owns──► inventory tools
+          ├─ delegates to → order_agent      ──owns──► order tools
+          ├─ delegates to → language_agent   (localization)
+          └─ delegates to → channel_agent    (web/phone formatting)
+
+    The orchestrator does NOT call retail tools directly. It SELECTS a worker
+    sub-agent for the task and delegates to it; the WORKER agent owns and calls
+    the actual tools. This is the canonical ADK pattern and is what shows up in
+    traces as: invoke_agent orchestrator → invoke_agent inventory_agent →
+    execute_tool search_inventory.
 
     Imported lazily so the module loads even where google-adk isn't installed.
     """
@@ -90,34 +108,57 @@ def build_root_agent():
     from google.adk.agents import LlmAgent
     from google.adk.tools.agent_tool import AgentTool
 
-    # Wrap the three specialist sub-agents as AgentTools. Unlike `sub_agents`
-    # (which only emit a span when the LLM voluntarily *transfers* control — it
-    # usually doesn't), AgentTools are explicit tools the orchestrator CALLS, so
-    # each produces its own `invoke_agent <name>` span in Cloud Trace every turn.
     model = _settings.gemini_model
-    modality_tool = AgentTool(agent=modality_agent_stub(model))
-    language_tool = AgentTool(agent=language_agent.build_adk_agent(model))
-    channel_tool = AgentTool(agent=channel_agent.build_adk_agent(model))
 
-    # Inventory/order tools are registered DIRECTLY as ADK function tools
-    # (in-process). GOOPHER is the only consumer of these tools, so MCP's extra
-    # process/transport indirection added failure surface without benefit; the
-    # agent calls the Python functions natively and they appear as `execute_tool
-    # <name>` spans in Cloud Trace.
-    retail_tools = inventory_skill.get_tools() + order_skill.get_tools()
+    # --- Worker sub-agents that OWN the tools ---
+    # inventory_agent owns the inventory tools and calls them itself.
+    inventory_agent = LlmAgent(
+        name="inventory_agent",
+        model=model,
+        description="Specialist that answers product availability, price, and "
+                    "stock questions by calling the inventory tools.",
+        instruction=(
+            "You are the inventory specialist for a store with women's casual "
+            "Clothing and Food/Snacks. Use your tools to answer the request:\n"
+            + inventory_skill.INSTRUCTION
+            + "\nReturn the concrete results (names, prices, stock). Trust tool "
+              "output; never claim the store only sells one category."
+        ),
+        tools=inventory_skill.get_tools(),
+    )
 
-    tools = [modality_tool, language_tool, channel_tool] + retail_tools
+    # order_agent owns the order tools and calls them itself.
+    order_agent = LlmAgent(
+        name="order_agent",
+        model=model,
+        description="Specialist that answers order-status and order-management "
+                    "questions (single or bulk) by calling the order tools.",
+        instruction=(
+            "You are the order-management specialist. Use your tools to answer:\n"
+            + order_skill.INSTRUCTION
+            + "\nThe signed-in customer_id is provided in context; never ask for it."
+        ),
+        tools=order_skill.get_tools(),
+    )
 
+    # --- Specialist sub-agents (no retail tools) ---
+    language_sub = language_agent.build_adk_agent(model)
+    channel_sub = channel_agent.build_adk_agent(model)
+
+    # --- Root orchestrator: SELECTS and DELEGATES to the workers ---
+    # It exposes the workers as AgentTools (explicit, traced delegation). It owns
+    # NO retail tools itself — it must route through a worker sub-agent.
     root = LlmAgent(
         name="goopher_orchestrator",
         model=model,
-        description="Unified conversational retail agent for clothing & food.",
-        instruction=ROOT_INSTRUCTION
-        + "\n\n"
-        + inventory_skill.INSTRUCTION
-        + "\n\n"
-        + order_skill.INSTRUCTION,
-        tools=tools,
+        description="Unified conversational retail orchestrator for clothing & food.",
+        instruction=ROOT_INSTRUCTION + "\n\n" + ORCHESTRATOR_DELEGATION,
+        tools=[
+            AgentTool(agent=inventory_agent),
+            AgentTool(agent=order_agent),
+            AgentTool(agent=language_sub),
+            AgentTool(agent=channel_sub),
+        ],
     )
     return root
 
@@ -226,11 +267,12 @@ class AgentService:
         ft.record.customer_id = customer_id
         ft.record.user_message = req.message
 
-        # Names of the specialist sub-agents (wrapped as ADK AgentTools). When the
-        # ADK path runs, these come back in `used_tools` and ARE the real agent
-        # invocations — so we render them as SUB-AGENT steps and the rest as TOOL
-        # steps, attributing each exactly once.
-        SUBAGENT_NAMES = {"modality_agent", "language_agent", "channel_agent"}
+        # Worker + specialist sub-agents the orchestrator delegates to (they come
+        # back in `used_tools` from the ADK run). Worker agents OWN the tools, so
+        # a worker name in used_tools means the orchestrator delegated to it; the
+        # actual tool names appear too (the worker called them).
+        SUBAGENT_NAMES = {"inventory_agent", "order_agent",
+                          "modality_agent", "language_agent", "channel_agent"}
 
         with span("chat_turn", session=req.session_id, channel=req.channel,
                   customer=customer_id) as trace_id:

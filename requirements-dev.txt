@@ -1,5 +1,5 @@
 # Minimal dependency set to run unit tests & evals WITHOUT the heavy
-# ADK / MCP / Google Cloud packages. The app degrades gracefully to its
+# ADK / Google Cloud packages. The app degrades gracefully to its
 # deterministic template engine when those optional packages/keys are absent,
 # so CI validates the core logic fast and offline (no cloud, no LLM key).
 fastapi>=0.115

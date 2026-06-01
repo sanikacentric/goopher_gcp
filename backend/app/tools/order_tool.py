@@ -2,7 +2,7 @@
 Order-status tool logic (Requirement 2A-2: order status retrieval) and the
 high-volume / bulk path (Requirement 3: individual AND high-volume management).
 
-Exposed via MCP (mcp/server.py) and imported by the order skill.
+Registered directly as ADK function tools via the order skill (in-process).
 """
 from __future__ import annotations
 

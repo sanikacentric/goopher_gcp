@@ -28,7 +28,7 @@ from .agents.orchestrator import get_agent_service
 from .auth.auth import authenticate, create_access_token, decode_token
 from .config import BACKEND_DIR, get_settings
 from .db.database import get_repository
-from .mcp.order_tool import bulk_order_status
+from .tools.order_tool import bulk_order_status
 from .models.schemas import (
     BulkOrderQuery,
     ChatRequest,

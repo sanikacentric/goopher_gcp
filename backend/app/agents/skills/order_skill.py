@@ -2,11 +2,12 @@
 Order Management Agent Skill (Requirement T4 + Req 3).
 
 Bundles instruction + tools for both INDIVIDUAL order tracking and HIGH-VOLUME
-bulk status. Wraps the logic shared with the MCP order tools.
+bulk status. The tools are plain functions (tools/order_tool.py) registered
+directly with the ADK agent as in-process function tools.
 """
 from __future__ import annotations
 
-from ...mcp.order_tool import bulk_order_status, get_order_status, list_customer_orders
+from ...tools.order_tool import bulk_order_status, get_order_status, list_customer_orders
 
 INSTRUCTION = """
 You help customers manage orders for the store (clothing & food):

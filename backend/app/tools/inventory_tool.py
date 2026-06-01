@@ -1,12 +1,10 @@
 """
 Inventory tool logic (Requirement 2A-1: real-time inventory retrieval).
 
-These are plain, well-tested Python functions. They are exposed two ways:
-  1. As MCP tools (see mcp/server.py) — the canonical integration per T5.
-  2. Imported directly by the ADK agent skills for in-process speed.
-
-Keeping the logic here (not in the MCP wiring) makes it unit-testable without
-spinning up a server.
+These are plain, well-tested Python functions registered directly as ADK
+function tools (in-process) via the agent skills, and also called by the
+deterministic fallback engine. Keeping the logic in plain functions makes it
+unit-testable without any agent/LLM.
 """
 from __future__ import annotations
 

@@ -130,7 +130,7 @@ jobs:
             --max-instances 2 \
             --memory 1Gi \
             --cpu 1 \
-            --set-env-vars "ENVIRONMENT=production,DB_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=${PROJ_CLEAN},OTEL_EXPORTER=gcp,LLM_PROVIDER=gemini,USE_ADK_PATH=true,USE_VERTEXAI=true,USE_MCP_TOOLS=true,VERTEX_LOCATION=us-central1,GEMINI_MODEL=gemini-2.5-flash,JWT_SECRET=${JWT_CLEAN}"
+            --set-env-vars "ENVIRONMENT=production,DB_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=${PROJ_CLEAN},OTEL_EXPORTER=gcp,LLM_PROVIDER=gemini,USE_ADK_PATH=true,USE_VERTEXAI=true,VERTEX_LOCATION=us-central1,GEMINI_MODEL=gemini-2.5-flash,JWT_SECRET=${JWT_CLEAN}"
 
       - name: Allow public access (run.invoker for allUsers)
         if: steps.gate.outputs.ready == 'true'

@@ -1,5 +1,4 @@
-# Minimum-version ranges (not exact pins) so pip can resolve a consistent set —
-# google-adk pulls a recent mcp, so pinning mcp low caused a hard conflict.
+# Minimum-version ranges (not exact pins) so pip resolves a consistent set.
 
 # --- Core runtime ---
 fastapi>=0.115
@@ -15,11 +14,8 @@ openai>=1.59
 # --- LLM (Gemini) — used when LLM_PROVIDER=gemini ---
 google-generativeai>=0.8.3
 
-# --- ADK orchestrator (T2) — Gemini multi-agent path; pulls a compatible mcp ---
+# --- ADK orchestrator (T2) — Gemini multi-agent path; tools registered in-process ---
 google-adk>=1.2
-
-# --- MCP tools (T5).  Range kept compatible with google-adk (needs mcp>=1.8). ---
-mcp>=1.8
 
 # --- Google Cloud free tier: Firestore + observability (T7, T10) ---
 google-cloud-firestore>=2.20

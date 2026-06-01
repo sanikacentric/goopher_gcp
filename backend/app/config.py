@@ -47,10 +47,6 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.5-flash"  # fast, multimodal
     use_vertexai: bool = False              # True -> route Gemini/ADK via Vertex AI
     vertex_location: str = "us-central1"
-    # True -> orchestrator reaches the inventory/order tools over the MCP protocol
-    # (launches backend/app/mcp/server.py as a stdio MCP server), so tool calls
-    # genuinely go through MCP. False -> call the same functions in-process (faster).
-    use_mcp_tools: bool = False
 
     # When True, try the ADK multi-agent path first and fall back to the grounded
     # path if it errors. Default False = always use the grounded "tools + LLM

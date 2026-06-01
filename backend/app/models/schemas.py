@@ -1,5 +1,5 @@
 """
-Pydantic data models shared across the API, agents, MCP tools, and tests.
+Pydantic data models shared across the API, agents, tools, and tests.
 
 Keeping a single source of truth for shapes means the Chrome extension, the
 agents, and the database layer all agree on field names and types.

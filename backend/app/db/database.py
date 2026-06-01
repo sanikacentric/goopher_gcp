@@ -8,7 +8,7 @@ Provides a single `Repository` interface with two interchangeable backends:
                           always-free tier (1 GiB storage, 50K reads/day).
 
 The backend is chosen by `settings.db_backend` ("sqlite" | "firestore") so the
-exact same agent / MCP / API code runs locally and on Cloud Run unchanged.
+exact same agent / tool / API code runs locally and on Cloud Run unchanged.
 
 Both backends are seeded from `backend/data/goopher_catalog.json`.
 """

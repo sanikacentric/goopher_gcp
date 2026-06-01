@@ -1,5 +1,5 @@
-"""Unit tests for the order MCP tool logic (Req 2A-2, Req 3 bulk)."""
-from backend.app.mcp.order_tool import (
+"""Unit tests for the order tool logic (Req 2A-2, Req 3 bulk)."""
+from backend.app.tools.order_tool import (
     bulk_order_status,
     get_order_status,
     list_customer_orders,

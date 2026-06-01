@@ -1,5 +1,5 @@
-"""Unit tests for the inventory MCP tool logic (Req 2A-1)."""
-from backend.app.mcp.inventory_tool import (
+"""Unit tests for the inventory tool logic (Req 2A-1)."""
+from backend.app.tools.inventory_tool import (
     check_stock,
     get_product_details,
     search_inventory,

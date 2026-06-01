@@ -6,12 +6,12 @@ teaches the LLM when/how to use the capability, and (b) the callable tools that
 implement it. The orchestrator composes skills rather than loose functions, so
 capabilities can be added/removed as units.
 
-The tools wrap the SAME logic exposed over MCP (mcp/inventory_tool.py), giving
-the in-process agent a fast path while MCP remains the external contract.
+The tools are plain Python functions (tools/inventory_tool.py) registered
+directly with the ADK agent as in-process function tools.
 """
 from __future__ import annotations
 
-from ...mcp.inventory_tool import check_stock, get_product_details, search_inventory
+from ...tools.inventory_tool import check_stock, get_product_details, search_inventory
 
 INSTRUCTION = """
 You can answer questions about the store's two departments — women's casual

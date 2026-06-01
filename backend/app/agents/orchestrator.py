@@ -51,22 +51,24 @@ Stay on the topic of the store's clothing & food products and order help.
 # How the ROOT orchestrator must DELEGATE. It owns no retail tools itself — it
 # picks a worker sub-agent for the task; the worker calls the tools.
 ORCHESTRATOR_DELEGATION = """
-You are the ORCHESTRATOR. You do NOT call inventory or order tools yourself.
-You SELECT and DELEGATE to a specialist sub-agent, which owns and calls the
-tools, then you compose the final reply from what it returns.
+You are the ORCHESTRATOR. You own NO tools yourself. You SELECT and DELEGATE to
+specialist sub-agents (each is a tool you call), then compose the final reply
+from what they return.
 
-Routing rules — for every turn:
-- Product availability / price / stock / "do you have…" / "show me…" questions
-  -> delegate to `inventory_agent` (it owns the inventory tools).
-- Order status / tracking / "where is my order" / bulk order questions
-  -> delegate to `order_agent` (it owns the order tools).
-- If the customer's language is not English, you MAY call `language_agent` to
-  localize the final reply.
-- You MAY call `channel_agent` to format for the active channel (web vs phone).
+Follow this workflow on EVERY turn, calling the sub-agents in order:
+1. `memory_agent`   — recall recent conversation context for this session.
+2. `modality_agent` — interpret the input (text/voice/image/file) -> normalized text.
+3. `language_agent` — detect the customer's language + localization directive.
+4. Pick the WORKER for the request and delegate to get the real data:
+     - product availability / price / stock / "do you have…" / "show me…"
+       -> `inventory_agent` (owns the inventory tools)
+     - order status / tracking / "where is my order" / bulk orders
+       -> `order_agent` (owns the order tools)
+5. `channel_agent`  — get the formatting directive for the active channel.
+6. Compose a concise, grounded reply in the detected language and channel style.
 
-Always delegate to the right worker sub-agent first to get the real data, then
-write a concise, grounded reply. Never invent product or order facts; only use
-what the sub-agent returned.
+Never invent product or order facts — use only what the worker sub-agent
+returned. Never claim the store sells only one category.
 """.strip()
 
 
@@ -105,7 +107,7 @@ def build_root_agent():
         if _settings.google_api_key:
             os.environ["GOOGLE_API_KEY"] = _settings.google_api_key
 
-    from google.adk.agents import LlmAgent
+    from google.adk.agents import LlmAgent, SequentialAgent
     from google.adk.tools.agent_tool import AgentTool
 
     model = _settings.gemini_model
@@ -141,42 +143,38 @@ def build_root_agent():
         tools=order_skill.get_tools(),
     )
 
-    # --- Specialist sub-agents (no retail tools) ---
-    language_sub = language_agent.build_adk_agent(model)
-    channel_sub = channel_agent.build_adk_agent(model)
+    # --- Pre-processing specialist sub-agents (real ADK LlmAgents, each owns a
+    #     function tool wrapping the deterministic helper). ---
+    from . import specialist_agents as sp
 
-    # --- Root orchestrator: SELECTS and DELEGATES to the workers ---
-    # It exposes the workers as AgentTools (explicit, traced delegation). It owns
-    # NO retail tools itself — it must route through a worker sub-agent.
-    root = LlmAgent(
+    modality_sub = sp.build_modality_agent(model)
+    language_sub = sp.build_language_agent(model)
+    channel_sub = sp.build_channel_agent(model)
+    memory_sub = sp.build_memory_agent(model)
+
+    # --- The ORCHESTRATOR (LlmAgent) — smartly SELECTS the right worker ---
+    # It owns only the two workers as tools; for a turn it delegates to whichever
+    # fits (inventory vs order). This is the "smart routing" part of the hybrid.
+    orchestrator = LlmAgent(
         name="goopher_orchestrator",
         model=model,
-        description="Unified conversational retail orchestrator for clothing & food.",
+        description="Selects the right worker sub-agent and composes the reply.",
         instruction=ROOT_INSTRUCTION + "\n\n" + ORCHESTRATOR_DELEGATION,
-        tools=[
-            AgentTool(agent=inventory_agent),
-            AgentTool(agent=order_agent),
-            AgentTool(agent=language_sub),
-            AgentTool(agent=channel_sub),
-        ],
+        tools=[AgentTool(agent=inventory_agent), AgentTool(agent=order_agent)],
     )
-    return root
 
-
-def modality_agent_stub(model: str):
-    """ADK sub-agent registration for modality handling (logic lives in
-    modality_agent.py; this exposes it to the LLM as a delegatable agent)."""
-    from google.adk.agents import LlmAgent
-
-    return LlmAgent(
-        name="modality_agent",
-        model=model,
-        description="Normalizes voice/image/file inputs into text attributes.",
-        instruction=(
-            "You interpret non-text inputs (image descriptions, extracted file "
-            "data) and restate them as concrete shopping or order intents."
-        ),
+    # --- HYBRID: a SequentialAgent runs the pipeline in a GUARANTEED order ---
+    # The pre-processing agents (memory, modality, language) ALWAYS run, then the
+    # orchestrator (which picks a worker), then channel formatting ALWAYS runs.
+    # This guarantees every stage is invoked + visible every turn, while keeping
+    # the orchestrator's smart worker selection in the middle.
+    pipeline = SequentialAgent(
+        name="goopher_pipeline",
+        description="Guaranteed GOOPHER turn pipeline: memory -> modality -> "
+                    "language -> orchestrator(worker) -> channel.",
+        sub_agents=[memory_sub, modality_sub, language_sub, orchestrator, channel_sub],
     )
+    return pipeline
 
 
 # --------------------------------------------------------------------------- #
@@ -281,92 +279,50 @@ class AgentService:
             ft.step("session", "memory.get",
                     f"session_id={req.session_id} (backend={_settings.db_backend})")
 
-            # --- PHASE 1: deterministic PRE-PROCESSING (plain Python, no LLM) ---
-            # Fast request normalization that runs BEFORE the ADK orchestrator, to
-            # detect modality/language/channel for routing + the final reply. These
-            # are NOT the ADK agents — labeled "preprocess" so it's clear the
-            # orchestrator (Phase 2) is what drives the real multi-agent flow.
             mem = self.memory.get(req.session_id, customer_id)
+            channel = req.channel  # may be refined by the channel sub-agent
 
-            # Each preprocessing step is wrapped in its own OTel span so it ALSO
-            # appears in Cloud Trace (nested under chat_turn), not just the dev
-            # portal — otherwise these plain-Python helpers produce no trace span.
-            _t0 = _time.perf_counter()
-            with span("preprocess.modality_agent"):
-                modality = modality_agent.classify_modality(req.message, req.attachments)
-                # Voice dictation reaches us as text (browser speech-to-text); the
-                # `voice` flag is the only signal it originated as speech.
-                if getattr(req, "voice", False) and modality == "text":
-                    modality = "voice"
-                text = modality_agent.normalize_to_text(
-                    req.message, req.attachments, _settings.gemini_model
+            # Two CLEANLY SEPARATED paths — never mixed:
+            #   ADK path: the orchestrator drives REAL sub-agents (memory →
+            #             modality → language → worker → channel). No deterministic
+            #             pre-processing runs.
+            #   Backup  : the deterministic engine does everything (used only when
+            #             ADK is off or errors).
+            if self._adk_ready and _settings.use_adk_path:
+                # Record the user turn so the memory sub-agent can recall it.
+                self.memory.add_turn(
+                    req.session_id,
+                    Turn(role="user", content=req.message, channel=channel,
+                         language=req.language or "en", modality="text"),
                 )
-            _mdetail = (f"modality={modality} "
-                        f"({'voice transcript' if modality == 'voice' else str(len(req.attachments)) + ' attachment(s)'})")
-            ft.step("preprocess", "detect modality", _mdetail,
-                    ms=(_time.perf_counter() - _t0) * 1000, modality=modality)
-
-            _t0 = _time.perf_counter()
-            with span("preprocess.language_agent"):
-                language = req.language or language_agent.detect_language(
-                    text, default=self.memory.recall(req.session_id, "language", "en")
-                )
-            self.memory.remember(req.session_id, "language", language)
-            ft.step("preprocess", "detect language", f"language = {language}",
-                    ms=(_time.perf_counter() - _t0) * 1000, language=language)
-
-            with span("preprocess.channel_agent"):
-                channel = req.channel
-                self.memory.remember(req.session_id, "channel", channel)
-            ft.step("preprocess", "select channel", f"channel = {channel}", channel=channel)
-
-            # Record the user turn BEFORE answering (memory / context).
-            self.memory.add_turn(
-                req.session_id,
-                Turn(role="user", content=text, channel=channel,
-                     language=language, modality=modality),
-            )
-
-            # --- PHASE 2: the ADK ORCHESTRATOR drives the multi-agent flow ---
-            # The orchestrator SELECTS a worker sub-agent and delegates; the worker
-            # owns and calls the tools. This is the start of the real agent work.
-            _t0 = _time.perf_counter()
-            reply, used_tools, path = self._generate(req.session_id, text,
-                                                     customer_id, channel, language)
-            gen_ms = (_time.perf_counter() - _t0) * 1000
-
-            orchestrator_label = ("invoke_agent: goopher_orchestrator (ADK + gemini)"
-                                  if path == "adk"
-                                  else f"orchestrator: deterministic router ({_settings.llm_provider})")
-            ft.step("orchestrator", orchestrator_label,
-                    "ROOT agent — selects a worker sub-agent and delegates", ms=gen_ms)
-
-            # The worker sub-agents the orchestrator delegated to, and the tools
-            # those workers called (rendered AFTER the orchestrator, as children).
-            for name in used_tools:
-                if name in SUBAGENT_NAMES:
-                    ft.step("subagent", f"↳ {name}",
-                            "worker sub-agent invoked by orchestrator", tool=name)
+                ft.step("orchestrator", "invoke_agent: goopher_orchestrator (ADK + gemini)",
+                        "ROOT agent — calls memory/modality/language/worker/channel "
+                        "sub-agents and composes the reply", ms=0)
+                try:
+                    reply, used_tools, language, modality = self._run_adk_turn(req, customer_id)
+                    path = "adk"
+                except Exception as exc:
+                    log_event("adk_turn_failed", reason=str(exc))
+                    incr("errors_total")
+                    reply, used_tools, language, modality, channel = \
+                        self._run_backup_turn(req, customer_id, ft)
+                    path = "fallback"
                 else:
-                    ft.step("tool", f"↳ {name}",
-                            "tool called by the worker sub-agent", tool=name)
-            if not used_tools:
-                ft.step("tool", "(no tool call)",
-                        "orchestrator answered from context/history")
+                    # Render the sub-agents the orchestrator actually delegated to.
+                    for name in used_tools:
+                        if name in SUBAGENT_NAMES:
+                            ft.step("subagent", f"↳ {name}",
+                                    "sub-agent invoked by orchestrator", tool=name)
+                        else:
+                            ft.step("tool", f"↳ {name}",
+                                    "function tool called by a sub-agent", tool=name)
+            else:
+                reply, used_tools, language, modality, channel = \
+                    self._run_backup_turn(req, customer_id, ft)
+                path = "fallback"
 
-            # 5) CHANNEL post-processing for phone (voice-safe text).
-            if channel == "phone":
-                reply = channel_agent.adapt_for_phone(reply)
-                ft.step("preprocess", "adapt_for_phone",
-                        "stripped markdown for voice output")
-
-            # Record the assistant turn.
-            self.memory.add_turn(
-                req.session_id,
-                Turn(role="assistant", content=reply, channel=channel,
-                     language=language, modality=modality),
-            )
-            ft.step("memory", "add_turn x2",
+            # (User + assistant turns are persisted inside the path helpers.)
+            ft.step("memory", "session updated",
                     "persisted user + assistant turns to session memory")
 
             log_event("chat_reply", session=req.session_id, language=language,
@@ -393,6 +349,99 @@ class AgentService:
                 reply=reply, session_id=req.session_id, language=language,
                 channel=channel, used_tools=used_tools, trace_id=trace_id,
             )
+
+    # ----- ADK path (real sub-agents) ----- #
+    def _run_adk_turn(self, req: ChatRequest, customer_id: str
+                      ) -> tuple[str, list[str], str, str]:
+        """
+        Drive one turn through the ADK orchestrator + real sub-agents. Binds the
+        per-turn context so the specialist tools (memory/modality/language/
+        channel) can read session/message/channel without the LLM passing ids.
+        Returns (reply, used_tools, language, modality).
+        """
+        from . import specialist_agents as sp
+
+        sp.set_turn_context(
+            session_id=req.session_id, customer_id=customer_id,
+            message=req.message, channel=req.channel,
+            voice=getattr(req, "voice", False), attachments=req.attachments,
+        )
+        directives = f"The signed-in customer_id is {customer_id}."
+        reply, used_tools = self._generate_adk(
+            req.session_id, req.message, customer_id, directives
+        )
+        # Read what the sub-agents resolved (persisted to memory by their tools).
+        language = self.memory.recall(req.session_id, "language", req.language or "en")
+        modality = "voice" if getattr(req, "voice", False) else "text"
+        # Record the assistant turn.
+        self.memory.add_turn(
+            req.session_id,
+            Turn(role="assistant", content=reply, channel=req.channel,
+                 language=language, modality=modality),
+        )
+        return reply, used_tools, language, modality
+
+    # ----- backup path (deterministic, separate — never mixed with ADK) ----- #
+    def _run_backup_turn(self, req: ChatRequest, customer_id: str, ft
+                         ) -> tuple[str, list[str], str, str, str]:
+        """
+        Deterministic fallback for one turn: pure-Python modality/language/channel
+        detection + the template/LLM-phrasing engine. Used only when ADK is off or
+        errored. Returns (reply, used_tools, language, modality, channel).
+        """
+        import time as _time
+
+        _t0 = _time.perf_counter()
+        modality = modality_agent.classify_modality(req.message, req.attachments)
+        if getattr(req, "voice", False) and modality == "text":
+            modality = "voice"
+        text = modality_agent.normalize_to_text(
+            req.message, req.attachments, _settings.gemini_model
+        )
+        ft.step("preprocess", "detect modality (backup)", f"modality={modality}",
+                ms=(_time.perf_counter() - _t0) * 1000, modality=modality)
+
+        language = req.language or language_agent.detect_language(
+            text, default=self.memory.recall(req.session_id, "language", "en")
+        )
+        self.memory.remember(req.session_id, "language", language)
+        ft.step("preprocess", "detect language (backup)", f"language={language}",
+                language=language)
+
+        channel = req.channel
+        self.memory.remember(req.session_id, "channel", channel)
+        ft.step("preprocess", "select channel (backup)", f"channel={channel}",
+                channel=channel)
+
+        self.memory.add_turn(
+            req.session_id,
+            Turn(role="user", content=text, channel=channel,
+                 language=language, modality=modality),
+        )
+
+        directives = (
+            channel_agent.channel_directive(channel) + "\n"
+            + language_agent.language_directive(language)
+            + f"\nThe signed-in customer_id is {customer_id}."
+        )
+        reply, used_tools = self._generate_fallback(
+            req.session_id, text, customer_id, directives, channel, language
+        )
+        ft.step("orchestrator", f"deterministic router ({_settings.llm_provider})",
+                "BACKUP engine — intent routing + grounded reply")
+        for name in used_tools:
+            ft.step("tool", name, "tool executed (backup)", tool=name)
+
+        if channel == "phone":
+            reply = channel_agent.adapt_for_phone(reply)
+            ft.step("preprocess", "adapt_for_phone (backup)", "voice-safe text")
+
+        self.memory.add_turn(
+            req.session_id,
+            Turn(role="assistant", content=reply, channel=channel,
+                 language=language, modality=modality),
+        )
+        return reply, used_tools, language, modality, channel
 
     # ----- generation paths ----- #
     def _generate(self, session_id: str, text: str, customer_id: str,

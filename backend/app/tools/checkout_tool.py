@@ -32,6 +32,49 @@ def _next_order_id() -> str:
     return f"ORD-{n}"
 
 
+def resolve_variant_by_name(query: str) -> dict:
+    """
+    Resolve a free-text product name (e.g. "oreo cookies") to a concrete in-stock
+    variant, so a shopper can order by name without knowing the SKU.
+
+    IMPORTANT: this NEVER substitutes a different product. If the named product
+    isn't in the catalog, or every variant is out of stock, it returns an error
+    (ok=False) and the caller must NOT place an order for something else.
+
+    Returns:
+        {"ok": True, "variant_id": ..., "product": ..., "sku": ...} on a hit, or
+        {"ok": False, "not_found"|"out_of_stock": True, "message": ...} otherwise.
+    """
+    incr("tool_calls_total")
+    repo = get_repository()
+    query = (query or "").strip()
+    if not query:
+        return {"ok": False, "not_found": True,
+                "message": "No product name was given, so no order was placed."}
+
+    products = repo.search_products(query=query)
+    log_event("checkout_resolve_name", query=query, results=len(products))
+    if not products:
+        return {"ok": False, "not_found": True,
+                "message": (f'Sorry, we couldn\'t find "{query}" in the catalog, '
+                            f'so no order was placed and nothing was substituted. '
+                            f'Please check the product name and try again.')}
+
+    # Best match first (search_products ranks by relevance). Pick the first
+    # in-stock variant of the best-matching product.
+    for p in products:
+        for v in p.variants:
+            if v.stock > 0:
+                return {"ok": True, "variant_id": v.variant_id,
+                        "product": p.name, "sku": p.sku}
+
+    # The product exists but is entirely out of stock — do NOT substitute.
+    name = products[0].name
+    return {"ok": False, "out_of_stock": True,
+            "message": (f'"{name}" is currently out of stock, so no order was '
+                        f'placed. We did not substitute another item.')}
+
+
 def add_to_cart(variant_id: str = "", qty: int = 1) -> dict:
     """
     Add a product variant to the cart.

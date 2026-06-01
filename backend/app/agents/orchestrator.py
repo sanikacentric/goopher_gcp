@@ -498,7 +498,7 @@ class AgentService:
         answer (via Gemini if available, else a clean template). This keeps the
         service fully functional with no ADK and is what unit tests exercise.
         """
-        from ..tools.checkout_tool import place_bulk_order, place_order
+        from ..tools.checkout_tool import place_bulk_order, place_order, resolve_variant_by_name
         from ..tools.inventory_tool import check_stock, search_inventory
         from ..tools.order_tool import bulk_order_status, get_order_status, list_customer_orders
 
@@ -520,10 +520,29 @@ class AgentService:
         # --- intent: PLACE AN ORDER (single item) ---
         if any(k in lowered for k in ("place an order", "place order", "checkout",
                                       "check out", "buy this", "buy it", "order this",
-                                      "place my order", "complete my order")):
-            data = place_order(customer_id,
-                               variant_id=variant_ids[0] if variant_ids else "", qty=1)
+                                      "place my order", "complete my order", "buy ",
+                                      "purchase ", "order of", "order for")):
             used_tools.append("checkout_agent")
+            qty = self._extract_qty(text)
+            if variant_ids:
+                # Explicit SKU/variant in the message — use it directly.
+                data = place_order(customer_id, variant_id=variant_ids[0], qty=qty)
+            else:
+                # Did the shopper NAME a product (e.g. "place an order of oreo
+                # cookies")? If so, resolve it by name and order THAT product.
+                # We must never substitute a different item.
+                product = self._extract_order_product(text)
+                if product:
+                    res = resolve_variant_by_name(product)
+                    if not res.get("ok"):
+                        # Not found / out of stock -> refuse cleanly, no substitution.
+                        data = {"ok": False, "message": res["message"]}
+                        self._last_checkout = self._checkout_payload(data, bulk=False)
+                        return self._phrase(text, res["message"], directives), used_tools
+                    data = place_order(customer_id, variant_id=res["variant_id"], qty=qty)
+                else:
+                    # Bare "place an order" with no product named -> default demo item.
+                    data = place_order(customer_id, variant_id="", qty=qty)
             self._last_checkout = self._checkout_payload(data, bulk=False)
             facts = self._format_checkout(data)
             return self._phrase(text, facts, directives), used_tools
@@ -699,6 +718,44 @@ class AgentService:
         if data["missing"]:
             lines.append(f"Missing: {', '.join(data['missing'][:10])}")
         return "\n".join(lines)
+
+    @staticmethod
+    def _extract_qty(text: str) -> int:
+        """Pull a small quantity from phrases like 'order 3 oreos'. Default 1."""
+        import re
+        for m in re.finditer(r"\b(\d{1,3})\b", text):
+            n = int(m.group(1))
+            if 1 <= n <= 100:
+                return n
+        return 1
+
+    @staticmethod
+    def _extract_order_product(text: str) -> str:
+        """
+        Extract the product a shopper wants to order from a natural phrase, e.g.
+        'place an order of oreo cookies' -> 'oreo cookies'. Returns "" for a bare
+        'place an order' (no product named) or a pronoun like 'this'/'it', which
+        signals the caller to use the default-demo-item behavior instead.
+        """
+        import re
+        low = text.strip().lower()
+        patterns = [
+            r"place\s+(?:an?\s+)?(?:bulk\s+)?order\s+(?:of|for)\s+(.+)",
+            r"order\s+(?:of|for)\s+(.+)",
+            r"(?:i\s+(?:want|would like|wanna|need)\s+to\s+)?"
+            r"(?:buy|purchase|order|get)\s+(?:me\s+|some\s+|an?\s+|the\s+)*(.+)",
+        ]
+        for pat in patterns:
+            m = re.search(pat, low)
+            if m:
+                prod = m.group(1)
+                prod = re.sub(r"^\d{1,3}\s+", "", prod)  # drop leading qty
+                prod = re.sub(r"\b(please|now|thanks|thank you|today|asap)\b", "", prod)
+                prod = prod.strip(" .,!?\"'")
+                if prod in {"", "this", "it", "that", "one", "this item", "order"}:
+                    return ""
+                return prod
+        return ""
 
     @staticmethod
     def _format_checkout(data: dict) -> str:

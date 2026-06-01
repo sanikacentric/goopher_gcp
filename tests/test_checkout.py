@@ -7,6 +7,7 @@ from backend.app.tools.checkout_tool import (
     place_bulk_order,
     place_order,
     process_payment,
+    resolve_variant_by_name,
 )
 
 
@@ -43,6 +44,49 @@ def test_place_an_order_intent_routes_to_checkout():
     )
     assert "checkout_agent" in resp.used_tools
     assert "placed" in resp.reply.lower() or "order" in resp.reply.lower()
+
+
+def test_resolve_variant_by_name_finds_named_product():
+    """Ordering by product name resolves to that product's in-stock variant."""
+    res = resolve_variant_by_name("oreo cookies")
+    assert res["ok"] is True
+    assert "oreo" in res["product"].lower()
+    assert res["variant_id"]
+
+
+def test_resolve_variant_by_name_never_substitutes():
+    """An unknown product is refused — NOT swapped for a different item."""
+    res = resolve_variant_by_name("flying spaghetti monster plushie")
+    assert res["ok"] is False
+    assert res.get("not_found") is True
+    assert "variant_id" not in res
+    assert "substitut" in res["message"].lower()
+
+
+def test_named_order_buys_that_product_not_a_substitute():
+    """'place an order of oreo cookies' must order Oreo, never a fallback item."""
+    svc = AgentService()
+    resp = svc.run_turn(
+        ChatRequest(message="place an order of oreo cookies", session_id="chk-named"),
+        customer_id="CUST-1001",
+    )
+    assert "checkout_agent" in resp.used_tools
+    assert resp.checkout and resp.checkout.get("ok") is True
+    items = " ".join(resp.checkout.get("items", [])).lower()
+    assert "oreo" in items
+    assert "cheez" not in items  # no silent substitution
+
+
+def test_named_order_unknown_product_does_not_place_order():
+    """Naming a product that isn't in the catalog places NO order (no substitute)."""
+    svc = AgentService()
+    resp = svc.run_turn(
+        ChatRequest(message="place an order of flying unicorn slippers",
+                    session_id="chk-unknown"),
+        customer_id="CUST-1001",
+    )
+    assert resp.checkout is not None and resp.checkout.get("ok") is False
+    assert resp.checkout.get("order_id") is None
 
 
 def test_place_bulk_order_persists_multi_item_order():

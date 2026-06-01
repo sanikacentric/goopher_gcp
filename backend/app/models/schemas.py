@@ -111,6 +111,10 @@ class ChatRequest(BaseModel):
     language: Optional[str] = Field(
         default=None, description="ISO code; auto-detected when omitted."
     )
+    # True when the question was dictated via the microphone (speech-to-text in
+    # the browser). The transcript arrives as text, so this is the only signal
+    # the backend has that the turn originated as voice.
+    voice: bool = False
     attachments: list[Attachment] = Field(default_factory=list)
 
 

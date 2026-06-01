@@ -239,22 +239,38 @@ class AgentService:
             ft.step("session", "memory.get",
                     f"session_id={req.session_id} (backend={_settings.db_backend})")
 
-            # Deterministic detection runs silently to populate response metadata
-            # (modality/language/channel). These are cheap pure-Python helpers, NOT
-            # the LLM agents — when ADK is active the real agent work is done by the
-            # AgentTools below, so we do NOT emit portal steps for these here (that
-            # was the source of the duplicate modality/language/channel entries).
+            # The modality/language/channel sub-agents run EVERY turn to route the
+            # request (detect modality, detect language, select channel style).
+            # We always show them in the portal — they genuinely execute. The ADK
+            # orchestrator may ADDITIONALLY invoke them as AgentTools; if it does,
+            # we annotate that (no duplicate row).
             mem = self.memory.get(req.session_id, customer_id)
+
+            _t0 = _time.perf_counter()
             modality = modality_agent.classify_modality(req.message, req.attachments)
+            # Voice dictation reaches us as text (browser speech-to-text); the
+            # `voice` flag is the only signal it originated as speech.
+            if getattr(req, "voice", False) and modality == "text":
+                modality = "voice"
             text = modality_agent.normalize_to_text(
                 req.message, req.attachments, _settings.gemini_model
             )
+            _mdetail = (f"modality={modality} "
+                        f"({'voice transcript' if modality == 'voice' else str(len(req.attachments)) + ' attachment(s)'})")
+            ft.step("subagent", "modality_agent", _mdetail,
+                    ms=(_time.perf_counter() - _t0) * 1000, modality=modality)
+
+            _t0 = _time.perf_counter()
             language = req.language or language_agent.detect_language(
                 text, default=self.memory.recall(req.session_id, "language", "en")
             )
             self.memory.remember(req.session_id, "language", language)
+            ft.step("subagent", "language_agent", f"detected language = {language}",
+                    ms=(_time.perf_counter() - _t0) * 1000, language=language)
+
             channel = req.channel
             self.memory.remember(req.session_id, "channel", channel)
+            ft.step("subagent", "channel_agent", f"channel = {channel}", channel=channel)
 
             # Record the user turn BEFORE answering (memory / context).
             self.memory.add_turn(
@@ -263,33 +279,29 @@ class AgentService:
                      language=language, modality=modality),
             )
 
-            # 4) Generate the reply via the ADK agents (real AgentTools) or the
-            #    deterministic backup engine.
+            # 4) ORCHESTRATOR: route to tools + compose the reply. Real ADK agent
+            #    tree when on the ADK path; deterministic engine as backup.
             _t0 = _time.perf_counter()
             reply, used_tools, path = self._generate(req.session_id, text,
                                                      customer_id, channel, language)
             gen_ms = (_time.perf_counter() - _t0) * 1000
 
-            if path == "adk":
-                # Attribute each invocation once: sub-agents vs retail tools, in
-                # the order the orchestrator actually called them.
-                for name in used_tools:
-                    if name in SUBAGENT_NAMES:
-                        ft.step("subagent", name, "invoked by ADK orchestrator", tool=name)
-                    else:
-                        ft.step("tool", name, "inventory/order tool executed", tool=name)
-                ft.step("llm", "ADK orchestrator (gemini)",
-                        "multi-agent reasoning + reply", ms=gen_ms)
-            else:
-                # Backup path: deterministic helpers did the routing. Show them
-                # once here (they didn't run as AgentTools in this path).
-                ft.step("subagent", "modality_agent (backup)", f"modality={modality}")
-                ft.step("subagent", "language_agent (backup)", f"language={language}")
-                ft.step("subagent", "channel_agent (backup)", f"channel={channel}")
-                for name in used_tools:
+            orchestrator_label = ("invoke_agent: goopher_orchestrator (ADK + gemini)"
+                                  if path == "adk"
+                                  else f"orchestrator: deterministic router + {_settings.llm_provider}")
+            ft.step("llm", orchestrator_label,
+                    "selects tools and composes the grounded reply", ms=gen_ms)
+
+            # Tool / AgentTool invocations the orchestrator actually made.
+            for name in used_tools:
+                if name in SUBAGENT_NAMES:
+                    ft.step("subagent", f"{name} (invoked by orchestrator)",
+                            "ADK AgentTool call", tool=name)
+                else:
                     ft.step("tool", name, "inventory/order tool executed", tool=name)
-                ft.step("llm", f"phrase ({_settings.llm_provider})",
-                        "reply from tool results (backup engine)", ms=gen_ms)
+            if not used_tools:
+                ft.step("tool", "(no tool call)",
+                        "orchestrator answered from context/history")
 
             # 5) CHANNEL post-processing for phone (voice-safe text).
             if channel == "phone":

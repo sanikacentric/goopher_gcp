@@ -132,7 +132,7 @@ async function send(text, attachments, viaVoice = false) {
   showTyping();
 
   try {
-    const resp = await sendChat({ message: text, sessionId, channel, language, attachments });
+    const resp = await sendChat({ message: text, sessionId, channel, language, attachments, voice: viaVoice });
     hideTyping();
     const meta = `${resp.channel} · ${resp.language}${resp.used_tools?.length ? " · " + resp.used_tools.join(",") : ""}`;
     addMessage(resp.reply, "bot", meta);

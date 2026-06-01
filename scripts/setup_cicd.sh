@@ -39,6 +39,7 @@ done
 
 # 3. Grant the roles the pipeline needs: build, push, deploy, act-as runtime SA.
 for ROLE in \
+  roles/viewer \
   roles/run.admin \
   roles/cloudbuild.builds.editor \
   roles/artifactregistry.admin \

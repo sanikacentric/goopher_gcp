@@ -118,24 +118,25 @@ jobs:
           GOOGLE_KEY: ${{ secrets.GOOGLE_API_KEY }}
           JWT: ${{ secrets.JWT_SECRET }}
         run: |
-          # Build a YAML env-vars file (handles special chars safely). Each value
-          # is quoted; we strip any stray surrounding spaces from the project id.
+          # Build a YAML env-vars file (handles special chars safely). Each line
+          # is written with `echo` so it lands at column 0 — a heredoc here would
+          # inherit this block's indentation and produce invalid YAML.
           PROJ_CLEAN="$(echo "$PROJ" | tr -d '[:space:]')"
-          cat > /tmp/envvars.yaml <<EOF
-          ENVIRONMENT: "production"
-          DB_BACKEND: "firestore"
-          GOOGLE_CLOUD_PROJECT: "${PROJ_CLEAN}"
-          OTEL_EXPORTER: "gcp"
-          LLM_PROVIDER: "gemini"
-          USE_ADK_PATH: "true"
-          USE_VERTEXAI: "true"
-          USE_MCP_TOOLS: "true"
-          VERTEX_LOCATION: "us-central1"
-          GEMINI_MODEL: "gemini-2.5-flash"
-          OPENAI_API_KEY: "${OPENAI_KEY}"
-          GOOGLE_API_KEY: "${GOOGLE_KEY}"
-          JWT_SECRET: "${JWT}"
-          EOF
+          F=/tmp/envvars.yaml
+          : > "$F"
+          echo "ENVIRONMENT: \"production\""              >> "$F"
+          echo "DB_BACKEND: \"firestore\""                >> "$F"
+          echo "GOOGLE_CLOUD_PROJECT: \"${PROJ_CLEAN}\""  >> "$F"
+          echo "OTEL_EXPORTER: \"gcp\""                   >> "$F"
+          echo "LLM_PROVIDER: \"gemini\""                 >> "$F"
+          echo "USE_ADK_PATH: \"true\""                   >> "$F"
+          echo "USE_VERTEXAI: \"true\""                   >> "$F"
+          echo "USE_MCP_TOOLS: \"true\""                  >> "$F"
+          echo "VERTEX_LOCATION: \"us-central1\""         >> "$F"
+          echo "GEMINI_MODEL: \"gemini-2.5-flash\""       >> "$F"
+          echo "OPENAI_API_KEY: \"${OPENAI_KEY}\""        >> "$F"
+          echo "GOOGLE_API_KEY: \"${GOOGLE_KEY}\""        >> "$F"
+          echo "JWT_SECRET: \"${JWT}\""                   >> "$F"
           gcloud run deploy "$SERVICE" \
             --image "gcr.io/${PROJ_CLEAN}/$SERVICE:${{ github.sha }}" \
             --region "$REGION" \
@@ -145,7 +146,7 @@ jobs:
             --max-instances 2 \
             --memory 1Gi \
             --cpu 1 \
-            --env-vars-file /tmp/envvars.yaml
+            --env-vars-file "$F"
 
       - name: Allow public access (run.invoker for allUsers)
         if: steps.gate.outputs.ready == 'true'

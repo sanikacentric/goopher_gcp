@@ -571,15 +571,21 @@ class AgentService:
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
+            # Strip a leading action verb + separators so "order - 15 oreos" and
+            # "buy: 2 lego" become "15 oreos" / "2 lego".
+            line = re.sub(r"^(order|buy|purchase|add|get|want|need)\b[\s:_().\-]*",
+                          "", line, flags=re.IGNORECASE).strip()
+            if not line:
+                continue
             qty, item = 1, line
-            m = re.match(r"^(\d{1,3})\s*[xX]\s+(.+)$", line)        # "3x item"
+            m = re.match(r"^(\d{1,4})\s*[xX]\s+(.+)$", line)        # "3x item"
             if m:
                 qty, item = int(m.group(1)), m.group(2)
-            elif re.match(r"^\d{1,3}\s+\S", line):                  # "3 item"
-                m = re.match(r"^(\d{1,3})\s+(.+)$", line)
+            elif re.match(r"^\d{1,4}\s+\S", line):                  # "15 item"
+                m = re.match(r"^(\d{1,4})\s+(.+)$", line)
                 qty, item = int(m.group(1)), m.group(2)
             else:                                                   # "item x3" / "item, 3"
-                m = re.match(r"^(.+?)[\s,]+[xX]?(\d{1,3})$", line)
+                m = re.match(r"^(.+?)[\s,]+[xX]?(\d{1,4})$", line)
                 if m:
                     item, qty = m.group(1), int(m.group(2))
             item = item.strip(" ,:-\t")

@@ -97,9 +97,10 @@ class Settings(BaseSettings):
     rate_limit_chat_per_min: int = 20     # /chat requests per client per minute
     rate_limit_global_per_min: int = 120  # all requests per client per minute
     rate_limit_login_per_min: int = 10    # /auth/login attempts per client per min
-    # Max request body size (bytes). Blocks oversized payloads (e.g. huge base64
-    # attachments) before they reach the app. 2 MB default.
-    max_request_bytes: int = 2 * 1024 * 1024
+    # Max request body size (bytes). Blocks oversized payloads before they reach
+    # the app, but must be generous enough for legitimate base64 attachments
+    # (camera photos, order files, PDFs). 12 MB.
+    max_request_bytes: int = 12 * 1024 * 1024
     # Max characters in a single chat message (separate from body size).
     max_chat_message_chars: int = 4000
 

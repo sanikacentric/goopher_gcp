@@ -336,6 +336,12 @@ async function send(text, attachments, viaVoice = false) {
       showLogin();
       els.loginError.textContent = "Session expired. Please sign in again.";
       els.loginError.hidden = false;
+    } else if (/failed to fetch|network/i.test(err.message)) {
+      addMessage(
+        "⚠️ Couldn't reach GOOPHER. If you attached a large file/photo, try a " +
+          "smaller one; otherwise the service may be waking up — please send again.",
+        "bot"
+      );
     } else {
       addMessage("⚠️ " + err.message, "bot");
     }

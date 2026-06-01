@@ -146,7 +146,9 @@ def test_order_from_uploaded_file_places_structured_bulk_order():
     import base64
     from backend.app.models.schemas import Attachment
     svc = AgentService()
-    order_txt = "2 soccer balls\n3 oreos\nlego x1\nTOY-NRF-3003\n1 unicorn statue"
+    # "order - N product" is the real-world format the demo file uses.
+    order_txt = ("order - 2 soccer balls\norder -3 oreos\nlego x1\n"
+                 "TOY-NRF-3003\n1 unicorn statue")
     att = Attachment(kind="file", filename="order.txt", mime_type="text/plain",
                      content_b64=base64.b64encode(order_txt.encode()).decode())
     out = svc._try_file_bulk_order("please check the attachment and order", [att], "CUST-1001")

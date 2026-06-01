@@ -30,6 +30,10 @@ from .observability.telemetry import incr, log_event
 
 _settings = get_settings()
 
+# So middleware-generated error responses (413/429) are still readable by the
+# cross-origin extension instead of surfacing as an opaque "Failed to fetch".
+_CORS_HEADERS = {"Access-Control-Allow-Origin": "*"}
+
 # Register the abuse counters so they show up at /metrics.
 for _m in ("rate_limited_total", "oversized_rejected_total"):
     incr(_m, 0)
@@ -92,9 +96,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     if int(cl) > _settings.max_request_bytes:
                         incr("oversized_rejected_total")
                         log_event("request_too_large", path=path, content_length=cl)
+                        # Drain the body first; rejecting mid-upload makes the
+                        # browser report a generic "Failed to fetch" instead of
+                        # the 413. And add CORS so the extension can read it.
+                        try:
+                            await request.body()
+                        except Exception:
+                            pass
                         return JSONResponse(
                             status_code=413,
                             content={"detail": "Request body too large."},
+                            headers=_CORS_HEADERS,
                         )
                 except ValueError:
                     pass
@@ -132,7 +144,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return JSONResponse(
             status_code=429,
             content={"detail": "Too many requests. Please slow down."},
-            headers={"Retry-After": "60"},
+            headers={"Retry-After": "60", **_CORS_HEADERS},
         )
 
 

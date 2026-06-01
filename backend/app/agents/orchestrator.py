@@ -304,20 +304,23 @@ class AgentService:
                     Turn(role="user", content=req.message, channel=channel,
                          language=req.language or "en", modality="text"),
                 )
-                ft.step("orchestrator", "invoke_agent: goopher_orchestrator (ADK + gemini)",
-                        "ROOT agent — calls memory/modality/language/worker/channel "
-                        "sub-agents and composes the reply", ms=0)
                 try:
                     reply, used_tools, language, modality = self._run_adk_turn(req, customer_id)
                     path = "adk"
                 except Exception as exc:
+                    # ADK failed — surface WHY in the portal, then fall back.
                     log_event("adk_turn_failed", reason=str(exc))
                     incr("errors_total")
+                    ft.step("orchestrator", "ADK orchestrator FAILED → backup",
+                            f"{type(exc).__name__}: {str(exc)[:200]}")
                     reply, used_tools, language, modality, channel = \
                         self._run_backup_turn(req, customer_id, ft)
                     path = "fallback"
                 else:
-                    # Render the sub-agents the orchestrator actually delegated to.
+                    # ADK succeeded: the orchestrator drove the real sub-agents.
+                    ft.step("orchestrator",
+                            "invoke_agent: goopher_orchestrator (ADK + gemini)",
+                            "ROOT agent — coordinated its sub-agents and composed the reply")
                     for name in used_tools:
                         if name in SUBAGENT_NAMES:
                             ft.step("subagent", f"↳ {name}",

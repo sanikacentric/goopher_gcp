@@ -21,13 +21,13 @@ def _mock_recognize(label):
 
 
 def test_vision_price_intent_answers_price(monkeypatch):
-    monkeypatch.setattr(va, "_recognize", _mock_recognize("basketball"))
+    monkeypatch.setattr(va, "_recognize", _mock_recognize("soccer ball"))
     out = handle_vision("what is the price of this?", FAKE_IMG, "image/jpeg",
                         "CUST-1001", "vis-1")
     assert out["checkout"] is None
     assert out["recognized"]["matched"] is True
     assert "$" in out["reply"]
-    assert "basketball" in out["reply"].lower()
+    assert "soccer" in out["reply"].lower()
 
 
 def test_vision_order_intent_places_order_via_gate(monkeypatch):

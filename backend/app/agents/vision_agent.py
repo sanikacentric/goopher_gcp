@@ -40,7 +40,7 @@ _RECOGNIZE_PROMPT = (
     "You are a product-recognition model for a store that sells CLOTHING, FOOD, "
     "and TOYS. Identify the SINGLE main item held up in this photo. Respond with "
     "ONLY its short, common product name (2-5 words) — no sentence, no "
-    "punctuation. Examples: 'basketball', 'Oreo cookies', 'LEGO bricks', "
+    "punctuation. Examples: 'soccer ball', 'Oreo cookies', 'LEGO bricks', "
     "'potato chips', 'NERF blaster', 'Play-Doh', 'toy car', 'soda can', "
     "'midi dress'. If it is clearly a toy or a food item, name that item."
 )

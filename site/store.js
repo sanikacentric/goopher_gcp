@@ -13,14 +13,15 @@ const DEPT_ICON = { Clothing: "👗", Food: "🍿", Toys: "🧸" };
 // Per-item emoji so the demo looks lively without real product images.
 const ITEM_ICON = {
   Dress: "👗", "Casual Dress": "👗", Snacks: "🍪", Beverages: "🥤",
-  "Balls & Sports": "🏀", "Building Sets": "🧱", "Outdoor & Action": "🔫",
+  "Balls & Sports": "⚽", "Building Sets": "🧱", "Outdoor & Action": "🔫",
   "Arts & Crafts": "🎨", Vehicles: "🚗", Puzzles: "🧩",
 };
 const NAME_ICON = [
   [/chip/i, "🥔"], [/oreo|cookie/i, "🍪"], [/peanut|nuts/i, "🥜"],
   [/cola|soda/i, "🥤"], [/cheez|cracker/i, "🧀"], [/bar/i, "🍫"],
   [/denim|jean/i, "👖"], [/maxi|midi|dress|wrap/i, "👗"],
-  [/basketball|ball/i, "🏀"], [/lego|brick/i, "🧱"], [/nerf|blaster|dart/i, "🔫"],
+  [/soccer|football/i, "⚽"], [/basketball/i, "🏀"], [/ball/i, "⚽"],
+  [/lego|brick/i, "🧱"], [/nerf|blaster|dart/i, "🔫"],
   [/play-?doh|dough/i, "🎨"], [/hot wheels|car/i, "🚗"], [/puzzle/i, "🧩"],
 ];
 

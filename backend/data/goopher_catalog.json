@@ -236,21 +236,21 @@
     {
       "department": "Toys",
       "sku": "TOY-SPL-3001",
-      "name": "Spalding Rubber Basketball",
-      "brand": "Spalding",
+      "name": "Adidas Match Soccer Ball",
+      "brand": "Adidas",
       "category": "Balls & Sports",
-      "description": "Durable rubber outdoor basketball with deep channels for excellent grip. Official size 7.",
+      "description": "Durable machine-stitched outdoor soccer ball (football) with a soft TPU cover for excellent control. Official size 5.",
       "list_price": 24.99,
       "sale_price": 17.99,
       "rating": 4.7,
       "review_count": 1442,
-      "colors": ["Orange", "Blue/Yellow"],
-      "sizes": ["Size 5 (Youth)", "Size 7 (Official)"],
-      "material": "Rubber",
+      "colors": ["White/Black", "Blue/Yellow"],
+      "sizes": ["Size 4 (Youth)", "Size 5 (Official)"],
+      "material": "TPU / Synthetic Leather",
       "variants": [
-        {"variant_id": "TOY-SPL-3001-ORG-7", "color": "Orange", "size": "Size 7 (Official)", "stock": 60},
-        {"variant_id": "TOY-SPL-3001-ORG-5", "color": "Orange", "size": "Size 5 (Youth)", "stock": 34},
-        {"variant_id": "TOY-SPL-3001-BLY-7", "color": "Blue/Yellow", "size": "Size 7 (Official)", "stock": 0}
+        {"variant_id": "TOY-SPL-3001-WBK-5", "color": "White/Black", "size": "Size 5 (Official)", "stock": 60},
+        {"variant_id": "TOY-SPL-3001-WBK-4", "color": "White/Black", "size": "Size 4 (Youth)", "stock": 34},
+        {"variant_id": "TOY-SPL-3001-BLY-5", "color": "Blue/Yellow", "size": "Size 5 (Official)", "stock": 0}
       ]
     },
     {

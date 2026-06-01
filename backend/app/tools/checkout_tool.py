@@ -1,0 +1,160 @@
+"""
+Checkout tool logic (Requirement 4: place an order).
+
+A self-contained "add to cart → dummy payment → order placed" flow. When the
+shopper says "place an order", the checkout_agent calls these functions to:
+  1. build a cart (from an explicit variant_id, or sensibly default to a popular
+     in-stock item so a bare "place an order" still demonstrates the flow),
+  2. run a SIMULATED payment (always succeeds — this is a demo, no real gateway),
+  3. persist a new order to the catalog and return a confirmation.
+
+Registered as in-process ADK function tools via the checkout skill. The payment
+is intentionally fake; swapping in a real PSP (Stripe, etc.) would only touch
+`process_payment` without changing the agent contract.
+"""
+from __future__ import annotations
+
+from ..db.database import get_repository
+from ..observability.telemetry import incr, log_event
+
+
+def _next_order_id() -> str:
+    """
+    Generate the next ORD-##### id. We probe upward from the seeded range until
+    we find a free slot — bounded and simple, fine for a demo catalog.
+    """
+    repo = get_repository()
+    n = 50006
+    while n < 50100:  # small bound; demo only
+        if repo.get_order(f"ORD-{n}") is None:
+            return f"ORD-{n}"
+        n += 1
+    return f"ORD-{n}"
+
+
+def add_to_cart(variant_id: str = "", qty: int = 1) -> dict:
+    """
+    Add a product variant to the cart.
+
+    Args:
+        variant_id: e.g. "JCP-ANA-1001-NVY-S". If empty, a popular in-stock item
+                    is chosen automatically so a bare "place an order" still works.
+        qty: quantity (default 1).
+    """
+    incr("tool_calls_total")
+    repo = get_repository()
+
+    # Resolve the variant (or pick a default in-stock one).
+    chosen = None
+    if variant_id:
+        info = repo.check_stock(variant_id)
+        if info and info.get("in_stock"):
+            chosen = info
+    if chosen is None:
+        # Default: first in-stock variant in the catalog.
+        for p in repo.list_products():
+            for v in p.variants:
+                if v.stock > 0:
+                    chosen = repo.check_stock(v.variant_id)
+                    break
+            if chosen:
+                break
+
+    if chosen is None:
+        return {"ok": False, "message": "No in-stock items available to add."}
+
+    qty = max(1, int(qty))
+    line_total = round(chosen["sale_price"] * qty, 2)
+    log_event("cart_add", variant_id=chosen["variant_id"], qty=qty)
+    return {
+        "ok": True,
+        "cart": {
+            "variant_id": chosen["variant_id"],
+            "name": chosen["product"],
+            "color": chosen["color"],
+            "size": chosen["size"],
+            "unit_price": chosen["sale_price"],
+            "qty": qty,
+            "line_total": line_total,
+        },
+        "subtotal": line_total,
+    }
+
+
+def process_payment(amount: float, method: str = "card") -> dict:
+    """
+    Simulate a payment. ALWAYS succeeds (demo only — no real payment gateway).
+
+    Args:
+        amount: total to charge.
+        method: payment method label (card/upi/wallet).
+    """
+    incr("tool_calls_total")
+    # A fake but realistic-looking transaction id.
+    txn = f"PAY-{abs(hash((round(amount, 2), method))) % 10_000_000:07d}"
+    log_event("payment_processed", amount=round(amount, 2), method=method, txn=txn)
+    return {
+        "ok": True,
+        "status": "SUCCESS",
+        "transaction_id": txn,
+        "amount": round(amount, 2),
+        "method": method,
+        "message": f"Payment of ${amount:.2f} via {method} was successful.",
+    }
+
+
+def place_order(customer_id: str, variant_id: str = "", qty: int = 1) -> dict:
+    """
+    Full checkout: add to cart -> simulate payment -> persist the order.
+
+    Args:
+        customer_id: the signed-in customer (provided in context).
+        variant_id: optional specific variant; defaults to a popular in-stock item.
+        qty: quantity (default 1).
+
+    Returns a confirmation with the new order id and the (simulated) payment.
+    """
+    incr("tool_calls_total")
+    from ..models.schemas import Order, OrderItem  # local import to avoid cycles
+
+    cart = add_to_cart(variant_id=variant_id, qty=qty)
+    if not cart.get("ok"):
+        return cart
+
+    line = cart["cart"]
+    total = cart["subtotal"]
+    payment = process_payment(total, method="card")
+
+    repo = get_repository()
+    order_id = _next_order_id()
+    order = Order(
+        order_id=order_id,
+        customer_id=customer_id,
+        status="Processing",
+        order_date="2026-06-01",
+        estimated_delivery="2026-06-08",
+        delivered_date=None,
+        tracking_number=None,
+        carrier=None,
+        shipping_address="123 Demo St, Plano, TX 75024",
+        items=[OrderItem(
+            variant_id=line["variant_id"], name=line["name"],
+            color=line["color"], size=line["size"],
+            qty=line["qty"], unit_price=line["unit_price"],
+        )],
+        total=total,
+    )
+    repo.save_order(order)
+    log_event("order_placed", order_id=order_id, customer_id=customer_id, total=total)
+
+    return {
+        "ok": True,
+        "order_id": order_id,
+        "status": "Processing",
+        "item": f'{line["name"]} ({line["color"]}, {line["size"]}) x{line["qty"]}',
+        "total": total,
+        "payment": payment,
+        "estimated_delivery": "2026-06-08",
+        "message": (f"Payment successful — order {order_id} placed! "
+                    f"${total:.2f} charged. Estimated delivery 2026-06-08."),
+    }

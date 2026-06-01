@@ -51,6 +51,10 @@ class Repository(ABC):
     def list_orders_for_customer(self, customer_id: str) -> list[Order]: ...
 
     @abstractmethod
+    def save_order(self, order: Order) -> None:
+        """Insert or update an order (used when a customer places a new order)."""
+
+    @abstractmethod
     def get_customer_by_email(self, email: str) -> Optional[tuple[Customer, str]]:
         """Return (customer, password_hash) or None."""
 
@@ -250,6 +254,13 @@ class SQLiteRepository(Repository):
         rows = self._conn.execute("SELECT doc FROM orders WHERE customer_id=?", (customer_id,)).fetchall()
         return [Order(**json.loads(r["doc"])) for r in rows]
 
+    def save_order(self, order: Order) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO orders VALUES (?,?,?)",
+            (order.order_id, order.customer_id, json.dumps(order.model_dump())),
+        )
+        self._conn.commit()
+
     def get_customer_by_email(self, email: str) -> Optional[tuple[Customer, str]]:
         row = self._conn.execute("SELECT doc, password_hash FROM customers WHERE email=?", (email,)).fetchone()
         if not row:
@@ -292,6 +303,9 @@ class FirestoreRepository(Repository):
     def list_orders_for_customer(self, customer_id: str) -> list[Order]:
         q = self.db.collection("orders").where("customer_id", "==", customer_id).stream()
         return [Order(**d.to_dict()) for d in q]
+
+    def save_order(self, order: Order) -> None:
+        self.db.collection("orders").document(order.order_id).set(order.model_dump())
 
     def get_customer_by_email(self, email: str) -> Optional[tuple[Customer, str]]:
         snap = self.db.collection("customers").document(email).get()

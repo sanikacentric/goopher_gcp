@@ -30,7 +30,7 @@ from ..models.schemas import ChatRequest, ChatResponse
 from ..observability.flow_recorder import TurnTrace
 from ..observability.telemetry import incr, log_event, span
 from . import channel_agent, language_agent, modality_agent
-from .skills import inventory_skill, order_skill
+from .skills import checkout_skill, inventory_skill, order_skill
 
 _settings = get_settings()
 
@@ -60,6 +60,8 @@ For every turn:
   -> delegate to `inventory_agent` (it owns the inventory tools).
 - order status / tracking / "where is my order" / bulk orders
   -> delegate to `order_agent` (it owns the order tools).
+- "place an order" / "buy" / "checkout" / "order this"
+  -> delegate to `checkout_agent` (it adds to cart, takes payment, places it).
 
 The customer's language and channel formatting directive are provided to you in
 context (detected during pre-processing) — honor them in your reply. You are the
@@ -143,6 +145,21 @@ def build_root_agent():
         tools=order_skill.get_tools(),
     )
 
+    # checkout_agent owns the checkout tools (add to cart, simulated payment,
+    # place order) — used when the customer says "place an order".
+    checkout_agent = LlmAgent(
+        name="checkout_agent",
+        model=model,
+        description="Specialist that places an order: adds to cart, runs the "
+                    "(simulated) payment, and confirms the placed order.",
+        instruction=(
+            "You are the checkout specialist. Use your tools to place orders:\n"
+            + checkout_skill.INSTRUCTION
+            + "\nThe signed-in customer_id is provided in context; never ask for it."
+        ),
+        tools=checkout_skill.get_tools(),
+    )
+
     # --- ROOT: goopher_orchestrator — the MAIN unified agent ---
     # It coordinates the WORKER sub-agents (inventory, order) — the agents that do
     # real reasoning over tools — and composes the reply. These two are reliable
@@ -159,12 +176,13 @@ def build_root_agent():
         name="goopher_orchestrator",
         model=model,
         description="The main unified GOOPHER agent. Selects the right worker "
-                    "sub-agent (inventory or order), and composes the "
+                    "sub-agent (inventory, order, or checkout), and composes the "
                     "customer-facing reply for clothing & food retail.",
         instruction=ROOT_INSTRUCTION + "\n\n" + ORCHESTRATOR_DELEGATION,
         tools=[
             AgentTool(agent=inventory_agent),    # worker: products
-            AgentTool(agent=order_agent),        # worker: orders
+            AgentTool(agent=order_agent),        # worker: order status
+            AgentTool(agent=checkout_agent),     # worker: place an order
         ],
     )
     return orchestrator
@@ -265,7 +283,7 @@ class AgentService:
         # Worker sub-agents the orchestrator delegates to (the rest is the tools
         # those workers call). modality/language/channel are deterministic
         # pre-processing now, not sub-agents.
-        SUBAGENT_NAMES = {"inventory_agent", "order_agent"}
+        SUBAGENT_NAMES = {"inventory_agent", "order_agent", "checkout_agent"}
 
         with span("chat_turn", session=req.session_id, channel=req.channel,
                   customer=customer_id) as trace_id:
@@ -454,11 +472,25 @@ class AgentService:
         answer (via Gemini if available, else a clean template). This keeps the
         service fully functional with no ADK and is what unit tests exercise.
         """
+        from ..tools.checkout_tool import place_order
         from ..tools.inventory_tool import check_stock, search_inventory
         from ..tools.order_tool import bulk_order_status, get_order_status, list_customer_orders
 
         used_tools: list[str] = []
         lowered = text.lower()
+
+        # --- intent: PLACE AN ORDER (checkout) — checked first ---
+        if any(k in lowered for k in ("place an order", "place order", "checkout",
+                                      "check out", "buy this", "buy it", "order this",
+                                      "place my order", "complete my order")):
+            import re
+            vid = re.search(r"JCP-[A-Z0-9\-]+|FOOD-[A-Z0-9\-]+", text.upper())
+            data = place_order(customer_id,
+                               variant_id=vid.group(0) if vid else "", qty=1)
+            used_tools.append("checkout_agent")
+            facts = self._format_checkout(data)
+            reply = self._phrase(text, facts, directives)
+            return reply, used_tools
 
         # --- intent: bulk orders (high volume) ---
         order_ids = modality_agent.extract_order_ids_from_text(text)
@@ -631,6 +663,21 @@ class AgentService:
         if data["missing"]:
             lines.append(f"Missing: {', '.join(data['missing'][:10])}")
         return "\n".join(lines)
+
+    @staticmethod
+    def _format_checkout(data: dict) -> str:
+        if not data.get("ok"):
+            return data.get("message", "Couldn't place the order right now.")
+        pay = data.get("payment", {})
+        return (
+            "🛒 Added to cart → 💳 processing payment…\n"
+            f"✅ Payment {pay.get('status', 'SUCCESS')} "
+            f"(txn {pay.get('transaction_id', '—')}, ${data['total']:.2f}).\n"
+            f"🎉 Order {data['order_id']} placed!\n"
+            f"- Item: {data['item']}\n"
+            f"- Total: ${data['total']:.2f}\n"
+            f"- Status: {data['status']} · Est. delivery {data['estimated_delivery']}"
+        )
 
 
 # Process-wide singleton.

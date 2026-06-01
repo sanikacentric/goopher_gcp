@@ -108,6 +108,25 @@ def test_checkout_is_structured_even_with_adk_path_on(monkeypatch):
     assert "oreo" in resp.reply.lower()
 
 
+def test_natural_phrasing_order_triggers_structured_checkout():
+    """Conversational order phrasings (not just "place an order") must hit the
+    structured gate so the cart payload is produced — and status queries must
+    NOT be mistaken for purchases."""
+    svc = AgentService()
+    # Purchase intents → structured checkout with a cart.
+    for msg in ["hi can you please order balls for me", "get me a lego",
+                "i want to buy oreos"]:
+        svc._last_checkout = None
+        out = svc._try_checkout(msg, "CUST-1001")
+        assert out is not None, msg
+        assert svc._last_checkout and svc._last_checkout.get("ok") is True
+        assert svc._last_checkout.get("cart")
+    # Status / inventory queries → NOT checkout.
+    for msg in ["where is ORD-50019", "what are my orders", "is the lego in stock",
+                "track my order"]:
+        assert svc._try_checkout(msg, "CUST-1001") is None, msg
+
+
 def test_typed_product_sku_resolves_not_substitutes():
     """Typing a product SKU (not a full variant_id) orders that product, never
     a fallback item."""

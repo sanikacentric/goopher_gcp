@@ -521,6 +521,38 @@ class AgentService:
                     return v.variant_id
         return None
 
+    @staticmethod
+    def _is_order_intent(lowered: str) -> bool:
+        """True if the message is a PURCHASE intent (not an order-STATUS query).
+
+        Catches natural phrasings the keyword list missed — "order balls for me",
+        "can you order…", "get me a…", "i want to buy…" — while excluding
+        tracking/status questions that merely contain the word "order".
+        """
+        import re
+        # Status / tracking / post-order questions are NOT purchases.
+        if re.search(r"ord-\d", lowered):
+            return False
+        if any(s in lowered for s in (
+                "order status", "status of", "my order", "my orders", "track",
+                "where is", "where's", "order history", "cancel", "return ",
+                "did my", "has my", "is my order", "out for delivery")):
+            return False
+        # Explicit checkout phrases.
+        if any(k in lowered for k in (
+                "place an order", "place order", "checkout", "check out", "buy this",
+                "buy it", "order this", "place my order", "complete my order",
+                "order of", "order for")):
+            return True
+        # A purchase verb anywhere ("order balls", "buy a…", "purchase 2…",
+        # "can you order…") or a polite request to get an item.
+        if re.search(r"\b(order|buy|purchase)\b", lowered):
+            return True
+        if any(k in lowered for k in ("get me ", "grab me ", "i want ", "i'd like ",
+                                      "i would like ", "wanna ")):
+            return True
+        return False
+
     def _try_checkout(self, text: str, customer_id: str):
         """
         Handle checkout intents ("place an order" / bulk) DETERMINISTICALLY with
@@ -551,10 +583,7 @@ class AgentService:
             return self._format_bulk_checkout(data), ["checkout_agent"]
 
         # --- PLACE AN ORDER (single item) ---
-        if any(k in lowered for k in ("place an order", "place order", "checkout",
-                                      "check out", "buy this", "buy it", "order this",
-                                      "place my order", "complete my order", "buy ",
-                                      "purchase ", "order of", "order for")):
+        if self._is_order_intent(lowered):
             qty = self._extract_qty(text)
             if variant_ids:
                 # Explicit SKU/variant token in the message. It may be a full
@@ -815,7 +844,8 @@ class AgentService:
             if m:
                 prod = m.group(1)
                 prod = re.sub(r"^\d{1,3}\s+", "", prod)  # drop leading qty
-                prod = re.sub(r"\b(please|now|thanks|thank you|today|asap)\b", "", prod)
+                prod = re.sub(r"\b(please|now|thanks|thank you|today|asap|"
+                              r"for me|for us|to me|right now)\b", "", prod)
                 prod = prod.strip(" .,!?\"'")
                 if prod in {"", "this", "it", "that", "one", "this item", "order"}:
                     return ""

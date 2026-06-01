@@ -7,7 +7,7 @@ import { getCustomer, getToken, getMyOrders, login, logout, sendChat, sendVision
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.4.6 — camera Vision: frame guard + qty + diagnostics");
+console.log("GOOPHER side panel v0.5.0 — Phone (Voice) channel renders a mobile simulator");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -32,7 +32,27 @@ const els = {
   ordersPanel: document.getElementById("ordersPanel"),
   ordersList: document.getElementById("ordersList"),
   ordersClose: document.getElementById("ordersClose"),
+  phoneClock: document.getElementById("phoneClock"),
 };
+
+// Phone (Voice) channel → render the chat as a mobile-device simulator. Same
+// features as Web (voice, camera, cart, orders); it's a visual skin toggled by
+// the Channel selector.
+function updatePhoneClock() {
+  if (!els.phoneClock) return;
+  const d = new Date();
+  let h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, "0");
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  els.phoneClock.textContent = `${h}:${m} ${ampm}`;
+}
+function applyChannelSkin() {
+  const isPhone = els.channel.value === "phone";
+  els.chatView.classList.toggle("gp-phone", isPhone);
+  if (isPhone) updatePhoneClock();
+}
+setInterval(updatePhoneClock, 30000);
 
 // One stable session id per browser profile keeps memory/context continuous.
 let sessionId = null;
@@ -273,6 +293,7 @@ async function showChat() {
   els.chatView.hidden = false;
   els.logoutBtn.hidden = false;
   els.cartBtn.hidden = false;        // show the cart/orders button once signed in
+  applyChannelSkin();                // honor the current channel (phone vs web)
   const customer = await getCustomer();
   if (els.messages.childElementCount === 0) {
     addMessage(
@@ -526,6 +547,9 @@ els.logoutBtn.addEventListener("click", async () => {
 
 els.cartBtn.addEventListener("click", toggleOrders);
 els.ordersClose.addEventListener("click", closeOrders);
+
+// Channel switch → toggle the phone simulator skin (Phone vs Web).
+els.channel.addEventListener("change", applyChannelSkin);
 
 els.fileInput.addEventListener("change", async (e) => {
   for (const f of e.target.files) {

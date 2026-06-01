@@ -71,23 +71,37 @@
         </label>
       </div>
 
-      <div id="messages" class="gp-messages"></div>
+      <!-- DEVICE FRAME — plain in Web mode; rendered as a phone simulator when
+           the channel is "Phone (voice)". Same features either way. -->
+      <div id="deviceFrame" class="gp-device">
+        <!-- Mobile status bar + notch (shown only in phone mode) -->
+        <div class="gp-device-statusbar">
+          <span id="phoneClock">9:41</span>
+          <span class="gp-device-notch"></span>
+          <span class="gp-device-signal">📶 5G&nbsp; 🔋</span>
+        </div>
+        <div class="gp-device-screen">
+          <div id="messages" class="gp-messages"></div>
 
-      <div id="attachmentBar" class="gp-attachbar"></div>
+          <div id="attachmentBar" class="gp-attachbar"></div>
 
-      <form id="composer" class="gp-composer">
-        <label class="gp-attach" title="Attach image or file (multi-modal)">
-          📎
-          <input id="fileInput" type="file" accept="image/*,.csv,.txt,.pdf" hidden multiple />
-        </label>
-        <input id="messageInput" type="text" placeholder="Ask about products or your orders…" autocomplete="off" />
-        <!-- Camera (Vision subagent): show a toy/food item to the camera and ask
-             its price or say "place an order". -->
-        <button type="button" id="camBtn" class="gp-mic" title="Show an item to the camera">📷</button>
-        <!-- Voice input: click to dictate your question (speech-to-text) -->
-        <button type="button" id="micBtn" class="gp-mic" title="Ask by voice">🎤</button>
-        <button type="submit" class="gp-primary">Send</button>
-      </form>
+          <form id="composer" class="gp-composer">
+            <label class="gp-attach" title="Attach image or file (multi-modal)">
+              📎
+              <input id="fileInput" type="file" accept="image/*,.csv,.txt,.pdf" hidden multiple />
+            </label>
+            <input id="messageInput" type="text" placeholder="Ask about products or your orders…" autocomplete="off" />
+            <!-- Camera (Vision subagent): show a toy/food item to the camera and ask
+                 its price or say "place an order". -->
+            <button type="button" id="camBtn" class="gp-mic" title="Show an item to the camera">📷</button>
+            <!-- Voice input: click to dictate your question (speech-to-text) -->
+            <button type="button" id="micBtn" class="gp-mic" title="Ask by voice">🎤</button>
+            <button type="submit" class="gp-primary">Send</button>
+          </form>
+        </div>
+        <!-- Home indicator (shown only in phone mode) -->
+        <div class="gp-device-home"></div>
+      </div>
     </section>
 
     <script type="module" src="sidepanel.js"></script>

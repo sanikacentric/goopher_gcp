@@ -111,3 +111,48 @@ body {
 .gp-order-items { margin: 6px 0; padding-left: 16px; font-size: 12.5px; color: #333; }
 .gp-order-items li { margin: 1px 0; }
 .gp-order-foot { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11.5px; color: #555; }
+
+/* ---- Device frame ----
+   Web mode: a transparent, full-height container (chat looks unchanged).
+   Phone mode (.gp-phone on #chatView): rendered as a mobile-device simulator. */
+.gp-device { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.gp-device-screen { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.gp-device-statusbar, .gp-device-home, .gp-device-notch { display: none; }
+
+/* Phone simulator */
+.gp-phone .gp-device {
+  margin: 10px auto; max-width: 332px; width: 100%;
+  background: linear-gradient(160deg, #1d1d1f, #2c2c2e);
+  border-radius: 38px; padding: 10px 9px 9px; border: 2px solid #3a3a3c;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.4), inset 0 0 0 2px #000;
+}
+.gp-phone .gp-device-statusbar {
+  display: flex; align-items: center; justify-content: space-between;
+  position: relative; color: #fff; font-size: 12px; font-weight: 600;
+  padding: 3px 16px 8px;
+}
+.gp-phone .gp-device-notch {
+  display: block; position: absolute; left: 50%; top: -1px;
+  transform: translateX(-50%); width: 96px; height: 20px;
+  background: #000; border-radius: 0 0 14px 14px;
+}
+.gp-phone .gp-device-signal { letter-spacing: 1px; }
+.gp-phone .gp-device-screen {
+  background: var(--gp-bg); border-radius: 28px; overflow: hidden;
+}
+.gp-phone .gp-device-home {
+  display: block; width: 116px; height: 5px; border-radius: 3px;
+  background: #fff; opacity: 0.85; margin: 7px auto 2px;
+}
+/* A subtle "phone channel" banner cue at the top of the screen. */
+.gp-phone .gp-device-screen::before {
+  content: "📱 GOOPHER Mobile · Voice + Camera";
+  display: block; text-align: center; font-size: 11px; font-weight: 700;
+  color: #fff; background: var(--gp-primary); padding: 5px;
+}
+/* Compact the composer so 📎 · input · 📷 · 🎤 · Send all fit the narrow screen. */
+.gp-phone .gp-composer { padding: 7px 7px; gap: 5px; }
+.gp-phone .gp-mic { width: 32px; height: 32px; font-size: 15px; }
+.gp-phone .gp-composer input[type="text"] { padding: 8px; min-width: 0; }
+.gp-phone .gp-primary { padding: 8px 10px; }
+.gp-phone .gp-attach { font-size: 17px; }

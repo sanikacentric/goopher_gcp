@@ -3,6 +3,12 @@
 // session_id so the backend memory agent preserves context across switches.
 import { getCustomer, getToken, login, logout, sendChat } from "./api.js";
 
+// Version marker — confirms which build of the side panel Chrome has loaded.
+// Open the side panel's DevTools console; if you don't see this line after a
+// reload, Chrome is still running an old cached copy (reload the extension AND
+// close/reopen the side panel).
+console.log("GOOPHER side panel v0.2.0 — cart + staged checkout enabled");
+
 const els = {
   loginView: document.getElementById("loginView"),
   chatView: document.getElementById("chatView"),

@@ -101,7 +101,13 @@ jobs:
       - name: Build & push image (Cloud Build)
         if: steps.gate.outputs.ready == 'true'
         run: |
-          gcloud builds submit --tag "gcr.io/${{ secrets.GCP_PROJECT_ID }}/$SERVICE:${{ github.sha }}"
+          # The deployer service account can submit builds but can't STREAM the
+          # default-bucket logs back (it's not project Viewer/Owner), which made
+          # `gcloud builds submit` exit 1 even though the build itself succeeds.
+          # --suppress-logs skips streaming so the command succeeds on the build.
+          gcloud builds submit \
+            --tag "gcr.io/${{ secrets.GCP_PROJECT_ID }}/$SERVICE:${{ github.sha }}" \
+            --suppress-logs
 
       - name: Deploy to Cloud Run (free tier)
         if: steps.gate.outputs.ready == 'true'

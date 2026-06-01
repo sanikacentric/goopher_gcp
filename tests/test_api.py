@@ -8,8 +8,12 @@ from backend.app.main import app
 client = TestClient(app)
 
 
+# Single-user lockdown: allowlisted email + master password (set in conftest).
+GOOD = {"email": "demo@goopher.app", "password": "test-master-password"}
+
+
 def _token() -> str:
-    r = client.post("/auth/login", json={"email": "demo@goopher.app", "password": "demo"})
+    r = client.post("/auth/login", json=GOOD)
     assert r.status_code == 200
     return r.json()["access_token"]
 
@@ -21,14 +25,21 @@ def test_healthz():
 
 
 def test_login_success():
-    r = client.post("/auth/login", json={"email": "demo@goopher.app", "password": "demo"})
+    r = client.post("/auth/login", json=GOOD)
     assert r.status_code == 200
     body = r.json()
     assert body["customer"]["customer_id"] == "CUST-1001"
 
 
-def test_login_failure():
+def test_login_wrong_password():
     r = client.post("/auth/login", json={"email": "demo@goopher.app", "password": "bad"})
+    assert r.status_code == 401
+
+
+def test_login_non_allowlisted_email_rejected():
+    # Correct master password, but a non-allowlisted email -> denied.
+    r = client.post("/auth/login",
+                    json={"email": "attacker@evil.com", "password": "test-master-password"})
     assert r.status_code == 401
 
 

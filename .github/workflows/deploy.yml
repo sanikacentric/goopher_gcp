@@ -10,7 +10,10 @@
 #   GCP_PROJECT_ID   your Google Cloud project id (e.g. sanika-project-2107)
 #   GCP_SA_KEY       JSON key of a deployer service account (see README/scripts)
 #   JWT_SECRET       a long random string for signing auth tokens
+#   MASTER_PASSWORD  the ONLY password that can log in (single-user lockdown).
+#                    If unset, the deployed service rejects every login.
 # Optional:
+#   ALLOWED_EMAILS   comma-separated allowlist (defaults to demo@goopher.app)
 #   GOOGLE_API_KEY   AI Studio Gemini key (NOT needed when using Vertex AI, which
 #                    this workflow does via USE_VERTEXAI=true)
 #   OPENAI_API_KEY   only if you also want the OpenAI fallback available in cloud
@@ -117,10 +120,31 @@ jobs:
           # multi-line value breaking the env-var parser.
           PROJ: ${{ secrets.GCP_PROJECT_ID }}
           JWT: ${{ secrets.JWT_SECRET }}
+          MASTER_PW: ${{ secrets.MASTER_PASSWORD }}
+          ALLOWED: ${{ secrets.ALLOWED_EMAILS }}
         run: |
-          # Sanitize: project id must be a single token; JWT must be one line.
+          # Sanitize: single tokens / single lines (env-var string can't contain
+          # commas or newlines). The master password must NOT contain a comma.
           PROJ_CLEAN="$(printf '%s' "$PROJ" | tr -d '[:space:]')"
           JWT_CLEAN="$(printf '%s' "$JWT" | tr -d '\r\n')"
+          PW_CLEAN="$(printf '%s' "$MASTER_PW" | tr -d '\r\n')"
+          EMAILS_CLEAN="$(printf '%s' "${ALLOWED:-demo@goopher.app}" | tr -d '[:space:]')"
+          # Write env vars to a YAML file so the (possibly punctuation-heavy)
+          # master password can't break gcloud's comma-separated --set-env-vars.
+          F=/tmp/envvars.yaml
+          : > "$F"
+          echo "ENVIRONMENT: \"production\""               >> "$F"
+          echo "DB_BACKEND: \"firestore\""                 >> "$F"
+          echo "GOOGLE_CLOUD_PROJECT: \"${PROJ_CLEAN}\""   >> "$F"
+          echo "OTEL_EXPORTER: \"gcp\""                    >> "$F"
+          echo "LLM_PROVIDER: \"gemini\""                  >> "$F"
+          echo "USE_ADK_PATH: \"true\""                    >> "$F"
+          echo "USE_VERTEXAI: \"true\""                    >> "$F"
+          echo "VERTEX_LOCATION: \"us-central1\""          >> "$F"
+          echo "GEMINI_MODEL: \"gemini-2.5-flash\""        >> "$F"
+          echo "JWT_SECRET: \"${JWT_CLEAN}\""              >> "$F"
+          echo "ALLOWED_EMAILS: \"${EMAILS_CLEAN}\""       >> "$F"
+          echo "MASTER_PASSWORD: \"${PW_CLEAN}\""          >> "$F"
           gcloud run deploy "$SERVICE" \
             --image "gcr.io/${PROJ_CLEAN}/$SERVICE:${{ github.sha }}" \
             --region "$REGION" \
@@ -130,7 +154,7 @@ jobs:
             --max-instances 2 \
             --memory 1Gi \
             --cpu 1 \
-            --set-env-vars "ENVIRONMENT=production,DB_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=${PROJ_CLEAN},OTEL_EXPORTER=gcp,LLM_PROVIDER=gemini,USE_ADK_PATH=true,USE_VERTEXAI=true,VERTEX_LOCATION=us-central1,GEMINI_MODEL=gemini-2.5-flash,JWT_SECRET=${JWT_CLEAN}"
+            --env-vars-file "$F"
 
       - name: Allow public access (run.invoker for allUsers)
         if: steps.gate.outputs.ready == 'true'

@@ -24,6 +24,9 @@ os.environ.update(
         "USE_ADK_PATH": "false",
         "USE_VERTEXAI": "false",
         "JWT_SECRET": "test-secret",
+        # Single-user lockdown: a known allowlist + master password for tests.
+        "ALLOWED_EMAILS": "demo@goopher.app",
+        "MASTER_PASSWORD": "test-master-password",
         "ENABLE_TRACING": "false",
         "ENVIRONMENT": "test",
     }

@@ -68,6 +68,16 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24  # 1 day
 
+    # --- Access control (single-user lockdown) ---
+    # Only these emails may log in / use the LLM endpoint. Comma-separated.
+    # Anyone else is rejected even with a correct password.
+    allowed_emails: str = "demo@goopher.app"
+    # The master password for the allowed account(s). MUST be set via env /
+    # Secret Manager in any deployed environment. If left at this sentinel, the
+    # service refuses ALL logins (fail-closed) so a missing password can't leave
+    # the endpoint open. Never commit a real password.
+    master_password: str = "CHANGE_ME_set_via_env"
+
     # --- Observability ---
     enable_tracing: bool = True
     otel_exporter: str = "console"  # console | gcp (Cloud Trace)

@@ -5,14 +5,19 @@ Requirement T1: when a customer uses the extension, the backend must
 authenticate that customer. We issue a short-lived JWT on login; the extension
 stores it and sends it as a Bearer token on every chat / order request.
 
-For the demo, credentials are validated against the seeded `customers` data
-(passwords stored as the literal "demo"). In production you would swap
-`verify_password` for Firebase Authentication / Identity Platform (also free
-tier) without touching the agent code — the token contract stays the same.
+SINGLE-USER LOCKDOWN: the LLM endpoint is private. A login is accepted ONLY if
+BOTH hold:
+  1. the email is on the allowlist (settings.allowed_emails), AND
+  2. the password equals the master password (settings.master_password),
+     compared in constant time.
+The master password MUST be supplied via env / Secret Manager. If it is left at
+its sentinel value, the service is FAIL-CLOSED — every login is rejected — so a
+misconfiguration can never leave the endpoint open. The seeded per-customer
+demo passwords are intentionally ignored.
 """
 from __future__ import annotations
 
-import hashlib
+import hmac
 import time
 from typing import Optional
 
@@ -24,32 +29,51 @@ from ..models.schemas import Customer
 
 _settings = get_settings()
 
-
-def _hash(password: str) -> str:
-    """Stable hash for comparing seeded demo passwords."""
-    return hashlib.sha256(password.encode()).hexdigest()
+# Sentinel that means "no real password configured" -> reject all logins.
+_UNSET_PASSWORD = "CHANGE_ME_set_via_env"
 
 
-def verify_password(plain: str, stored: str) -> bool:
+def _allowed_emails() -> set[str]:
+    """Lower-cased set of emails permitted to authenticate."""
+    return {e.strip().lower() for e in _settings.allowed_emails.split(",") if e.strip()}
+
+
+def verify_password(plain: str) -> bool:
     """
-    Validate a password. Seed data stores the sentinel "demo" in clear text for
-    convenience; anything else is compared as a sha256 hash. Replace with
-    Firebase Auth / bcrypt in production.
+    Validate the master password in constant time.
+
+    Fail-closed: if the master password isn't configured (still the sentinel),
+    or the supplied password is empty, authentication is refused.
     """
-    if stored == "demo":
-        return plain == "demo"
-    return _hash(plain) == stored
+    expected = _settings.master_password
+    if not expected or expected == _UNSET_PASSWORD:
+        return False
+    if not plain:
+        return False
+    return hmac.compare_digest(plain, expected)
 
 
 def authenticate(email: str, password: str) -> Optional[Customer]:
-    """Return the Customer if credentials are valid, else None."""
+    """
+    Return the Customer only if the email is allowlisted AND the master password
+    is correct. Returns None (login rejected) otherwise.
+    """
+    email_norm = (email or "").strip().lower()
+
+    # 1) Allowlist check — only approved email(s) may even attempt login.
+    if email_norm not in _allowed_emails():
+        return None
+
+    # 2) Master password check (constant-time, fail-closed).
+    if not verify_password(password):
+        return None
+
+    # 3) Load the customer record for identity/profile (must exist in the DB).
     repo = get_repository()
-    record = repo.get_customer_by_email(email)
+    record = repo.get_customer_by_email(email_norm)
     if not record:
         return None
-    customer, pwd_hash = record
-    if not verify_password(password, pwd_hash):
-        return None
+    customer, _ = record
     return customer
 
 

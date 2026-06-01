@@ -380,3 +380,91 @@ developer portal, 53 unit tests + 8 evals.
     one simple structure won't give both; choose deliberately.
 11. **Cloud Trace is the multi-agent diagnostic of record** — a red span on the
     exact failing node beats guessing from a fallback symptom.
+12. **Don't force deterministic work into LLM agents** — if a step needs no
+    intelligence (detect language, classify modality, pick channel), make it
+    plain code; wrapping it as an agent adds fragility + cost for no benefit.
+13. **Know when to stop iterating and revert** — when you can't test live and a
+    "more correct" design keeps breaking, reverting to the demonstrably-working
+    design is the right engineering call, not a defeat.
+
+---
+
+## 10. Case study: reverting the pre-processing "agents" to deterministic code
+
+This is the single most instructive arc of the build, so it gets its own
+section. It captures a multi-hour attempt to make **everything** an ADK agent,
+why it failed, and why reverting was the right decision.
+
+### The goal that drove it
+The requirement was a "proper ADK multi-agent" system where the orchestrator
+selects sub-agents that take action. Taken literally, that pushed toward making
+**all six** capabilities real ADK `LlmAgent`s the orchestrator delegates to:
+`memory`, `modality`, `language`, `channel` (pre-processing) **and**
+`inventory`, `order` (workers).
+
+### What we tried (in order)
+1. **Sub-agents as `AgentTool`s** — the LLM chose which to call. Problem: Gemini
+   *skipped* the ones it deemed unneeded, so they didn't reliably run.
+2. **A `SequentialAgent` wrapping all of them** to force fixed order. Problem #1:
+   it made the orchestrator just "step 4 in a list" — inverting the hierarchy
+   (the orchestrator should be the ROOT, not a peer).
+3. **`SequentialAgent` as a single `AgentTool` (`context_pipeline`)** to keep the
+   orchestrator on top while guaranteeing order. Problem: **a SequentialAgent
+   cannot be wrapped as an AgentTool** — it emits multiple sub-agent outputs and
+   breaks the tool's single-response contract → `execute_tool context_pipeline`
+   went **red in Cloud Trace** → every turn fell back to the deterministic engine.
+4. **Individual pre-processing agents as `AgentTool`s** with a per-turn
+   `ContextVar` to pass session context. Problem: the tool-only agents emitted
+   **no final text** (`RuntimeError: ADK produced no text response`), AND the
+   `ContextVar` was unreliable across ADK's execution context. Trace showed
+   `memory_agent` and `modality_agent` running, then `language_agent` erroring.
+5. **Instruction tweak ("always reply with text") + resilient text capture.**
+   The error simply moved to the *first* sub-agent (`memory_agent`). Still red.
+
+### Why it kept failing (root cause)
+The four pre-processing capabilities are **deterministic** — detecting a
+language, classifying modality, choosing a channel directive, and reading
+session memory need **no LLM reasoning**. Forcing them into `LlmAgent`s meant:
+- an extra Gemini call each (≈5 LLM calls/turn → cost + latency + quota burn),
+- a brittle dependency on ADK's tool/agent execution + context plumbing,
+- the "tool-only agent has no text to return" contract violation,
+all for **zero functional benefit** over a 0.02 ms Python function.
+
+### The decision: revert to the reliable design
+- **Keep as REAL ADK agents the only things that genuinely reason:**
+  `inventory_agent` and `order_agent` — workers that own and call tools. These
+  were **proven green in Cloud Trace** the whole time
+  (`orchestrator → inventory_agent → search_inventory`).
+- **Make modality/language/channel/memory deterministic Python** that runs as a
+  pre-processing phase before the orchestrator, shown clearly and separately in
+  the dev portal as "PRE-PROCESS" (not pretending to be agents).
+- Removed `specialist_agents.py` and the dead `_run_adk_turn` /
+  `_run_backup_turn` / `_generate` helpers.
+
+Result: the ADK path completes cleanly (no fallback), the orchestrator stays the
+ROOT/main agent, real worker delegation is intact, and the system is reliable
+and cheap.
+
+### The honest process lessons
+- **I iterated several times on a design I could not test live** (local Gemini
+  quota exhausted from the multi-call design; no cloud login). That produced
+  "blind" commits the user had to verify each time — inefficient and avoidable.
+- **The user's instinct ("keep deterministic as backup, don't mix") and the
+  final "revert" call were correct.** When two goals are in genuine tension
+  (guaranteed-order vs orchestrator-on-top) and the "clever" path is fragile,
+  choose the demonstrably-working structure.
+- **Match the tool to the job:** LLM agents for reasoning/decisions; plain
+  functions for deterministic transforms. "Make everything an agent" is an
+  anti-pattern.
+
+### Final architecture (the conclusion)
+```
+goopher_orchestrator   ◄── MAIN agent (ROOT, ADK LlmAgent, in charge)
+  │  delegates to →
+  ├─ inventory_agent  (real ADK worker → search_inventory / check_stock / details)
+  └─ order_agent      (real ADK worker → order_status / list / bulk_status)
+
++ Deterministic pre-processing (plain Python, runs first, shown as "PRE-PROCESS"):
+    modality · language · channel · memory   — 100% reliable, free, instant
++ Deterministic engine remains a separate BACKUP when ADK is off/errors.
+```

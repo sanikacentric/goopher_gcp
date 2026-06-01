@@ -137,12 +137,52 @@ the thread.
 The orchestrator has **two execution paths** behind one interface:
 
 1. **ADK + Gemini** — the production path (real LLM reasoning + tool calling).
-2. **Deterministic fallback** — intent routing over the same MCP tools, used
-   automatically when the API key or ADK package is absent.
+2. **Deterministic fallback** — intent routing over the same in-process tools,
+   used automatically when the API key or ADK package is absent, or if an ADK
+   turn errors.
 
 This is why unit tests and evals run offline in CI in seconds, and why a
 transient LLM outage degrades to still-useful, grounded answers instead of a
 hard failure.
+
+---
+
+## 5a. Why only inventory/order are ADK agents (design rationale)
+
+A deliberate, hard-won decision: **only the two capabilities that genuinely
+reason are ADK `LlmAgent`s** (`inventory_agent`, `order_agent`). The
+modality / language / channel / memory steps are **deterministic Python**, run
+as a pre-processing phase before the orchestrator — *not* ADK sub-agents.
+
+**Why not make everything an agent?** We tried (see `LEARNINGS.md §10`). Forcing
+the deterministic steps into `LlmAgent`s repeatedly failed:
+- `SequentialAgent` cannot be wrapped as an `AgentTool` (breaks the single-
+  response contract → red span in Cloud Trace → fell back to backup).
+- Tool-only agents emit no final text → `RuntimeError: ADK produced no text
+  response`.
+- Per-turn context (session id) didn't propagate reliably through ADK's tool
+  execution context.
+- Each added a Gemini call (~5/turn): more cost, latency, and quota burn — for
+  **zero functional benefit**, since detecting a language or modality needs no
+  intelligence.
+
+**The principle:** *LLM agents for reasoning/decisions; plain functions for
+deterministic transforms.* This keeps the genuine multi-agent value — the
+orchestrator selecting a worker that owns its tools — while making the pipeline
+reliable, fast, and cheap.
+
+```
+goopher_orchestrator   ◄── MAIN agent (ROOT LlmAgent, decides + delegates)
+  │  delegates to →
+  ├─ inventory_agent   (ADK worker → search_inventory / check_stock / details)
+  └─ order_agent       (ADK worker → order_status / list_customer_orders / bulk)
+
+  preceded by deterministic PRE-PROCESS (Python, no LLM):
+     modality · language · channel · memory     (100% reliable, free, instant)
+```
+
+The dev portal labels the deterministic steps "PRE-PROCESS" and the orchestrator
+"ORCHESTRATOR (gold)" so the two layers are never confused.
 
 ---
 

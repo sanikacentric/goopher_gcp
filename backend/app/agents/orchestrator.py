@@ -51,24 +51,24 @@ Stay on the topic of the store's clothing & food products and order help.
 # How the ROOT orchestrator must DELEGATE. It owns no retail tools itself — it
 # picks a worker sub-agent for the task; the worker calls the tools.
 ORCHESTRATOR_DELEGATION = """
-You are the ORCHESTRATOR. You own NO tools yourself. You SELECT and DELEGATE to
-specialist sub-agents (each is a tool you call), then compose the final reply
-from what they return.
+You are GOOPHER, the MAIN orchestrator agent. You are in charge of the whole
+turn and you coordinate your sub-agents (each is a tool you call), then compose
+the final customer-facing reply.
 
-Follow this workflow on EVERY turn, calling the sub-agents in order:
-1. `memory_agent`   — recall recent conversation context for this session.
-2. `modality_agent` — interpret the input (text/voice/image/file) -> normalized text.
-3. `language_agent` — detect the customer's language + localization directive.
-4. Pick the WORKER for the request and delegate to get the real data:
+Do this on EVERY turn, in order:
+1. Call `context_pipeline` FIRST — it recalls session memory, classifies the
+   input modality, and detects the customer's language (all in one step).
+2. Delegate to the WORKER sub-agent that fits the request, to get the real data:
      - product availability / price / stock / "do you have…" / "show me…"
        -> `inventory_agent` (owns the inventory tools)
      - order status / tracking / "where is my order" / bulk orders
        -> `order_agent` (owns the order tools)
-5. `channel_agent`  — get the formatting directive for the active channel.
-6. Compose a concise, grounded reply in the detected language and channel style.
+3. Call `channel_agent` to get the formatting directive for the active channel.
+4. Compose a concise, grounded reply in the detected language and channel style.
 
-Never invent product or order facts — use only what the worker sub-agent
-returned. Never claim the store sells only one category.
+You are the decision-maker; the others are your sub-agents. Never invent product
+or order facts — use only what the worker sub-agent returned. Never claim the
+store sells only one category.
 """.strip()
 
 
@@ -152,29 +152,37 @@ def build_root_agent():
     channel_sub = sp.build_channel_agent(model)
     memory_sub = sp.build_memory_agent(model)
 
-    # --- The ORCHESTRATOR (LlmAgent) — smartly SELECTS the right worker ---
-    # It owns only the two workers as tools; for a turn it delegates to whichever
-    # fits (inventory vs order). This is the "smart routing" part of the hybrid.
+    # --- Guaranteed context-prep chain (memory -> modality -> language) ---
+    # A SequentialAgent so all three ALWAYS run in order. It is exposed to the
+    # ROOT orchestrator as a SINGLE tool the orchestrator invokes first — it is
+    # NOT a peer of the orchestrator. The orchestrator stays on top.
+    context_pipeline = SequentialAgent(
+        name="context_pipeline",
+        description="Prepares the turn: recalls memory, classifies modality, and "
+                    "detects language (runs all three in order).",
+        sub_agents=[memory_sub, modality_sub, language_sub],
+    )
+
+    # --- ROOT: goopher_orchestrator — the MAIN unified agent ---
+    # It is the parent of every sub-agent. Per turn it: (1) calls
+    # `context_pipeline` to prepare context, (2) delegates to the right WORKER
+    # (inventory_agent | order_agent), (3) calls `channel_agent` to format, then
+    # composes the final reply. All others are sub-agents UNDER the orchestrator.
     orchestrator = LlmAgent(
         name="goopher_orchestrator",
         model=model,
-        description="Selects the right worker sub-agent and composes the reply.",
+        description="The main unified GOOPHER agent. Coordinates all sub-agents "
+                    "(context prep, inventory, order, channel) and composes the "
+                    "customer-facing reply for clothing & food retail.",
         instruction=ROOT_INSTRUCTION + "\n\n" + ORCHESTRATOR_DELEGATION,
-        tools=[AgentTool(agent=inventory_agent), AgentTool(agent=order_agent)],
+        tools=[
+            AgentTool(agent=context_pipeline),   # 1. always-run context prep
+            AgentTool(agent=inventory_agent),    # 2a. worker (products)
+            AgentTool(agent=order_agent),        # 2b. worker (orders)
+            AgentTool(agent=channel_sub),        # 3. formatting
+        ],
     )
-
-    # --- HYBRID: a SequentialAgent runs the pipeline in a GUARANTEED order ---
-    # The pre-processing agents (memory, modality, language) ALWAYS run, then the
-    # orchestrator (which picks a worker), then channel formatting ALWAYS runs.
-    # This guarantees every stage is invoked + visible every turn, while keeping
-    # the orchestrator's smart worker selection in the middle.
-    pipeline = SequentialAgent(
-        name="goopher_pipeline",
-        description="Guaranteed GOOPHER turn pipeline: memory -> modality -> "
-                    "language -> orchestrator(worker) -> channel.",
-        sub_agents=[memory_sub, modality_sub, language_sub, orchestrator, channel_sub],
-    )
-    return pipeline
+    return orchestrator
 
 
 # --------------------------------------------------------------------------- #
@@ -269,8 +277,9 @@ class AgentService:
         # back in `used_tools` from the ADK run). Worker agents OWN the tools, so
         # a worker name in used_tools means the orchestrator delegated to it; the
         # actual tool names appear too (the worker called them).
-        SUBAGENT_NAMES = {"inventory_agent", "order_agent",
-                          "modality_agent", "language_agent", "channel_agent"}
+        SUBAGENT_NAMES = {"context_pipeline", "inventory_agent", "order_agent",
+                          "memory_agent", "modality_agent", "language_agent",
+                          "channel_agent"}
 
         with span("chat_turn", session=req.session_id, channel=req.channel,
                   customer=customer_id) as trace_id:

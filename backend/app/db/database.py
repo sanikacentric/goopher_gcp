@@ -77,6 +77,8 @@ class Repository(ABC):
         # food category words (match every food item)
         "snack", "snacks", "food", "foods", "grocery", "groceries", "item",
         "items", "product", "products", "drink", "drinks", "beverage", "beverages",
+        # toys category words (match every toy item)
+        "toy", "toys", "game", "games", "plaything", "playthings",
         # conversational filler
         "show", "me", "find", "get", "the", "a", "an", "can", "could", "let",
         "know", "please", "price", "cost", "priced", "do", "you", "have", "in",
@@ -120,6 +122,8 @@ class Repository(ABC):
             dept_filter = "Food"
         elif {"dress", "dresses", "clothing", "apparel", "outfit"} & set(words):
             dept_filter = "Clothing"
+        elif {"toy", "toys", "game", "games", "plaything", "playthings"} & set(words):
+            dept_filter = "Toys"
 
         # Expand each token with a naive singular form so plural queries match,
         # e.g. "oreos" -> also try "oreo", "cookies" -> "cookie", "chips" ->

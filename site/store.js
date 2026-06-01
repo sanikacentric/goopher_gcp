@@ -9,15 +9,19 @@ const API_BASE = location.origin.startsWith("http")
   ? location.origin
   : "http://localhost:8080";
 
-const DEPT_ICON = { Clothing: "👗", Food: "🍿" };
+const DEPT_ICON = { Clothing: "👗", Food: "🍿", Toys: "🧸" };
 // Per-item emoji so the demo looks lively without real product images.
 const ITEM_ICON = {
   Dress: "👗", "Casual Dress": "👗", Snacks: "🍪", Beverages: "🥤",
+  "Balls & Sports": "🏀", "Building Sets": "🧱", "Outdoor & Action": "🔫",
+  "Arts & Crafts": "🎨", Vehicles: "🚗", Puzzles: "🧩",
 };
 const NAME_ICON = [
   [/chip/i, "🥔"], [/oreo|cookie/i, "🍪"], [/peanut|nuts/i, "🥜"],
   [/cola|soda/i, "🥤"], [/cheez|cracker/i, "🧀"], [/bar/i, "🍫"],
   [/denim|jean/i, "👖"], [/maxi|midi|dress|wrap/i, "👗"],
+  [/basketball|ball/i, "🏀"], [/lego|brick/i, "🧱"], [/nerf|blaster|dart/i, "🔫"],
+  [/play-?doh|dough/i, "🎨"], [/hot wheels|car/i, "🚗"], [/puzzle/i, "🧩"],
 ];
 
 function iconFor(p) {
@@ -73,8 +77,8 @@ async function load() {
     const res = await fetch(`${API_BASE}/catalog`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    // Show Clothing first, then Food, then anything else.
-    const order = ["Clothing", "Food"];
+    // Show Clothing first, then Food, then Toys, then anything else.
+    const order = ["Clothing", "Food", "Toys"];
     const depts = [
       ...order.filter((d) => data.catalog[d]),
       ...Object.keys(data.catalog).filter((d) => !order.includes(d)),

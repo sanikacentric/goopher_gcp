@@ -14,11 +14,11 @@ from __future__ import annotations
 from ...tools.inventory_tool import check_stock, get_product_details, search_inventory
 
 INSTRUCTION = """
-You can answer questions about the store's two departments — women's casual
-Clothing and Food/Snacks — using the inventory tools:
-- Use `search_inventory` for browsing/discovery in either department ("show me
-  black midi dresses under $40", "do you have barbecue chips"). Pass
-  color/size/max_price filters when the shopper mentions them.
+You can answer questions about the store's three departments — women's casual
+Clothing, Food/Snacks, and Toys — using the inventory tools:
+- Use `search_inventory` for browsing/discovery in any department ("show me
+  black midi dresses under $40", "do you have barbecue chips", "show me toys",
+  "is the LEGO set in stock"). Pass color/size/max_price filters when mentioned.
 - Use `inventory_check_stock` when the shopper asks whether a specific variant
   is available, naming a variant_id or a product+option (color/flavor + size).
 - Use `get_product_details` for deep questions about one product (material or

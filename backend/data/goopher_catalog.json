@@ -2,7 +2,7 @@
   "_meta": {
     "source": "Mock multi-department retail catalog for the GOOPHER demo: women's casual clothing + food/snacks.",
     "disclaimer": "This is SYNTHETIC/representative data for demo purposes only. It is NOT scraped from any retailer and does not reflect real pricing or stock. Brand names are used solely to make the demo realistic.",
-    "departments": ["Clothing", "Food"],
+    "departments": ["Clothing", "Food", "Toys"],
     "currency": "USD",
     "generated_for": "GOOPHER conversational retail agent demo"
   },
@@ -231,6 +231,121 @@
       "variants": [
         {"variant_id": "FOOD-KND-2006-DCN-6", "color": "Dark Chocolate Nuts & Sea Salt", "size": "6-bar box", "stock": 34},
         {"variant_id": "FOOD-KND-2006-CAR-12", "color": "Caramel Almond", "size": "12-bar box", "stock": 11}
+      ]
+    },
+    {
+      "department": "Toys",
+      "sku": "TOY-SPL-3001",
+      "name": "Spalding Rubber Basketball",
+      "brand": "Spalding",
+      "category": "Balls & Sports",
+      "description": "Durable rubber outdoor basketball with deep channels for excellent grip. Official size 7.",
+      "list_price": 24.99,
+      "sale_price": 17.99,
+      "rating": 4.7,
+      "review_count": 1442,
+      "colors": ["Orange", "Blue/Yellow"],
+      "sizes": ["Size 5 (Youth)", "Size 7 (Official)"],
+      "material": "Rubber",
+      "variants": [
+        {"variant_id": "TOY-SPL-3001-ORG-7", "color": "Orange", "size": "Size 7 (Official)", "stock": 60},
+        {"variant_id": "TOY-SPL-3001-ORG-5", "color": "Orange", "size": "Size 5 (Youth)", "stock": 34},
+        {"variant_id": "TOY-SPL-3001-BLY-7", "color": "Blue/Yellow", "size": "Size 7 (Official)", "stock": 0}
+      ]
+    },
+    {
+      "department": "Toys",
+      "sku": "TOY-LEG-3002",
+      "name": "LEGO Classic Creative Bricks Box",
+      "brand": "LEGO",
+      "category": "Building Sets",
+      "description": "A 500-piece box of classic LEGO bricks in 35 colors for open-ended creative building. Ages 4+.",
+      "list_price": 39.99,
+      "sale_price": 29.99,
+      "rating": 4.9,
+      "review_count": 3210,
+      "colors": ["Multicolor"],
+      "sizes": ["300 pcs", "500 pcs"],
+      "material": "ABS plastic",
+      "variants": [
+        {"variant_id": "TOY-LEG-3002-MUL-300", "color": "Multicolor", "size": "300 pcs", "stock": 41},
+        {"variant_id": "TOY-LEG-3002-MUL-500", "color": "Multicolor", "size": "500 pcs", "stock": 18}
+      ]
+    },
+    {
+      "department": "Toys",
+      "sku": "TOY-NRF-3003",
+      "name": "NERF Elite Dart Blaster",
+      "brand": "NERF",
+      "category": "Outdoor & Action",
+      "description": "Pump-action foam dart blaster with a 6-dart capacity and 90 ft range. Includes 12 Elite darts.",
+      "list_price": 22.99,
+      "sale_price": 15.99,
+      "rating": 4.6,
+      "review_count": 877,
+      "colors": ["Blue/Orange", "Camo"],
+      "sizes": ["Standard"],
+      "material": "Plastic, foam darts",
+      "variants": [
+        {"variant_id": "TOY-NRF-3003-BLO-STD", "color": "Blue/Orange", "size": "Standard", "stock": 52},
+        {"variant_id": "TOY-NRF-3003-CMO-STD", "color": "Camo", "size": "Standard", "stock": 7}
+      ]
+    },
+    {
+      "department": "Toys",
+      "sku": "TOY-HAS-3004",
+      "name": "Play-Doh Modeling Compound 10-Pack",
+      "brand": "Play-Doh",
+      "category": "Arts & Crafts",
+      "description": "Ten 2 oz cans of classic non-toxic modeling compound in assorted colors. Endless squishy fun. Ages 2+.",
+      "list_price": 12.99,
+      "sale_price": 8.49,
+      "rating": 4.8,
+      "review_count": 2065,
+      "colors": ["Assorted"],
+      "sizes": ["10-pack", "20-pack"],
+      "material": "Non-toxic modeling compound",
+      "variants": [
+        {"variant_id": "TOY-HAS-3004-AST-10", "color": "Assorted", "size": "10-pack", "stock": 73},
+        {"variant_id": "TOY-HAS-3004-AST-20", "color": "Assorted", "size": "20-pack", "stock": 29}
+      ]
+    },
+    {
+      "department": "Toys",
+      "sku": "TOY-HOT-3005",
+      "name": "Hot Wheels Die-Cast Car 5-Pack",
+      "brand": "Hot Wheels",
+      "category": "Vehicles",
+      "description": "Set of five 1:64 scale die-cast cars with bold designs. A classic collectible for kids and fans. Ages 3+.",
+      "list_price": 9.99,
+      "sale_price": 6.99,
+      "rating": 4.7,
+      "review_count": 1588,
+      "colors": ["Assorted"],
+      "sizes": ["5-pack", "10-pack"],
+      "material": "Die-cast metal, plastic",
+      "variants": [
+        {"variant_id": "TOY-HOT-3005-AST-5", "color": "Assorted", "size": "5-pack", "stock": 88},
+        {"variant_id": "TOY-HOT-3005-AST-10", "color": "Assorted", "size": "10-pack", "stock": 14}
+      ]
+    },
+    {
+      "department": "Toys",
+      "sku": "TOY-MEL-3006",
+      "name": "Melissa & Doug Wooden Jigsaw Puzzle",
+      "brand": "Melissa & Doug",
+      "category": "Puzzles",
+      "description": "Sturdy 48-piece wooden jigsaw puzzle with a colorful animal scene. Develops problem-solving skills. Ages 3+.",
+      "list_price": 14.99,
+      "sale_price": 10.49,
+      "rating": 4.8,
+      "review_count": 642,
+      "colors": ["Safari", "Ocean"],
+      "sizes": ["24 pcs", "48 pcs"],
+      "material": "Wood",
+      "variants": [
+        {"variant_id": "TOY-MEL-3006-SAF-48", "color": "Safari", "size": "48 pcs", "stock": 26},
+        {"variant_id": "TOY-MEL-3006-OCN-24", "color": "Ocean", "size": "24 pcs", "stock": 5}
       ]
     }
   ],

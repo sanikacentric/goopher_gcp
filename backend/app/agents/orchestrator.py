@@ -30,7 +30,7 @@ from ..models.schemas import ChatRequest, ChatResponse
 from ..observability.flow_recorder import TurnTrace
 from ..observability.telemetry import incr, log_event, span
 from . import channel_agent, language_agent, modality_agent
-from .skills import checkout_skill, inventory_skill, order_skill
+from .skills import checkout_skill, inventory_skill, order_mgmt_skill, order_skill
 
 _settings = get_settings()
 
@@ -162,6 +162,24 @@ def build_root_agent():
         tools=checkout_skill.get_tools(),
     )
 
+    # order_management_agent owns the fulfillment pipeline (runs after payment):
+    # validate -> inventory check -> insert ORDER_PLACED -> confirm -> warehouse
+    # -> ship -> track -> deliver -> invoice. Checkout triggers it automatically;
+    # it's also exposed so the orchestrator can run/re-run fulfillment on request.
+    order_management_agent = LlmAgent(
+        name="order_management_agent",
+        model=model,
+        description="Specialist that runs the post-payment fulfillment pipeline "
+                    "(validation, inventory check, ORDER_PLACED insert, shipping, "
+                    "delivery, invoice).",
+        instruction=(
+            "You manage order fulfillment after payment.\n"
+            + order_mgmt_skill.INSTRUCTION
+            + "\nThe signed-in customer_id is provided in context."
+        ),
+        tools=order_mgmt_skill.get_tools(),
+    )
+
     # --- ROOT: goopher_orchestrator — the MAIN unified agent ---
     # It coordinates the WORKER sub-agents (inventory, order) — the agents that do
     # real reasoning over tools — and composes the reply. These two are reliable
@@ -182,9 +200,10 @@ def build_root_agent():
                     "customer-facing reply for clothing & food retail.",
         instruction=ROOT_INSTRUCTION + "\n\n" + ORCHESTRATOR_DELEGATION,
         tools=[
-            AgentTool(agent=inventory_agent),    # worker: products
-            AgentTool(agent=order_agent),        # worker: order status
-            AgentTool(agent=checkout_agent),     # worker: place an order
+            AgentTool(agent=inventory_agent),          # worker: products
+            AgentTool(agent=order_agent),              # worker: order status
+            AgentTool(agent=checkout_agent),           # worker: place an order
+            AgentTool(agent=order_management_agent),   # worker: fulfillment pipeline
         ],
     )
     return orchestrator
@@ -285,7 +304,8 @@ class AgentService:
         # Worker sub-agents the orchestrator delegates to (the rest is the tools
         # those workers call). modality/language/channel are deterministic
         # pre-processing now, not sub-agents.
-        SUBAGENT_NAMES = {"inventory_agent", "order_agent", "checkout_agent"}
+        SUBAGENT_NAMES = {"inventory_agent", "order_agent", "checkout_agent",
+                          "order_management_agent"}
 
         with span("chat_turn", session=req.session_id, channel=req.channel,
                   customer=customer_id) as trace_id:
@@ -686,8 +706,19 @@ class AgentService:
             f"🎉 Order {data['order_id']} placed!\n"
             f"- Item: {data['item']}\n"
             f"- Total: ${data['total']:.2f}\n"
-            f"- Status: {data['status']} · Est. delivery {data['estimated_delivery']}"
+            f"- Status: {data['status']} · Est. delivery {data['estimated_delivery']}\n"
+            + AgentService._fulfillment_line(data)
         )
+
+    @staticmethod
+    def _fulfillment_line(data: dict) -> str:
+        f = data.get("fulfillment") or {}
+        if not f.get("ok"):
+            return ""
+        inv = "in stock ✓" if f.get("inventory_ok") else "low/out ⚠"
+        return (f"📦 Order management: inventory {inv} · inserted into "
+                f"ORDER_PLACED · shipped (UPS {f.get('tracking_number', '—')}) · "
+                f"see the live pipeline in the dev portal.")
 
     @staticmethod
     def _format_bulk_checkout(data: dict) -> str:
@@ -704,6 +735,9 @@ class AgentService:
             lines.append(f"- {it}")
         lines.append(f"- Total: ${data['total']:.2f}  ·  Status: {data['status']}  "
                      f"·  Est. delivery {data['estimated_delivery']}")
+        fl = AgentService._fulfillment_line(data)
+        if fl:
+            lines.append(fl)
         return "\n".join(lines)
 
 

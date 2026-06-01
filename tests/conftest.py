@@ -27,6 +27,7 @@ os.environ.update(
         # Single-user lockdown: a known allowlist + master password for tests.
         "ALLOWED_EMAILS": "demo@goopher.app",
         "MASTER_PASSWORD": "test-master-password",
+        "FULFILLMENT_STAGE_DELAY": "0",   # no demo delays in tests
         "ENABLE_TRACING": "false",
         "ENVIRONMENT": "test",
     }

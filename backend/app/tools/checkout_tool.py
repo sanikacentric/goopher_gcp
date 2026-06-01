@@ -147,6 +147,11 @@ def place_order(customer_id: str, variant_id: str = "", qty: int = 1) -> dict:
     repo.save_order(order)
     log_event("order_placed", order_id=order_id, customer_id=customer_id, total=total)
 
+    # Payment succeeded -> hand off to the order-management / fulfillment pipeline
+    # (inventory check -> insert ORDER_PLACED -> confirmation -> ... -> invoice),
+    # which streams its stages live to the dev portal.
+    fulfillment = _run_fulfillment_safe(order_id, customer_id)
+
     return {
         "ok": True,
         "order_id": order_id,
@@ -154,10 +159,21 @@ def place_order(customer_id: str, variant_id: str = "", qty: int = 1) -> dict:
         "item": f'{line["name"]} ({line["color"]}, {line["size"]}) x{line["qty"]}',
         "total": total,
         "payment": payment,
+        "fulfillment": fulfillment,
         "estimated_delivery": "2026-06-08",
         "message": (f"Payment successful — order {order_id} placed! "
                     f"${total:.2f} charged. Estimated delivery 2026-06-08."),
     }
+
+
+def _run_fulfillment_safe(order_id: str, customer_id: str) -> dict:
+    """Run the order-management pipeline; never let it break checkout."""
+    try:
+        from .order_mgmt_tool import run_fulfillment
+        return run_fulfillment(order_id, customer_id)
+    except Exception as exc:  # pragma: no cover - defensive
+        log_event("fulfillment_failed", order_id=order_id, reason=str(exc))
+        return {"ok": False, "message": f"fulfillment error: {exc}"}
 
 
 def place_bulk_order(customer_id: str, variant_ids: list[str] | None = None,
@@ -225,6 +241,8 @@ def place_bulk_order(customer_id: str, variant_ids: list[str] | None = None,
     log_event("bulk_order_placed", order_id=order_id, customer_id=customer_id,
               lines=len(items), total=total)
 
+    fulfillment = _run_fulfillment_safe(order_id, customer_id)
+
     return {
         "ok": True,
         "order_id": order_id,
@@ -234,6 +252,7 @@ def place_bulk_order(customer_id: str, variant_ids: list[str] | None = None,
         "line_count": len(items),
         "total": total,
         "payment": payment,
+        "fulfillment": fulfillment,
         "estimated_delivery": "2026-06-08",
         "message": (f"Payment successful — bulk order {order_id} placed with "
                     f"{len(items)} item(s), ${total:.2f} charged."),

@@ -35,9 +35,10 @@ class FlowStep:
 class FlowRecord:
     id: int
     ts: float                  # epoch seconds
-    kind: str                  # "login" | "turn"
+    kind: str                  # "login" | "turn" | "fulfillment"
     session_id: Optional[str] = None
     customer_id: Optional[str] = None
+    order_id: Optional[str] = None
     trace_id: Optional[str] = None
     channel: Optional[str] = None
     language: Optional[str] = None
@@ -55,6 +56,7 @@ class FlowRecord:
             "kind": self.kind,
             "session_id": self.session_id,
             "customer_id": self.customer_id,
+            "order_id": self.order_id,
             "trace_id": self.trace_id,
             "channel": self.channel,
             "language": self.language,
@@ -132,4 +134,23 @@ def record_login(customer_id: str, email: str, ok: bool) -> None:
                  detail=("allowlisted email + master password OK" if ok
                          else "rejected (allowlist/password)"))
     )
+    _recorder.add(rec)
+
+
+def new_pipeline_record(order_id: str, customer_id: str) -> FlowRecord:
+    """
+    Start a dedicated ORDER-MANAGEMENT pipeline record (its own card in the dev
+    portal, kind='fulfillment'). Append stages with add_pipeline_stage and commit
+    with commit_record once each stage completes — so stakeholders see it advance
+    live (inventory check in progress -> complete -> ... -> delivered).
+    """
+    return FlowRecord(
+        id=_recorder.next_id(), ts=time.time(), kind="fulfillment",
+        order_id=order_id, customer_id=customer_id,
+        user_message=f"Order management pipeline for {order_id}",
+    )
+
+
+def commit_record(rec: FlowRecord) -> None:
+    """Publish/refresh a record so the live portal reflects its current steps."""
     _recorder.add(rec)

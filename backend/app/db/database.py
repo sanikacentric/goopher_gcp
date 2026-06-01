@@ -55,6 +55,11 @@ class Repository(ABC):
         """Insert or update an order (used when a customer places a new order)."""
 
     @abstractmethod
+    def save_order_placed(self, record: dict) -> None:
+        """Insert a fulfilled-order record into the ORDER_PLACED table (order
+        management). `record` is a JSON-serializable dict keyed by order_id."""
+
+    @abstractmethod
     def get_customer_by_email(self, email: str) -> Optional[tuple[Customer, str]]:
         """Return (customer, password_hash) or None."""
 
@@ -219,6 +224,7 @@ class SQLiteRepository(Repository):
             CREATE TABLE IF NOT EXISTS products (sku TEXT PRIMARY KEY, doc TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS orders (order_id TEXT PRIMARY KEY, customer_id TEXT, doc TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS customers (email TEXT PRIMARY KEY, doc TEXT NOT NULL, password_hash TEXT);
+            CREATE TABLE IF NOT EXISTS order_placed (order_id TEXT PRIMARY KEY, customer_id TEXT, doc TEXT NOT NULL);
             """
         )
         self._conn.commit()
@@ -258,6 +264,13 @@ class SQLiteRepository(Repository):
         self._conn.execute(
             "INSERT OR REPLACE INTO orders VALUES (?,?,?)",
             (order.order_id, order.customer_id, json.dumps(order.model_dump())),
+        )
+        self._conn.commit()
+
+    def save_order_placed(self, record: dict) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO order_placed VALUES (?,?,?)",
+            (record["order_id"], record.get("customer_id", ""), json.dumps(record)),
         )
         self._conn.commit()
 
@@ -306,6 +319,9 @@ class FirestoreRepository(Repository):
 
     def save_order(self, order: Order) -> None:
         self.db.collection("orders").document(order.order_id).set(order.model_dump())
+
+    def save_order_placed(self, record: dict) -> None:
+        self.db.collection("order_placed").document(record["order_id"]).set(record)
 
     def get_customer_by_email(self, email: str) -> Optional[tuple[Customer, str]]:
         snap = self.db.collection("customers").document(email).get()

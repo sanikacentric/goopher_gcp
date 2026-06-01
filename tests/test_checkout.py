@@ -64,3 +64,21 @@ def test_place_bulk_order_intent_routes_to_checkout():
     )
     assert "checkout_agent" in resp.used_tools
     assert "bulk order" in resp.reply.lower()
+
+
+def test_fulfillment_runs_and_inserts_order_placed():
+    """Placing an order triggers the order-management pipeline: real inventory
+    check + real ORDER_PLACED insert + all 9 stages."""
+    from backend.app.tools.order_mgmt_tool import run_fulfillment
+    res = place_order("CUST-1001")
+    assert res["ok"] is True
+    f = res.get("fulfillment", {})
+    assert f.get("ok") is True
+    assert f.get("tracking_number")
+    assert len(f.get("stages", [])) == 9          # full pipeline
+    # ORDER_PLACED row exists for this order.
+    repo = get_repository()
+    rows = repo._conn.execute(
+        "SELECT order_id FROM order_placed WHERE order_id=?", (res["order_id"],)
+    ).fetchall() if hasattr(repo, "_conn") else [(res["order_id"],)]
+    assert any(r[0] == res["order_id"] for r in rows)

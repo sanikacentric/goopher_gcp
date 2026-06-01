@@ -51,6 +51,7 @@
         background: var(--blue); color: #fff; text-transform: uppercase;
       }
       .turn-head .kind.login { background: var(--purple); }
+      .turn-head .kind.fulfillment { background: #0d8a6a; }
       .meta { font-size: 12px; color: var(--muted); }
       .meta b { color: var(--text); font-weight: 600; }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -87,6 +88,8 @@
       .stage.tool { color: var(--green); } .step.tool { border-left: 3px solid var(--green); }
       .stage.llm { color: var(--accent); } .step.llm { border-left: 3px solid var(--accent); }
       .stage.memory { color: var(--amber); } .step.memory { border-left: 3px solid var(--amber); }
+      .stage.fulfillment { color: #1abc9c; } .step.fulfillment { border-left: 3px solid #1abc9c; min-width: 170px; }
+      .step.fulfillment.warn { border-left: 3px solid var(--amber); }
 
       .mem { padding: 0 16px 16px; }
       .mem pre {
@@ -105,7 +108,7 @@
         <span class="logo">🛰️</span>
         <div>
           <h1>GOOPHER — Developer Portal</h1>
-          <div class="sub">Live end-to-end flow · auth → preprocess → ORCHESTRATOR → worker sub-agents → tools → memory</div>
+          <div class="sub">Live end-to-end flow · auth → preprocess → ORCHESTRATOR → worker sub-agents → tools → memory · + order-management fulfillment pipeline</div>
         </div>
       </div>
       <div class="status"><span id="dot" class="dot"></span><span id="statusText">connecting…</span></div>
@@ -119,6 +122,7 @@
       <span class="chip"><i style="background:#c8102e"></i> Error / fell back to backup</span>
       <span class="chip"><i style="background:#1f6feb"></i> Worker sub-agent (inventory / order / checkout)</span>
       <span class="chip"><i style="background:#2ea043"></i> Tool (called by the worker)</span>
+      <span class="chip"><i style="background:#1abc9c"></i> Order-management / fulfillment stage</span>
     </div>
 
     <main id="feed">
@@ -137,7 +141,7 @@
       const STAGE_LABEL = {
         auth: "AUTH", session: "SESSION", preprocess: "PRE-PROCESS",
         orchestrator: "ORCHESTRATOR", subagent: "WORKER SUB-AGENT",
-        tool: "TOOL", llm: "LLM", memory: "MEMORY",
+        tool: "TOOL", llm: "LLM", memory: "MEMORY", fulfillment: "FULFILLMENT",
       };
 
       function esc(s) {
@@ -150,7 +154,8 @@
         const el = document.createElement("div");
         // Only a genuine failure (e.g. "ADK ... FAILED") gets the red .failed style.
         const failed = /fail|error/i.test(step.name || "");
-        el.className = `step ${step.stage}${failed ? " failed" : ""}`;
+        const warn = (step.data && step.data.status === "warn");
+        el.className = `step ${step.stage}${failed ? " failed" : ""}${warn ? " warn" : ""}`;
         el.innerHTML = `
           <div class="stage ${step.stage}${failed ? " failed" : ""}">${STAGE_LABEL[step.stage] || step.stage}</div>
           <div class="name">${esc(step.name)}</div>

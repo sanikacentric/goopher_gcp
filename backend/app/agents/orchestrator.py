@@ -55,16 +55,17 @@ You are GOOPHER, the MAIN orchestrator agent. You are in charge of the whole
 turn and you coordinate your sub-agents (each is a tool you call), then compose
 the final customer-facing reply.
 
-Do this on EVERY turn, in order:
-1. Call `context_pipeline` FIRST — it recalls session memory, classifies the
-   input modality, and detects the customer's language (all in one step).
-2. Delegate to the WORKER sub-agent that fits the request, to get the real data:
+Do this on EVERY turn, calling your sub-agents IN THIS ORDER:
+1. `memory_agent`   — recall recent conversation context for this session.
+2. `modality_agent` — classify the input (text/voice/image/file) → normalized text.
+3. `language_agent` — detect the customer's language + localization directive.
+4. Delegate to the WORKER sub-agent that fits the request, to get the real data:
      - product availability / price / stock / "do you have…" / "show me…"
        -> `inventory_agent` (owns the inventory tools)
      - order status / tracking / "where is my order" / bulk orders
        -> `order_agent` (owns the order tools)
-3. Call `channel_agent` to get the formatting directive for the active channel.
-4. Compose a concise, grounded reply in the detected language and channel style.
+5. `channel_agent` — get the formatting directive for the active channel.
+6. Compose a concise, grounded reply in the detected language and channel style.
 
 You are the decision-maker; the others are your sub-agents. Never invent product
 or order facts — use only what the worker sub-agent returned. Never claim the
@@ -77,18 +78,21 @@ store sells only one category.
 # --------------------------------------------------------------------------- #
 def build_root_agent():
     """
-    Construct the ADK multi-agent tree with a true delegation hierarchy:
+    Construct the ADK multi-agent tree. goopher_orchestrator is the ROOT/main
+    agent; all others are sub-agents under it (exposed as AgentTools):
 
-        goopher_orchestrator (root, Gemini)
-          ├─ delegates to → inventory_agent  ──owns──► inventory tools
-          ├─ delegates to → order_agent      ──owns──► order tools
-          ├─ delegates to → language_agent   (localization)
-          └─ delegates to → channel_agent    (web/phone formatting)
+        goopher_orchestrator (ROOT, Gemini)
+          ├─ memory_agent     ──► recall_session_memory
+          ├─ modality_agent   ──► detect_modality
+          ├─ language_agent   ──► detect_language
+          ├─ inventory_agent  ──owns──► inventory tools
+          ├─ order_agent      ──owns──► order tools
+          └─ channel_agent    ──► select_channel
 
-    The orchestrator does NOT call retail tools directly. It SELECTS a worker
-    sub-agent for the task and delegates to it; the WORKER agent owns and calls
-    the actual tools. This is the canonical ADK pattern and is what shows up in
-    traces as: invoke_agent orchestrator → invoke_agent inventory_agent →
+    The orchestrator coordinates these sub-agents (per its instruction: memory →
+    modality → language → worker → channel) and composes the final reply. Worker
+    sub-agents OWN and call the retail tools. Shows in traces as:
+    invoke_agent goopher_orchestrator → invoke_agent inventory_agent →
     execute_tool search_inventory.
 
     Imported lazily so the module loads even where google-adk isn't installed.
@@ -107,7 +111,7 @@ def build_root_agent():
         if _settings.google_api_key:
             os.environ["GOOGLE_API_KEY"] = _settings.google_api_key
 
-    from google.adk.agents import LlmAgent, SequentialAgent
+    from google.adk.agents import LlmAgent
     from google.adk.tools.agent_tool import AgentTool
 
     model = _settings.gemini_model
@@ -152,34 +156,26 @@ def build_root_agent():
     channel_sub = sp.build_channel_agent(model)
     memory_sub = sp.build_memory_agent(model)
 
-    # --- Guaranteed context-prep chain (memory -> modality -> language) ---
-    # A SequentialAgent so all three ALWAYS run in order. It is exposed to the
-    # ROOT orchestrator as a SINGLE tool the orchestrator invokes first — it is
-    # NOT a peer of the orchestrator. The orchestrator stays on top.
-    context_pipeline = SequentialAgent(
-        name="context_pipeline",
-        description="Prepares the turn: recalls memory, classifies modality, and "
-                    "detects language (runs all three in order).",
-        sub_agents=[memory_sub, modality_sub, language_sub],
-    )
-
     # --- ROOT: goopher_orchestrator — the MAIN unified agent ---
-    # It is the parent of every sub-agent. Per turn it: (1) calls
-    # `context_pipeline` to prepare context, (2) delegates to the right WORKER
-    # (inventory_agent | order_agent), (3) calls `channel_agent` to format, then
-    # composes the final reply. All others are sub-agents UNDER the orchestrator.
+    # It is the parent of every sub-agent and stays on top. Each sub-agent is a
+    # plain LlmAgent exposed as an AgentTool (a SequentialAgent CANNOT be wrapped
+    # as an AgentTool — it breaks the single-response tool contract, which is why
+    # context_pipeline errored in the trace). Guaranteed ordering (memory →
+    # modality → language → worker → channel) is enforced by the instruction.
     orchestrator = LlmAgent(
         name="goopher_orchestrator",
         model=model,
         description="The main unified GOOPHER agent. Coordinates all sub-agents "
-                    "(context prep, inventory, order, channel) and composes the "
-                    "customer-facing reply for clothing & food retail.",
+                    "(memory, modality, language, inventory, order, channel) and "
+                    "composes the customer-facing reply for clothing & food retail.",
         instruction=ROOT_INSTRUCTION + "\n\n" + ORCHESTRATOR_DELEGATION,
         tools=[
-            AgentTool(agent=context_pipeline),   # 1. always-run context prep
-            AgentTool(agent=inventory_agent),    # 2a. worker (products)
-            AgentTool(agent=order_agent),        # 2b. worker (orders)
-            AgentTool(agent=channel_sub),        # 3. formatting
+            AgentTool(agent=memory_sub),         # 1. recall context
+            AgentTool(agent=modality_sub),       # 2. classify input
+            AgentTool(agent=language_sub),       # 3. detect language
+            AgentTool(agent=inventory_agent),    # 4a. worker (products)
+            AgentTool(agent=order_agent),        # 4b. worker (orders)
+            AgentTool(agent=channel_sub),        # 5. formatting
         ],
     )
     return orchestrator
@@ -277,7 +273,7 @@ class AgentService:
         # back in `used_tools` from the ADK run). Worker agents OWN the tools, so
         # a worker name in used_tools means the orchestrator delegated to it; the
         # actual tool names appear too (the worker called them).
-        SUBAGENT_NAMES = {"context_pipeline", "inventory_agent", "order_agent",
+        SUBAGENT_NAMES = {"inventory_agent", "order_agent",
                           "memory_agent", "modality_agent", "language_agent",
                           "channel_agent"}
 

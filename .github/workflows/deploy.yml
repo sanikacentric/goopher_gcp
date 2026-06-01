@@ -72,8 +72,14 @@ jobs:
 
       - name: Check for GCP credentials
         id: gate
+        env:
+          # Pass secrets through env (handles the multi-line SA-key JSON safely).
+          # Inlining ${{ secrets.GCP_SA_KEY }} directly in bash breaks the `if`
+          # because the JSON spans multiple lines -> the gate always read "empty".
+          SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          PROJ: ${{ secrets.GCP_PROJECT_ID }}
         run: |
-          if [ -n "${{ secrets.GCP_SA_KEY }}" ] && [ -n "${{ secrets.GCP_PROJECT_ID }}" ]; then
+          if [ -n "$SA_KEY" ] && [ -n "$PROJ" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"

@@ -79,7 +79,10 @@
       .stage.auth { color: var(--purple); } .step.auth { border-left: 3px solid var(--purple); }
       .stage.session { color: var(--amber); } .step.session { border-left: 3px solid var(--amber); }
       .stage.preprocess { color: #56a3a6; } .step.preprocess { border-left: 3px solid #56a3a6; }
-      .stage.orchestrator { color: var(--accent); } .step.orchestrator { border-left: 3px solid var(--accent); background:#221016; }
+      .stage.orchestrator { color: #e3a008; } .step.orchestrator { border-left: 3px solid #e3a008; background:#241d0c; }
+      /* A genuine error step (e.g. ADK failed -> backup) is the ONLY red box. */
+      .step.orchestrator.failed { border-left: 3px solid var(--accent); background:#221016; }
+      .stage.orchestrator.failed { color: var(--accent); }
       .stage.subagent { color: var(--blue); } .step.subagent { border-left: 3px solid var(--blue); }
       .stage.tool { color: var(--green); } .step.tool { border-left: 3px solid var(--green); }
       .stage.llm { color: var(--accent); } .step.llm { border-left: 3px solid var(--accent); }
@@ -112,7 +115,8 @@
       <span class="chip"><i style="background:#8957e5"></i> Auth</span>
       <span class="chip"><i style="background:#d29922"></i> Session / Memory</span>
       <span class="chip"><i style="background:#56a3a6"></i> Pre-process (deterministic, no LLM)</span>
-      <span class="chip"><i style="background:#c8102e"></i> Orchestrator (ROOT ADK agent — decides & delegates)</span>
+      <span class="chip"><i style="background:#e3a008"></i> Orchestrator (ROOT ADK agent — decides & delegates)</span>
+      <span class="chip"><i style="background:#c8102e"></i> Error / fell back to backup</span>
       <span class="chip"><i style="background:#1f6feb"></i> Worker sub-agent (inventory / order)</span>
       <span class="chip"><i style="background:#2ea043"></i> Tool (called by the worker)</span>
     </div>
@@ -144,9 +148,11 @@
         const wrap = document.createElement("div");
         wrap.style.display = "contents";
         const el = document.createElement("div");
-        el.className = `step ${step.stage}`;
+        // Only a genuine failure (e.g. "ADK ... FAILED") gets the red .failed style.
+        const failed = /fail|error/i.test(step.name || "");
+        el.className = `step ${step.stage}${failed ? " failed" : ""}`;
         el.innerHTML = `
-          <div class="stage ${step.stage}">${STAGE_LABEL[step.stage] || step.stage}</div>
+          <div class="stage ${step.stage}${failed ? " failed" : ""}">${STAGE_LABEL[step.stage] || step.stage}</div>
           <div class="name">${esc(step.name)}</div>
           ${step.detail ? `<div class="detail">${esc(step.detail)}</div>` : ""}
           ${step.ms ? `<div class="ms">${step.ms} ms</div>` : ""}`;

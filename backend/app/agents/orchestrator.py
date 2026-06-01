@@ -513,6 +513,7 @@ class AgentService:
 
         used_tools: list[str] = []
         final_text = ""
+        last_text = ""  # last non-empty text from ANY event (resilience fallback)
         for event in self._adk_runner.run(
             user_id=customer_id, session_id=session_id, new_message=content
         ):
@@ -520,14 +521,20 @@ class AgentService:
             if getattr(event, "get_function_calls", None):
                 for fc in event.get_function_calls() or []:
                     used_tools.append(fc.name)
-            if getattr(event, "is_final_response", lambda: False)():
-                if event.content and event.content.parts:
-                    final_text = "".join(p.text or "" for p in event.content.parts)
+            if event.content and event.content.parts:
+                txt = "".join(p.text or "" for p in event.content.parts)
+                if txt.strip():
+                    last_text = txt
+                if getattr(event, "is_final_response", lambda: False)():
+                    final_text = txt
 
-        if not final_text.strip():
-            # Don't return an empty apology — let _generate fall back.
+        # Prefer the final response; if it was empty (e.g. a tool-only sub-agent
+        # ended the stream), fall back to the last text the orchestrator emitted
+        # before raising — only raise if there is genuinely nothing to return.
+        reply = final_text.strip() or last_text.strip()
+        if not reply:
             raise RuntimeError("ADK produced no text response")
-        return final_text, used_tools
+        return reply, used_tools
 
     def _generate_fallback(self, session_id: str, text: str, customer_id: str,
                            directives: str, channel: str, language: str

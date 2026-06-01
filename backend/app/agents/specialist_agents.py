@@ -93,14 +93,20 @@ def recall_session_memory() -> dict:
 # --------------------------------------------------------------------------- #
 # ADK sub-agent builders
 # --------------------------------------------------------------------------- #
+# Each specialist MUST end its turn with a short TEXT summary of the tool result.
+# An ADK AgentTool wraps a sub-agent and expects a final text response; if the
+# sub-agent calls its tool but emits NO text, the AgentTool raises ("no text
+# response") and the whole turn fails. The explicit "then state ... in text"
+# instruction guarantees a final text part.
 def build_modality_agent(model: str):
     from google.adk.agents import LlmAgent
     return LlmAgent(
         name="modality_agent", model=model,
         description="Interprets the input modality (text/voice/image/file) and "
                     "returns the normalized request text.",
-        instruction="Call detect_modality to classify the input and get the "
-                    "normalized text. Report the modality and the text.",
+        instruction="Call detect_modality. Then reply in ONE short sentence "
+                    "stating the modality and the normalized text. Always reply "
+                    "with text after the tool call.",
         tools=[detect_modality],
     )
 
@@ -111,8 +117,9 @@ def build_language_agent(model: str):
         name="language_agent", model=model,
         description="Detects the customer's language so the final reply can be "
                     "localized.",
-        instruction="Call detect_language to determine the language and the "
-                    "localization directive. Report the ISO code.",
+        instruction="Call detect_language. Then reply in ONE short sentence "
+                    "stating the detected ISO language code and directive. Always "
+                    "reply with text after the tool call.",
         tools=[detect_language],
     )
 
@@ -123,8 +130,9 @@ def build_channel_agent(model: str):
         name="channel_agent", model=model,
         description="Determines how to format the reply for the active channel "
                     "(web vs phone/voice).",
-        instruction="Call select_channel to get the channel and its formatting "
-                    "directive (markdown for web, voice-safe for phone).",
+        instruction="Call select_channel. Then reply in ONE short sentence "
+                    "stating the channel and its formatting directive. Always "
+                    "reply with text after the tool call.",
         tools=[select_channel],
     )
 
@@ -135,7 +143,8 @@ def build_memory_agent(model: str):
         name="memory_agent", model=model,
         description="Recalls prior conversation context for the current session "
                     "to keep replies consistent across turns and switches.",
-        instruction="Call recall_session_memory to fetch recent history and the "
-                    "remembered language/channel for this session.",
+        instruction="Call recall_session_memory. Then reply in ONE short sentence "
+                    "summarizing the recalled context (or 'no prior context'). "
+                    "Always reply with text after the tool call.",
         tools=[recall_session_memory],
     )

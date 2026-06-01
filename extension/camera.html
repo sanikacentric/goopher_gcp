@@ -41,6 +41,12 @@
       <button id="capture" class="primary" disabled>📸 Capture &amp; ask GOOPHER</button>
       <button id="retry" class="ghost" hidden>Try again</button>
     </div>
+    <div class="row">
+      <!-- Safety net: if the live camera is blocked (e.g. in use by Google
+           Meet), use a saved photo and still demo Gemini Vision. -->
+      <button id="uploadBtn" class="ghost">📁 Use a saved photo instead</button>
+      <input id="fileInput" type="file" accept="image/*" hidden />
+    </div>
     <script src="camera.js"></script>
   </body>
 </html>

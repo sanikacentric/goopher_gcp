@@ -7,7 +7,7 @@ import { getCustomer, getToken, getMyOrders, login, logout, sendChat, sendVision
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.4.3 — camera Vision (demo-safe: typed cmd = camera-only)");
+console.log("GOOPHER side panel v0.4.5 — camera Vision: voice in/out + photo-upload fallback");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -400,8 +400,9 @@ function setupCamera() {
     lastVisionId = msg.id || null;
 
     const question = (msg.question || "").trim();
-    // Show exactly what the customer typed (if anything) — don't fabricate a
-    // question. With no text, the backend defaults to "identify + price".
+    const viaVoice = !!msg.via_voice;   // spoken question → speak the answer
+    // Show exactly what the customer said/typed — don't fabricate a question.
+    // With nothing given, the backend defaults to "identify + price".
     addMessage(question ? `📷 ${question}` : "📷 (sent a photo)", "user");
     showTyping();
     try {
@@ -414,7 +415,7 @@ function setupCamera() {
         language: els.language.value,
       });
       hideTyping();
-      await deliverResponse(resp, false);
+      await deliverResponse(resp, viaVoice);
     } catch (err) {
       hideTyping();
       if (err.message === "UNAUTHORIZED") { await logout(); showLogin(); }

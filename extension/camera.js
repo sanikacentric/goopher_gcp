@@ -13,6 +13,8 @@ const statusEl = document.getElementById("status");
 const transcriptEl = document.getElementById("transcript");
 const captureBtn = document.getElementById("capture");
 const retryBtn = document.getElementById("retry");
+const uploadBtn = document.getElementById("uploadBtn");
+const fileInput = document.getElementById("fileInput");
 
 // Typed fallback question + speech language come in via the query string.
 const params = new URLSearchParams(location.search);
@@ -150,11 +152,38 @@ captureBtn.addEventListener("click", () => {
     image_b64: b64,
     mime_type: "image/jpeg",
     question,
+    // True when the question was SPOKEN → the side panel reads the answer aloud.
+    via_voice: useVoice,
     id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
   });
 });
 
 retryBtn.addEventListener("click", run);
+
+// --- safety net: use a saved photo instead of the live camera ---
+uploadBtn.addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files && fileInput.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = String(reader.result || "");
+    const b64 = dataUrl.split(",")[1] || "";
+    if (!b64) { setStatus("Couldn't read that image."); return; }
+    stopAll();
+    setStatus("Sending photo to GOOPHER…");
+    relayAndClose({
+      type: "goopher_vision_image",
+      image_b64: b64,
+      mime_type: file.type || "image/jpeg",
+      question: typedQuestion,   // uploaded photos use the typed question
+      via_voice: false,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    });
+  };
+  reader.readAsDataURL(file);
+});
+
 window.addEventListener("beforeunload", stopAll);
 
 run();

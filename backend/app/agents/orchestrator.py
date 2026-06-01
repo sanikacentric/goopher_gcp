@@ -288,30 +288,36 @@ class AgentService:
             # orchestrator (Phase 2) is what drives the real multi-agent flow.
             mem = self.memory.get(req.session_id, customer_id)
 
+            # Each preprocessing step is wrapped in its own OTel span so it ALSO
+            # appears in Cloud Trace (nested under chat_turn), not just the dev
+            # portal — otherwise these plain-Python helpers produce no trace span.
             _t0 = _time.perf_counter()
-            modality = modality_agent.classify_modality(req.message, req.attachments)
-            # Voice dictation reaches us as text (browser speech-to-text); the
-            # `voice` flag is the only signal it originated as speech.
-            if getattr(req, "voice", False) and modality == "text":
-                modality = "voice"
-            text = modality_agent.normalize_to_text(
-                req.message, req.attachments, _settings.gemini_model
-            )
+            with span("preprocess.modality_agent"):
+                modality = modality_agent.classify_modality(req.message, req.attachments)
+                # Voice dictation reaches us as text (browser speech-to-text); the
+                # `voice` flag is the only signal it originated as speech.
+                if getattr(req, "voice", False) and modality == "text":
+                    modality = "voice"
+                text = modality_agent.normalize_to_text(
+                    req.message, req.attachments, _settings.gemini_model
+                )
             _mdetail = (f"modality={modality} "
                         f"({'voice transcript' if modality == 'voice' else str(len(req.attachments)) + ' attachment(s)'})")
             ft.step("preprocess", "detect modality", _mdetail,
                     ms=(_time.perf_counter() - _t0) * 1000, modality=modality)
 
             _t0 = _time.perf_counter()
-            language = req.language or language_agent.detect_language(
-                text, default=self.memory.recall(req.session_id, "language", "en")
-            )
+            with span("preprocess.language_agent"):
+                language = req.language or language_agent.detect_language(
+                    text, default=self.memory.recall(req.session_id, "language", "en")
+                )
             self.memory.remember(req.session_id, "language", language)
             ft.step("preprocess", "detect language", f"language = {language}",
                     ms=(_time.perf_counter() - _t0) * 1000, language=language)
 
-            channel = req.channel
-            self.memory.remember(req.session_id, "channel", channel)
+            with span("preprocess.channel_agent"):
+                channel = req.channel
+                self.memory.remember(req.session_id, "channel", channel)
             ft.step("preprocess", "select channel", f"channel = {channel}", channel=channel)
 
             # Record the user turn BEFORE answering (memory / context).

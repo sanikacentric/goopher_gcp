@@ -21,7 +21,8 @@ def test_dev_recent_empty_ok():
 
 def test_flow_captured_after_turn():
     """A login + chat must produce a 'login' and a 'turn' flow record with the
-    full pipeline of stages (auth → sub-agents → tool → memory)."""
+    full pipeline of stages: auth → session → preprocess → orchestrator → tool
+    → memory."""
     token = client.post("/auth/login", json=GOOD).json()["access_token"]
     client.post(
         "/chat",
@@ -35,6 +36,6 @@ def test_flow_captured_after_turn():
     turn = [r for r in recs if r["kind"] == "turn" and r["session_id"] == "devtest"][-1]
     stages = {s["stage"] for s in turn["steps"]}
     # The end-to-end pipeline the portal visualizes:
-    assert {"auth", "session", "subagent", "tool", "llm", "memory"} <= stages
+    assert {"auth", "session", "preprocess", "orchestrator", "tool", "memory"} <= stages
     assert turn["used_tools"]  # at least one tool ran
     assert "history_preview" in turn["memory"]

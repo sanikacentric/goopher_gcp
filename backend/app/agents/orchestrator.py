@@ -514,8 +514,10 @@ class AgentService:
             data = place_bulk_order(customer_id, variant_ids=variant_ids or None, qty_each=1)
             used_tools.append("checkout_agent")
             self._last_checkout = self._checkout_payload(data, bulk=True)
-            facts = self._format_bulk_checkout(data)
-            return self._phrase(text, facts, directives), used_tools
+            # Return the deterministic receipt directly (NOT via the LLM) so the
+            # cart + staged lines always appear verbatim — even on a stale
+            # extension that shows resp.reply instead of the staged bubbles.
+            return self._format_bulk_checkout(data), used_tools
 
         # --- intent: PLACE AN ORDER (single item) ---
         if any(k in lowered for k in ("place an order", "place order", "checkout",
@@ -544,8 +546,10 @@ class AgentService:
                     # Bare "place an order" with no product named -> default demo item.
                     data = place_order(customer_id, variant_id="", qty=qty)
             self._last_checkout = self._checkout_payload(data, bulk=False)
-            facts = self._format_checkout(data)
-            return self._phrase(text, facts, directives), used_tools
+            # Return the deterministic receipt directly (NOT via the LLM) so the
+            # cart + staged lines always appear verbatim — even on a stale
+            # extension that shows resp.reply instead of the staged bubbles.
+            return self._format_checkout(data), used_tools
 
         # --- intent: bulk orders (high volume) ---
         order_ids = modality_agent.extract_order_ids_from_text(text)
@@ -758,20 +762,43 @@ class AgentService:
         return ""
 
     @staticmethod
+    def _cart_block(data: dict) -> str:
+        """A readable cart receipt from the structured cart lines."""
+        cart = data.get("cart") or []
+        lines = ["🛒 Your cart"]
+        if cart:
+            for it in cart:
+                opt = ", ".join(x for x in (it.get("color"), it.get("size")) if x)
+                opt = f" ({opt})" if opt else ""
+                lines.append(
+                    f"  • {it['name']}{opt} × {it['qty']}  —  "
+                    f"${it['unit_price']:.2f} ea = ${it['line_total']:.2f}"
+                )
+        else:  # bulk/legacy: fall back to pre-formatted item strings
+            for s in data.get("items", []):
+                lines.append(f"  • {s}")
+        sub = data.get("subtotal", data.get("total", 0.0))
+        lines.append(f"  ──────────")
+        lines.append(f"  Subtotal: ${sub:.2f}")
+        return "\n".join(lines)
+
+    @staticmethod
     def _format_checkout(data: dict) -> str:
         if not data.get("ok"):
             return data.get("message", "Couldn't place the order right now.")
         pay = data.get("payment", {})
-        return (
-            "🛒 Added to cart → 💳 processing payment…\n"
+        out = [
+            AgentService._cart_block(data),
+            "💳 Processing payment…",
             f"✅ Payment {pay.get('status', 'SUCCESS')} "
-            f"(txn {pay.get('transaction_id', '—')}, ${data['total']:.2f}).\n"
-            f"🎉 Order {data['order_id']} placed!\n"
-            f"- Item: {data['item']}\n"
-            f"- Total: ${data['total']:.2f}\n"
-            f"- Status: {data['status']} · Est. delivery {data['estimated_delivery']}\n"
-            + AgentService._fulfillment_line(data)
-        )
+            f"(txn {pay.get('transaction_id', '—')}) — ${data['total']:.2f} charged.",
+            f"🎉 ORDER PLACED — {data['order_id']} · Status {data['status']} · "
+            f"Est. delivery {data['estimated_delivery']}",
+        ]
+        fl = AgentService._fulfillment_line(data)
+        if fl:
+            out.append(fl)
+        return "\n".join(out)
 
     @staticmethod
     def _checkout_payload(data: dict, bulk: bool) -> dict:
@@ -816,20 +843,18 @@ class AgentService:
         if not data.get("ok"):
             return data.get("message", "Couldn't place the bulk order right now.")
         pay = data.get("payment", {})
-        lines = [
-            f"🛒 Added {data['line_count']} item(s) to cart → 💳 processing payment…",
+        out = [
+            AgentService._cart_block(data),
+            "💳 Processing payment…",
             f"✅ Payment {pay.get('status', 'SUCCESS')} "
-            f"(txn {pay.get('transaction_id', '—')}, ${data['total']:.2f}).",
-            f"🎉 Bulk order {data['order_id']} placed!",
+            f"(txn {pay.get('transaction_id', '—')}) — ${data['total']:.2f} charged.",
+            f"🎉 BULK ORDER PLACED — {data['order_id']} ({data['line_count']} items) · "
+            f"Status {data['status']} · Est. delivery {data['estimated_delivery']}",
         ]
-        for it in data.get("items", []):
-            lines.append(f"- {it}")
-        lines.append(f"- Total: ${data['total']:.2f}  ·  Status: {data['status']}  "
-                     f"·  Est. delivery {data['estimated_delivery']}")
         fl = AgentService._fulfillment_line(data)
         if fl:
-            lines.append(fl)
-        return "\n".join(lines)
+            out.append(fl)
+        return "\n".join(out)
 
 
 # Process-wide singleton.

@@ -8,7 +8,7 @@
       body {
         margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         background: #1a1a1a; color: #fff; display: flex; flex-direction: column;
-        align-items: center; justify-content: center; height: 100vh; gap: 12px;
+        align-items: center; justify-content: center; height: 100vh; gap: 10px;
         text-align: center; padding: 14px;
       }
       #preview {
@@ -16,7 +16,13 @@
         aspect-ratio: 4 / 3; object-fit: cover;
       }
       #status { font-size: 13px; color: #ccc; min-height: 18px; }
-      .row { display: flex; gap: 10px; }
+      #transcript {
+        font-size: 14px; color: #fff; min-height: 20px; font-style: italic;
+        background: #2a2a2a; border-radius: 8px; padding: 6px 10px; width: 100%;
+        max-width: 380px; box-sizing: border-box;
+      }
+      #transcript.empty { color: #888; }
+      .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
       button {
         padding: 10px 16px; border: none; border-radius: 10px; cursor: pointer;
         font-weight: 600; font-size: 14px;
@@ -30,6 +36,7 @@
     <video id="preview" autoplay playsinline muted></video>
     <canvas id="canvas" hidden></canvas>
     <div id="status">Starting camera…</div>
+    <div id="transcript" class="empty">🎤 Say your question, e.g. “place an order” or “what’s the price?”</div>
     <div class="row">
       <button id="capture" class="primary" disabled>📸 Capture &amp; ask GOOPHER</button>
       <button id="retry" class="ghost" hidden>Try again</button>

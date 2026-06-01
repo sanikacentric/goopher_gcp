@@ -7,7 +7,7 @@ import { getCustomer, getToken, getMyOrders, login, logout, sendChat, sendVision
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.4.1 — camera Vision subagent (Gemini Vision via Vertex)");
+console.log("GOOPHER side panel v0.4.2 — camera Vision + spoken question (show it & say it)");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -423,9 +423,12 @@ function setupCamera() {
   });
 
   els.camBtn.addEventListener("click", async () => {
-    // Pass whatever the customer typed as the question (e.g. "place an order").
+    // The customer can SPEAK the question in the camera window; whatever they
+    // typed here is passed as a fallback. Pass the speech language too.
     const q = els.messageInput.value.trim();
-    const url = chrome.runtime.getURL(`camera.html?q=${encodeURIComponent(q)}`);
+    const langCode = LANG_BCP47[els.language.value] || "en-US";
+    const url = chrome.runtime.getURL(
+      `camera.html?q=${encodeURIComponent(q)}&lang=${encodeURIComponent(langCode)}`);
     if (camWindowId !== null) {
       try { await chrome.windows.update(camWindowId, { focused: true }); return; }
       catch (_) { camWindowId = null; }

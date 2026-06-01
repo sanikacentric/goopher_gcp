@@ -78,6 +78,8 @@
       /* stage colors */
       .stage.auth { color: var(--purple); } .step.auth { border-left: 3px solid var(--purple); }
       .stage.session { color: var(--amber); } .step.session { border-left: 3px solid var(--amber); }
+      .stage.preprocess { color: #56a3a6; } .step.preprocess { border-left: 3px solid #56a3a6; }
+      .stage.orchestrator { color: var(--accent); } .step.orchestrator { border-left: 3px solid var(--accent); background:#221016; }
       .stage.subagent { color: var(--blue); } .step.subagent { border-left: 3px solid var(--blue); }
       .stage.tool { color: var(--green); } .step.tool { border-left: 3px solid var(--green); }
       .stage.llm { color: var(--accent); } .step.llm { border-left: 3px solid var(--accent); }
@@ -100,7 +102,7 @@
         <span class="logo">🛰️</span>
         <div>
           <h1>GOOPHER — Developer Portal</h1>
-          <div class="sub">Live end-to-end agent flow · auth → sub-agents → tools → memory</div>
+          <div class="sub">Live end-to-end flow · auth → preprocess → ORCHESTRATOR → worker sub-agents → tools → memory</div>
         </div>
       </div>
       <div class="status"><span id="dot" class="dot"></span><span id="statusText">connecting…</span></div>
@@ -109,9 +111,10 @@
     <div class="legend">
       <span class="chip"><i style="background:#8957e5"></i> Auth</span>
       <span class="chip"><i style="background:#d29922"></i> Session / Memory</span>
-      <span class="chip"><i style="background:#1f6feb"></i> Sub-agent (modality / language / channel)</span>
-      <span class="chip"><i style="background:#2ea043"></i> Tool (inventory / order)</span>
-      <span class="chip"><i style="background:#c8102e"></i> LLM (Gemini / OpenAI)</span>
+      <span class="chip"><i style="background:#56a3a6"></i> Pre-process (deterministic, no LLM)</span>
+      <span class="chip"><i style="background:#c8102e"></i> Orchestrator (ROOT ADK agent — decides & delegates)</span>
+      <span class="chip"><i style="background:#1f6feb"></i> Worker sub-agent (inventory / order)</span>
+      <span class="chip"><i style="background:#2ea043"></i> Tool (called by the worker)</span>
     </div>
 
     <main id="feed">
@@ -128,7 +131,8 @@
       const statusText = document.getElementById("statusText");
 
       const STAGE_LABEL = {
-        auth: "AUTH", session: "SESSION", subagent: "SUB-AGENT",
+        auth: "AUTH", session: "SESSION", preprocess: "PRE-PROCESS",
+        orchestrator: "ORCHESTRATOR", subagent: "WORKER SUB-AGENT",
         tool: "TOOL", llm: "LLM", memory: "MEMORY",
       };
 

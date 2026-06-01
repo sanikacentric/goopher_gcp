@@ -281,11 +281,11 @@ class AgentService:
             ft.step("session", "memory.get",
                     f"session_id={req.session_id} (backend={_settings.db_backend})")
 
-            # The modality/language/channel sub-agents run EVERY turn to route the
-            # request (detect modality, detect language, select channel style).
-            # We always show them in the portal — they genuinely execute. The ADK
-            # orchestrator may ADDITIONALLY invoke them as AgentTools; if it does,
-            # we annotate that (no duplicate row).
+            # --- PHASE 1: deterministic PRE-PROCESSING (plain Python, no LLM) ---
+            # Fast request normalization that runs BEFORE the ADK orchestrator, to
+            # detect modality/language/channel for routing + the final reply. These
+            # are NOT the ADK agents — labeled "preprocess" so it's clear the
+            # orchestrator (Phase 2) is what drives the real multi-agent flow.
             mem = self.memory.get(req.session_id, customer_id)
 
             _t0 = _time.perf_counter()
@@ -299,7 +299,7 @@ class AgentService:
             )
             _mdetail = (f"modality={modality} "
                         f"({'voice transcript' if modality == 'voice' else str(len(req.attachments)) + ' attachment(s)'})")
-            ft.step("subagent", "modality_agent", _mdetail,
+            ft.step("preprocess", "detect modality", _mdetail,
                     ms=(_time.perf_counter() - _t0) * 1000, modality=modality)
 
             _t0 = _time.perf_counter()
@@ -307,12 +307,12 @@ class AgentService:
                 text, default=self.memory.recall(req.session_id, "language", "en")
             )
             self.memory.remember(req.session_id, "language", language)
-            ft.step("subagent", "language_agent", f"detected language = {language}",
+            ft.step("preprocess", "detect language", f"language = {language}",
                     ms=(_time.perf_counter() - _t0) * 1000, language=language)
 
             channel = req.channel
             self.memory.remember(req.session_id, "channel", channel)
-            ft.step("subagent", "channel_agent", f"channel = {channel}", channel=channel)
+            ft.step("preprocess", "select channel", f"channel = {channel}", channel=channel)
 
             # Record the user turn BEFORE answering (memory / context).
             self.memory.add_turn(
@@ -321,8 +321,9 @@ class AgentService:
                      language=language, modality=modality),
             )
 
-            # 4) ORCHESTRATOR: route to tools + compose the reply. Real ADK agent
-            #    tree when on the ADK path; deterministic engine as backup.
+            # --- PHASE 2: the ADK ORCHESTRATOR drives the multi-agent flow ---
+            # The orchestrator SELECTS a worker sub-agent and delegates; the worker
+            # owns and calls the tools. This is the start of the real agent work.
             _t0 = _time.perf_counter()
             reply, used_tools, path = self._generate(req.session_id, text,
                                                      customer_id, channel, language)
@@ -330,17 +331,19 @@ class AgentService:
 
             orchestrator_label = ("invoke_agent: goopher_orchestrator (ADK + gemini)"
                                   if path == "adk"
-                                  else f"orchestrator: deterministic router + {_settings.llm_provider}")
-            ft.step("llm", orchestrator_label,
-                    "selects tools and composes the grounded reply", ms=gen_ms)
+                                  else f"orchestrator: deterministic router ({_settings.llm_provider})")
+            ft.step("orchestrator", orchestrator_label,
+                    "ROOT agent — selects a worker sub-agent and delegates", ms=gen_ms)
 
-            # Tool / AgentTool invocations the orchestrator actually made.
+            # The worker sub-agents the orchestrator delegated to, and the tools
+            # those workers called (rendered AFTER the orchestrator, as children).
             for name in used_tools:
                 if name in SUBAGENT_NAMES:
-                    ft.step("subagent", f"{name} (invoked by orchestrator)",
-                            "ADK AgentTool call", tool=name)
+                    ft.step("subagent", f"↳ {name}",
+                            "worker sub-agent invoked by orchestrator", tool=name)
                 else:
-                    ft.step("tool", name, "inventory/order tool executed", tool=name)
+                    ft.step("tool", f"↳ {name}",
+                            "tool called by the worker sub-agent", tool=name)
             if not used_tools:
                 ft.step("tool", "(no tool call)",
                         "orchestrator answered from context/history")
@@ -348,7 +351,7 @@ class AgentService:
             # 5) CHANNEL post-processing for phone (voice-safe text).
             if channel == "phone":
                 reply = channel_agent.adapt_for_phone(reply)
-                ft.step("subagent", "channel_agent: adapt_for_phone",
+                ft.step("preprocess", "adapt_for_phone",
                         "stripped markdown for voice output")
 
             # Record the assistant turn.

@@ -186,6 +186,65 @@ The dev portal labels the deterministic steps "PRE-PROCESS" and the orchestrator
 
 ---
 
+## 5b. Why checkout is deterministic — the transactional gate
+
+**Principle: the LLM orchestrates and converses; it does not execute
+money-affecting actions. A purchase is transactional — it must be grounded,
+structured, reproducible, and auditable, never improvised by a model.**
+
+Checkout therefore runs through a single shared handler,
+`AgentService._try_checkout()`, called in `run_turn()` **before** the ADK/LLM
+branch. If the message is a transaction ("place an order", "buy …", bulk), it is
+handled by deterministic code and the LLM never touches it. Everything else
+(browsing, stock questions, order status, chit-chat) flows to the ADK agents as
+normal.
+
+```
+run_turn()
+   │  (after deterministic PRE-PROCESS: auth · session · channel/lang/modality)
+   ▼
+   _try_checkout(text, customer_id)   ◄── THE GATE (deterministic, structured)
+   │
+   ├─ transaction?  YES ─► resolve product (by name or SKU; REFUSE, never
+   │                        substitute) → place_order() → simulated payment →
+   │                        run_fulfillment() → REAL ORDER_PLACED DB write →
+   │                        build {checkout payload} + deterministic receipt
+   │                        🛒 cart → 💳 processing → ✅ paid → 🎉 ORDER PLACED
+   │
+   └─ transaction?  NO  ─► ADK path (_generate_adk: orchestrator → worker
+                            sub-agents) OR deterministic fallback
+```
+
+**Why this is the correct approach (the guardrail / "LLM ≠ cashier" pattern):**
+
+| Property | If the LLM did checkout | With the deterministic gate |
+|---|---|---|
+| Determinism | price / total / order-id can vary or be mis-phrased | same input → same output, always |
+| No hallucination | model may invent or drop details | totals, order id, tracking are computed, not generated |
+| Safety on irreversible acts | model implicitly charges / picks a substitute | charging & item selection are explicit, rule-bound code |
+| No silent substitution | "oreo not found → here's a cheez-it" | unresolved item is **refused**, never swapped |
+| Auditability / compliance | hard to prove what was charged | real `ORDER_PLACED` row + full trace in `/dev` |
+| Testability | LLM wording can't be asserted reliably | unit-tested transaction path (no LLM needed) |
+| Latency & cost | extra LLM round-trip per purchase | checkout skips the LLM entirely |
+| Behavioral parity | cloud (ADK on) ≠ local (ADK off) | identical behavior in every environment |
+
+This separation also fixed a real production bug: with the ADK path on in the
+cloud, checkout used to go through the LLM agent, which phrased its own reply and
+never produced the structured cart/`ORDER_PLACED` payload — so the cart silently
+vanished. Routing checkout through the gate makes every path produce the same
+grounded, structured result.
+
+**Trade-off & upgrade path (so the design scales):** the gate currently detects
+intent via keywords ("place an order", "buy", "checkout"). The clean evolution
+keeps the architecture intact — replace the keyword gate with an **LLM
+intent-classifier that only extracts `(intent, product, quantity)` as
+constrained JSON**, while **execution stays in the deterministic handler**. This
+is the same idea as constrained tool/function calling: the model proposes
+parameters; deterministic, validated code performs the transaction. The LLM
+never decides, on its own, to charge a card.
+
+---
+
 ## 6. High-volume order management (Req 3)
 
 Two entry points handle scale:

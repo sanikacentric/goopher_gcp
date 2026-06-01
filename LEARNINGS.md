@@ -252,6 +252,50 @@ independent issues. Each is a useful lesson on its own:
   3. "Guaranteed order" and "smart, on-top orchestrator" are in tension; pick
      deliberately rather than assuming one structure gives both.
 
+### 3.15 The LLM was put in the transactional path — checkout lost its cart
+- **Symptom:** "place an order of oreo cookies" replied with a friendly
+  paragraph ("Your order ID is ORD-50013, $89.95 charged…") but the **cart never
+  appeared** in the GOOPHER chat, and `resp.checkout` (the structured payload the
+  staged UI needs) was `null`. Reproduced only in the **cloud**, not locally.
+- **Root cause (two layers, the second one was the real bug):**
+  1. The cart/receipt logic lived only in the deterministic engine
+     (`_generate_fallback`).
+  2. **The cloud runs `use_adk_path=true`.** So checkout went through the ADK
+     `LlmAgent`, which called `place_order` and then **phrased its own
+     natural-language reply** — and never set `self._last_checkout`. The
+     deterministic cart/receipt code was simply not on the cloud's path, so the
+     structured payload and the itemized cart silently vanished.
+  - An earlier, related defect from the same mindset: ordering by name fell back
+    to "first in-stock item" when no SKU was typed → "oreo not found, here's a
+    Cheez-It" **silent substitution**, which the user explicitly forbade.
+- **Why it hid for so long:** every test I ran locally used the deterministic
+  path (OpenAI, `use_adk_path=false`), where it worked. The bug only existed on
+  the ADK path. Lesson: **test the path production actually runs.** I added a
+  regression test that places an order with `use_adk_path=True`.
+- **The diagnostic that cracked it:** a `/version` build-marker endpoint. The
+  live reply kept looking "old", so I couldn't tell if a deploy had landed or if
+  the code was wrong. `/version` proved the new code *was* live → the problem
+  wasn't deploy timing, it was that the ADK path bypassed my handler.
+- **Fix (`7c6b64f`):** Treat checkout as a **transactional gate**. Extracted
+  `_try_checkout()` and call it in `run_turn()` **before** the ADK/LLM branch, so
+  a purchase is handled by deterministic, structured code in *every* path (cloud
+  or local): resolve the product (refuse, never substitute) → `place_order` →
+  simulated payment → `run_fulfillment` (real `ORDER_PLACED` write) → return the
+  `{checkout}` payload + a deterministic `🛒 cart → 💳 → ✅ → 🎉` receipt. See
+  `ARCHITECTURE.md §5b`.
+- **Lessons:**
+  1. **The LLM orchestrates and converses; it must not execute money-affecting
+     actions.** Anything transactional/irreversible belongs in deterministic,
+     validated, auditable code — the "LLM ≠ cashier" guardrail pattern.
+  2. **Behavioral parity matters:** if the cloud path (ADK on) and the local path
+     (ADK off) differ, you will ship bugs you can't reproduce. Route critical
+     intents through one shared handler so all paths agree.
+  3. **A build/version endpoint is cheap and ends entire categories of "is it
+     even deployed?" confusion.** Add one early.
+  4. Upgrade path that keeps the guardrail: swap keyword intent-detection for an
+     LLM classifier that only extracts `(intent, product, qty)` as constrained
+     JSON — execution still stays deterministic.
+
 ---
 
 ## 4. Key trade-offs and decisions
@@ -386,6 +430,13 @@ developer portal, 53 unit tests + 8 evals.
 13. **Know when to stop iterating and revert** — when you can't test live and a
     "more correct" design keeps breaking, reverting to the demonstrably-working
     design is the right engineering call, not a defeat.
+14. **The LLM orchestrates; it must not execute transactions** — route
+    money-affecting/irreversible actions (checkout) through a deterministic,
+    structured, auditable handler *before* the LLM ("LLM ≠ cashier").
+15. **Test the path production runs** — a cloud-only bug (ADK on) hid behind a
+    local-only green suite (ADK off); keep behavioral parity across paths.
+16. **Ship a `/version` build marker early** — it ends "is it even deployed?"
+    guessing in one HTTP call.
 
 ---
 

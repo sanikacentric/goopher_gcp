@@ -37,6 +37,7 @@ while preserving conversation context.
 | **Bulk order from an uploaded file** | [`orchestrator.py`](backend/app/agents/orchestrator.py) `_try_file_bulk_order` | 3 |
 | **Cart / orders panel** in the extension | [`extension/`](extension/) + `/orders/mine` | 2A |
 | **Phone channel = mobile-device simulator** | [`extension/sidepanel.*`](extension/) | 2A-4 |
+| **Self-healing Guardian** (circuit breaker, failover, chaos demo) | [`guardian.py`](backend/app/agents/guardian.py) + `/dev` | T10 |
 | Individual **& high-volume** orders | [`order_tool.py`](backend/app/mcp/order_tool.py) + `/orders/bulk` | 3 |
 | Evals | [`evals/`](evals/) | T8 |
 | Unit tests | [`tests/`](tests/) | T9 |
@@ -67,6 +68,16 @@ while preserving conversation context.
   (structured cart → simulated payment → `ORDER_PLACED` → staged receipt) in
   *every* path — the LLM orchestrates and converses, but never executes the
   purchase. See [`ARCHITECTURE.md` §5b](ARCHITECTURE.md).
+- **🛡️ Self-healing Guardian.** A separate, isolated agent that wraps work in a
+  resilience policy — **circuit breaker · retry-with-backoff · failover ·
+  self-repair · health probes**. The `/dev` portal has a live **health strip**
+  and **chaos buttons** ("Kill Vertex"): break a subsystem on demand and watch
+  Guardian **DETECT → DIAGNOSE → REMEDIATE → VERIFY** and *heal forward* once it
+  recovers — the customer never sees an error. See
+  [`ARCHITECTURE.md` §5e](ARCHITECTURE.md) and the **[demo script](DEMO.md)**.
+
+> 🎬 **Presenting this?** See **[DEMO.md](DEMO.md)** for a full CTO walkthrough
+> with the exact lines to say.
 
 ---
 
@@ -215,6 +226,9 @@ goopher/
 | GET | `/healthz` | — | Liveness |
 | GET | `/version` | — | Build marker (which code is deployed) |
 | GET | `/metrics` | — | Metrics (observability) |
+| GET | `/dev/health` | — | Guardian component health (self-healing strip) |
+| POST | `/dev/chaos` | — | Inject/clear a chaos fault (demo control) |
+| POST | `/dev/heal-demo` | — | Run a synthetic transaction → watch it self-heal |
 
 Interactive docs at `/docs` when running.
 

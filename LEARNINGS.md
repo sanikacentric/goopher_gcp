@@ -352,6 +352,36 @@ modality:
   with how people actually talk, across every input channel, and keep the
   exclusions (status vs purchase) explicit.
 
+### 3.19 Self-healing Guardian — and the "don't touch what works" constraint
+- **The ask:** a self-healing agent impressive enough to make a CTO say *wow*.
+  The first instinct was to wrap the real operations (vision recognize, chat
+  LLM, catalog reads) so a chaos fault on a *real* request would heal live.
+- **The course-correction (the actual lesson):** the existing flows were already
+  working and demo-critical. Wrapping them risked breaking the very thing being
+  demoed. The user's call — *"create a SEPARATE agent; it must not impact our
+  working flows"* — was the right engineering judgment. We reverted the vision
+  wiring and made Guardian **fully isolated**: it drives its own **synthetic
+  transactions** through the resilience policy. That's not a downgrade — it's how
+  real **synthetic monitoring** works, and it's *safer* (zero blast radius) while
+  the demo visual is identical.
+- **What made it WOW (and demoable):** the recovery had to be **visible and
+  repeatable**. So: a **chaos injector** (deterministic, on-demand faults — like
+  Chaos Monkey) + a live **health strip** + every recovery streamed to `/dev` as
+  a `DETECT → DIAGNOSE → REMEDIATE → VERIFY` record + a background probe that
+  **heals forward**. Breaking it on purpose and watching it fix itself is the
+  whole show.
+- **Honest framing for the CTO:** it's a real circuit-breaker + failover engine
+  (the patterns you'd ship), demonstrated on synthetic traffic via a controlled
+  fault injector — and it automates the *actual* incidents from this build
+  (Vertex outage, thinking-budget, stale catalog, rate limits).
+- **Lessons:**
+  1. **Protect what works.** A new capability shouldn't be able to break shipped,
+     demo-critical paths — isolate it; wire into real flows later behind a flag.
+  2. **Self-healing is only impressive if it's visible** — invest in the chaos
+     button + the live heal stream, not just the recovery logic.
+  3. **Synthetic transactions** are a legitimate, low-risk way to demonstrate (and
+     monitor) resilience.
+
 ---
 
 ## 4. Key trade-offs and decisions
@@ -502,6 +532,11 @@ developer portal, 53 unit tests + 8 evals.
     legitimate 413/429 shows up as an opaque "Failed to fetch."
 20. **Build the diagnostic into the failure path** — capture the reason
     (`finish_reason`, last error) so the next failed attempt tells you why.
+21. **A new feature must not endanger what already works** — isolate it (Guardian
+    drives synthetic transactions, never the live flows); integrate deeper later
+    behind a flag.
+22. **Self-healing is only a "wow" if it's visible** — ship the chaos button and
+    the live DETECT→DIAGNOSE→REMEDIATE→VERIFY stream, not just the recovery code.
 
 ---
 

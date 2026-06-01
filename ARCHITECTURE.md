@@ -301,6 +301,52 @@ Vision turns are recorded to the `/dev` portal as a distinct `vision` flow kind.
 
 ---
 
+## 5e. The Guardian — a self-healing agent (isolated)
+
+A separate, self-contained agent (`guardian.py`) that adds **autonomous fault
+recovery** with full visibility, and — critically — **touches none of the live
+flows** (`/chat`, `/vision`, checkout are unchanged). It is a *demonstrator and
+control plane* for resilience, driven by **synthetic transactions** (the same
+idea as production synthetic monitoring), so it can prove recovery without any
+risk to real shopping traffic.
+
+```
+GET  /dev/health      → component health (the live strip in /dev)
+POST /dev/chaos       → inject / clear a fault on a component  (demo control)
+POST /dev/heal-demo   → run a synthetic transaction through a component
+background tick()     → probe down components → "heal forward" when they recover
+```
+
+**Resilience policy** (`Guardian.protect`):
+```
+run primary()
+ ├─ success → component 🟢
+ └─ failure →
+      DETECT   classify the error; bump the circuit-breaker counter
+      DIAGNOSE map to the playbook (root cause)
+      REMEDIATE optional self-repair (e.g. re-seed) → retry with backoff →
+               fail over to a fallback so the CUSTOMER is never errored
+      VERIFY   mark healthy (recovered on primary) or healing (serving via
+               failover); stream the whole thing to /dev as a `heal` record
+   + circuit breaker: after N failures the circuit OPENS (skip the known-bad
+     primary, serve the fallback); a background probe HEALS FORWARD and closes
+     the circuit once the fault clears.
+```
+
+**Patterns:** circuit breaker · retry-with-jittered-backoff · failover / graceful
+degrade · self-repair · health-probe-driven recovery · chaos injection (an
+on-demand, deterministic fault injector — like Chaos Monkey — so the demo is
+repeatable). The `/dev` portal renders a **health strip** (🧠 Vertex · 🗄️ Catalog
+· 📦 Fulfillment) plus chaos buttons; recoveries appear as purple `heal` records.
+
+**Why isolated (design choice):** the existing flows were already working and
+demo-critical, so Guardian was built to *never* be able to break them — it wraps
+its own synthetic units of work, not the production calls. The same `protect()`
+API could later wrap real operations behind a flag, with zero change to the
+engine. See `LEARNINGS.md §3.19`.
+
+---
+
 ## 6. High-volume order management (Req 3)
 
 Two entry points handle scale:

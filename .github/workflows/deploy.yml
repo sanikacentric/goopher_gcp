@@ -110,33 +110,17 @@ jobs:
       - name: Deploy to Cloud Run (free tier)
         if: steps.gate.outputs.ready == 'true'
         env:
-          # Pass secrets through env so special characters (colons, commas) in a
-          # value can't break gcloud's --set-env-vars dict parser. We then write
-          # a YAML env-vars file, which is immune to that parsing entirely.
+          # Only inject SAFE, known-shape secrets. We deliberately DO NOT pass
+          # GOOGLE_API_KEY or OPENAI_API_KEY: the cloud service uses Vertex AI
+          # (authenticated by the service account, USE_VERTEXAI=true) and Gemini,
+          # so neither key is needed — and injecting them risks a malformed/
+          # multi-line value breaking the env-var parser.
           PROJ: ${{ secrets.GCP_PROJECT_ID }}
-          OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GOOGLE_KEY: ${{ secrets.GOOGLE_API_KEY }}
           JWT: ${{ secrets.JWT_SECRET }}
         run: |
-          # Build a YAML env-vars file (handles special chars safely). Each line
-          # is written with `echo` so it lands at column 0 — a heredoc here would
-          # inherit this block's indentation and produce invalid YAML.
-          PROJ_CLEAN="$(echo "$PROJ" | tr -d '[:space:]')"
-          F=/tmp/envvars.yaml
-          : > "$F"
-          echo "ENVIRONMENT: \"production\""              >> "$F"
-          echo "DB_BACKEND: \"firestore\""                >> "$F"
-          echo "GOOGLE_CLOUD_PROJECT: \"${PROJ_CLEAN}\""  >> "$F"
-          echo "OTEL_EXPORTER: \"gcp\""                   >> "$F"
-          echo "LLM_PROVIDER: \"gemini\""                 >> "$F"
-          echo "USE_ADK_PATH: \"true\""                   >> "$F"
-          echo "USE_VERTEXAI: \"true\""                   >> "$F"
-          echo "USE_MCP_TOOLS: \"true\""                  >> "$F"
-          echo "VERTEX_LOCATION: \"us-central1\""         >> "$F"
-          echo "GEMINI_MODEL: \"gemini-2.5-flash\""       >> "$F"
-          echo "OPENAI_API_KEY: \"${OPENAI_KEY}\""        >> "$F"
-          echo "GOOGLE_API_KEY: \"${GOOGLE_KEY}\""        >> "$F"
-          echo "JWT_SECRET: \"${JWT}\""                   >> "$F"
+          # Sanitize: project id must be a single token; JWT must be one line.
+          PROJ_CLEAN="$(printf '%s' "$PROJ" | tr -d '[:space:]')"
+          JWT_CLEAN="$(printf '%s' "$JWT" | tr -d '\r\n')"
           gcloud run deploy "$SERVICE" \
             --image "gcr.io/${PROJ_CLEAN}/$SERVICE:${{ github.sha }}" \
             --region "$REGION" \
@@ -146,7 +130,7 @@ jobs:
             --max-instances 2 \
             --memory 1Gi \
             --cpu 1 \
-            --env-vars-file "$F"
+            --set-env-vars "ENVIRONMENT=production,DB_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=${PROJ_CLEAN},OTEL_EXPORTER=gcp,LLM_PROVIDER=gemini,USE_ADK_PATH=true,USE_VERTEXAI=true,USE_MCP_TOOLS=true,VERTEX_LOCATION=us-central1,GEMINI_MODEL=gemini-2.5-flash,JWT_SECRET=${JWT_CLEAN}"
 
       - name: Allow public access (run.invoker for allUsers)
         if: steps.gate.outputs.ready == 'true'

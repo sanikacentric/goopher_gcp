@@ -15,8 +15,23 @@
           <div class="gp-subtitle">Your shopping agent</div>
         </div>
       </div>
-      <button id="logoutBtn" class="gp-link" hidden>Sign out</button>
+      <div class="gp-header-actions">
+        <!-- Cart / orders: click to see what's already been ordered. -->
+        <button id="cartBtn" class="gp-cart-btn" title="View your orders" hidden>
+          🛒<span id="cartCount" class="gp-cart-badge" hidden>0</span>
+        </button>
+        <button id="logoutBtn" class="gp-link" hidden>Sign out</button>
+      </div>
     </header>
+
+    <!-- ORDERS / CART PANEL (toggled by the cart button) -->
+    <section id="ordersPanel" class="gp-orders-panel" hidden>
+      <div class="gp-orders-head">
+        <span>🛒 Your orders</span>
+        <button id="ordersClose" class="gp-link" title="Close">✕</button>
+      </div>
+      <div id="ordersList" class="gp-orders-list"></div>
+    </section>
 
     <!-- LOGIN VIEW (Requirement T1: authenticate the customer) -->
     <section id="loginView" class="gp-login">

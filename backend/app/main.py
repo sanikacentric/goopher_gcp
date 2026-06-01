@@ -99,7 +99,7 @@ def healthz() -> dict:
 
 # Build marker — bump when verifying a deploy actually rolled out. Hit
 # GET /version on the live service to confirm which code Cloud Run is running.
-BUILD_VERSION = "2026-06-01-checkout-adk-fix"
+BUILD_VERSION = "2026-06-01-orders-panel"
 
 
 @app.get("/version")
@@ -173,6 +173,21 @@ def orders_bulk(body: BulkOrderQuery, claims: dict = Depends(current_customer)) 
     """High-volume order management endpoint (Req 3)."""
     log_event("orders_bulk_request", customer_id=claims["sub"], count=len(body.order_ids))
     return bulk_order_status(body.order_ids)
+
+
+@app.get("/orders/mine")
+def orders_mine(claims: dict = Depends(current_customer)) -> dict:
+    """
+    The signed-in customer's own orders — backs the extension's cart/orders
+    panel ("see what I've already ordered"). Authoritative list straight from
+    the repository (newly placed orders included), newest first.
+    """
+    from .tools.order_tool import list_customer_orders
+    data = list_customer_orders(claims["sub"])
+    orders = sorted(data.get("orders", []),
+                    key=lambda o: o.get("order_date", ""), reverse=True)
+    log_event("orders_mine", customer_id=claims["sub"], count=len(orders))
+    return {"count": len(orders), "orders": orders}
 
 
 # --------------------------------------------------------------------------- #

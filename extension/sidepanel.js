@@ -1,13 +1,13 @@
 // GOOPHER side panel controller: login flow, chat rendering, multi-modal
 // attachments, channel/language switching, and VOICE input. Maintains a stable
 // session_id so the backend memory agent preserves context across switches.
-import { getCustomer, getToken, login, logout, sendChat } from "./api.js";
+import { getCustomer, getToken, getMyOrders, login, logout, sendChat } from "./api.js";
 
 // Version marker — confirms which build of the side panel Chrome has loaded.
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.2.0 — cart + staged checkout enabled");
+console.log("GOOPHER side panel v0.3.0 — cart + staged checkout + orders panel");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -26,6 +26,11 @@ const els = {
   attachmentBar: document.getElementById("attachmentBar"),
   micBtn: document.getElementById("micBtn"),
   speakToggle: document.getElementById("speakToggle"),
+  cartBtn: document.getElementById("cartBtn"),
+  cartCount: document.getElementById("cartCount"),
+  ordersPanel: document.getElementById("ordersPanel"),
+  ordersList: document.getElementById("ordersList"),
+  ordersClose: document.getElementById("ordersClose"),
 };
 
 // One stable session id per browser profile keeps memory/context continuous.
@@ -174,11 +179,80 @@ function fileToAttachment(file) {
   });
 }
 
+// ---- cart / orders panel ----
+// A persistent header button (top corner) lets the customer open a panel of
+// everything they've already ordered. Data comes from the authoritative
+// /orders/mine endpoint, so it always reflects real placed orders.
+let ordersCache = [];
+
+function setCartBadge(n) {
+  els.cartCount.textContent = String(n);
+  els.cartCount.hidden = !n;
+}
+
+function renderOrders(orders) {
+  els.ordersList.innerHTML = "";
+  if (!orders.length) {
+    els.ordersList.innerHTML =
+      `<p class="gp-orders-empty">No orders yet. Try “place an order of oreo cookies”.</p>`;
+    return;
+  }
+  for (const o of orders) {
+    const items = (o.items || [])
+      .map((it) => {
+        const opt = [it.color, it.size].filter(Boolean).join(", ");
+        return `<li>${it.name}${opt ? ` (${opt})` : ""} × ${it.qty} — $${Number(it.unit_price).toFixed(2)}</li>`;
+      })
+      .join("");
+    const card = document.createElement("div");
+    card.className = "gp-order-card";
+    card.innerHTML = `
+      <div class="gp-order-top">
+        <span class="gp-order-id">${o.order_id}</span>
+        <span class="gp-order-status">${o.status || "Processing"}</span>
+      </div>
+      <ul class="gp-order-items">${items}</ul>
+      <div class="gp-order-foot">
+        <span>Total: <b>$${Number(o.total).toFixed(2)}</b></span>
+        ${o.tracking_number ? `<span>📦 ${o.carrier || "UPS"} ${o.tracking_number}</span>` : ""}
+        ${o.estimated_delivery ? `<span>ETA ${o.estimated_delivery}</span>` : ""}
+      </div>`;
+    els.ordersList.appendChild(card);
+  }
+}
+
+async function refreshOrders() {
+  try {
+    const data = await getMyOrders();
+    ordersCache = data.orders || [];
+    setCartBadge(data.count || ordersCache.length);
+    return ordersCache;
+  } catch (err) {
+    if (err.message === "UNAUTHORIZED") { await logout(); showLogin(); }
+    return ordersCache;
+  }
+}
+
+async function openOrders() {
+  renderOrders(await refreshOrders());
+  els.ordersPanel.hidden = false;
+}
+
+function closeOrders() {
+  els.ordersPanel.hidden = true;
+}
+
+function toggleOrders() {
+  if (els.ordersPanel.hidden) openOrders();
+  else closeOrders();
+}
+
 // ---- view switching ----
 async function showChat() {
   els.loginView.hidden = true;       // hide the sign-in form after login
   els.chatView.hidden = false;
   els.logoutBtn.hidden = false;
+  els.cartBtn.hidden = false;        // show the cart/orders button once signed in
   const customer = await getCustomer();
   if (els.messages.childElementCount === 0) {
     addMessage(
@@ -186,12 +260,15 @@ async function showChat() {
       "bot"
     );
   }
+  refreshOrders();                   // prime the cart badge with existing orders
 }
 
 function showLogin() {
   els.loginView.hidden = false;
   els.chatView.hidden = true;        // hide chat while logged out
   els.logoutBtn.hidden = true;
+  els.cartBtn.hidden = true;
+  closeOrders();
 }
 
 // ---- core send ----
@@ -216,6 +293,7 @@ async function send(text, attachments, viaVoice = false) {
     // ORDER PLACED SUCCESSFULLY. Shown only on a successful checkout turn.
     if (resp.checkout && resp.checkout.ok) {
       await renderCheckout(resp.checkout, meta);
+      refreshOrders();   // new order placed → update the cart badge/panel
       if (viaVoice && els.speakToggle?.checked) {
         speak(`Payment successful. Order ${resp.checkout.order_id} placed successfully.`, resp.language);
       }
@@ -373,6 +451,9 @@ els.logoutBtn.addEventListener("click", async () => {
   els.messages.innerHTML = "";
   showLogin();
 });
+
+els.cartBtn.addEventListener("click", toggleOrders);
+els.ordersClose.addEventListener("click", closeOrders);
 
 els.fileInput.addEventListener("change", async (e) => {
   for (const f of e.target.files) {

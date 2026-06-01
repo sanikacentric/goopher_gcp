@@ -77,3 +77,37 @@ body {
 .gp-mic:hover { background: #f2f2f2; }
 .gp-mic.listening { background: var(--gp-primary); border-color: var(--gp-primary); animation: gp-pulse 1s infinite; }
 @keyframes gp-pulse { 0% { box-shadow: 0 0 0 0 rgba(200,16,46,.5); } 70% { box-shadow: 0 0 0 8px rgba(200,16,46,0); } 100% { box-shadow: 0 0 0 0 rgba(200,16,46,0); } }
+
+/* ---- Header cart / orders button + panel ---- */
+.gp-header-actions { display: flex; align-items: center; gap: 12px; }
+.gp-cart-btn {
+  position: relative; border: 1px solid var(--gp-border); background: #fff;
+  border-radius: 50%; width: 36px; height: 36px; font-size: 17px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.gp-cart-btn:hover { background: #f2f2f2; }
+.gp-cart-badge {
+  position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px;
+  padding: 0 5px; border-radius: 9px; background: var(--gp-primary); color: #fff;
+  font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
+}
+
+.gp-orders-panel {
+  position: absolute; top: 56px; right: 8px; left: 8px; z-index: 20;
+  max-height: 65vh; overflow-y: auto; background: #fff;
+  border: 1px solid var(--gp-border); border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.18); padding: 10px 12px;
+}
+.gp-orders-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-weight: 700; font-size: 14px; margin-bottom: 8px;
+}
+.gp-orders-empty { color: #777; font-size: 13px; }
+.gp-orders-list { display: flex; flex-direction: column; gap: 8px; }
+.gp-order-card { border: 1px solid var(--gp-border); border-radius: 10px; padding: 8px 10px; background: #fafafa; }
+.gp-order-top { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+.gp-order-id { font-weight: 700; }
+.gp-order-status { font-size: 11px; color: #fff; background: #2e9e5b; border-radius: 10px; padding: 1px 8px; }
+.gp-order-items { margin: 6px 0; padding-left: 16px; font-size: 12.5px; color: #333; }
+.gp-order-items li { margin: 1px 0; }
+.gp-order-foot { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11.5px; color: #555; }

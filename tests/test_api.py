@@ -74,6 +74,31 @@ def test_bulk_orders_endpoint():
     assert "ORD-NOPE" in body["missing"]
 
 
+def test_orders_mine_requires_auth():
+    assert client.get("/orders/mine").status_code == 401
+
+
+def test_orders_mine_lists_customer_orders_including_new():
+    """The cart/orders panel endpoint returns the customer's orders, and a newly
+    placed order shows up in it."""
+    token = _token()
+    h = {"Authorization": f"Bearer {token}"}
+    before = client.get("/orders/mine", headers=h).json()["count"]
+    client.post("/chat", headers=h,
+                json={"message": "place an order of oreo cookies", "session_id": "mine-1"})
+    after = client.get("/orders/mine", headers=h).json()
+    assert after["count"] >= before + 1
+    # Each order carries the fields the panel renders.
+    o = after["orders"][0]
+    assert "order_id" in o and "items" in o and "total" in o
+
+
+def test_version_endpoint():
+    r = client.get("/version")
+    assert r.status_code == 200
+    assert "build" in r.json()
+
+
 def test_metrics_endpoint():
     r = client.get("/metrics")
     assert r.status_code == 200

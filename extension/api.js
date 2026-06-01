@@ -55,3 +55,14 @@ export async function sendChat({ message, sessionId, channel, language, attachme
   if (!res.ok) throw new Error(`Server error ${res.status}`);
   return res.json();
 }
+
+// The signed-in customer's orders — backs the header cart/orders panel.
+export async function getMyOrders() {
+  const token = await getToken();
+  const res = await fetch(`${CONFIG.API_BASE}/orders/mine`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 401) throw new Error("UNAUTHORIZED");
+  if (!res.ok) throw new Error(`Server error ${res.status}`);
+  return res.json();
+}

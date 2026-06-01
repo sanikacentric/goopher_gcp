@@ -796,6 +796,9 @@ class AgentService:
             "inventory_ok": f.get("inventory_ok"),
             "estimated_delivery": data.get("estimated_delivery"),
             "items": data.get("items") or ([data["item"]] if data.get("item") else []),
+            # Structured cart lines so the extension renders a real cart.
+            "cart": data.get("cart", []),
+            "subtotal": data.get("subtotal", data.get("total")),
         }
 
     @staticmethod

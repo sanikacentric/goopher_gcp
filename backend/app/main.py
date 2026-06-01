@@ -204,14 +204,18 @@ async def dev_stream() -> StreamingResponse:
 
     async def event_gen():
         recorder = get_recorder()
-        # Start after whatever already exists so we only stream NEW turns.
-        last = max((r["id"] for r in recorder.recent(limit=1)), default=0)
+        # Start at the current version so we only stream NEW changes; existing
+        # records are loaded once via /dev/recent. Tracking by VERSION (not id)
+        # lets a record that advances stage-by-stage (e.g. fulfillment) be
+        # re-sent so the portal updates that one card instead of duplicating it.
+        last_ver = recorder.current_version()
         # Greeting comment so the connection opens immediately.
         yield ": connected\n\n"
         while True:
-            for rec in recorder.since(last):
-                last = rec["id"]
+            snapshot = recorder.current_version()
+            for rec in recorder.since(last_ver):
                 yield f"data: {json.dumps(rec)}\n\n"
+            last_ver = snapshot
             await asyncio.sleep(1.0)
 
     return StreamingResponse(

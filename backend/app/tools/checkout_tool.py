@@ -200,6 +200,13 @@ def place_order(customer_id: str, variant_id: str = "", qty: int = 1) -> dict:
         "order_id": order_id,
         "status": "Processing",
         "item": f'{line["name"]} ({line["color"]}, {line["size"]}) x{line["qty"]}',
+        # Structured cart so the extension can show a proper cart with the order.
+        "cart": [{
+            "name": line["name"], "color": line["color"], "size": line["size"],
+            "qty": line["qty"], "unit_price": line["unit_price"],
+            "line_total": line["line_total"],
+        }],
+        "subtotal": total,
         "total": total,
         "payment": payment,
         "fulfillment": fulfillment,
@@ -292,6 +299,12 @@ def place_bulk_order(customer_id: str, variant_ids: list[str] | None = None,
         "status": "Processing",
         "items": [f'{it.name} ({it.color}, {it.size}) x{it.qty} '
                   f'@ ${it.unit_price:.2f}' for it in items],
+        "cart": [{
+            "name": it.name, "color": it.color, "size": it.size,
+            "qty": it.qty, "unit_price": it.unit_price,
+            "line_total": round(it.unit_price * it.qty, 2),
+        } for it in items],
+        "subtotal": total,
         "line_count": len(items),
         "total": total,
         "payment": payment,

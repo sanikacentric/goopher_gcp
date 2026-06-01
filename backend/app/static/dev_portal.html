@@ -172,8 +172,13 @@
 
       function render(rec) {
         empty.style.display = "none";
-        const card = document.createElement("div");
+        // Dedupe/merge by record id: a record (e.g. a fulfillment pipeline) is
+        // streamed repeatedly as it advances. Update the SAME card in place
+        // rather than inserting a duplicate.
+        const existing = feed.querySelector(`.turn[data-rec-id="${rec.id}"]`);
+        const card = existing || document.createElement("div");
         card.className = "turn";
+        card.setAttribute("data-rec-id", rec.id);
         const when = new Date(rec.ts * 1000).toLocaleTimeString();
 
         const tools = (rec.used_tools || []).map(t => `<span class="tag">${esc(t)}</span>`).join("");
@@ -202,9 +207,11 @@
           ${memJson ? `<div class="mem"><h3 style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:0 0 6px">Session memory (after turn)</h3><pre>${esc(memJson)}</pre></div>` : ""}
         `;
         const stepsHost = card.querySelector(".steps");
+        stepsHost.innerHTML = "";  // rebuild steps (record may have advanced)
         (rec.steps || []).forEach((s, i, arr) => stepsHost.appendChild(stepEl(s, i === arr.length - 1)));
 
-        feed.insertBefore(card, feed.firstChild === empty ? null : feed.firstChild);
+        // New card -> insert at top. Existing card -> already in place (updated).
+        if (!existing) feed.insertBefore(card, feed.firstChild === empty ? null : feed.firstChild);
       }
 
       // Load recent history, then stream live.

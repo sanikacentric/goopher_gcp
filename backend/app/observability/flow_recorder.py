@@ -70,9 +70,23 @@ class FlowRecord:
 
 
 class _Recorder:
+    """
+    Thread-safe store of flow records, DEDUPED BY RECORD ID.
+
+    A record (e.g. a fulfillment pipeline) is committed repeatedly as it
+    advances — once per stage. We must NOT store a new copy each time (that's
+    what made the dev portal show the same pipeline 9×). Instead we upsert by
+    id and bump a monotonic VERSION counter, so:
+      * `recent()` returns each record exactly once (latest state), and
+      * `since(version)` re-returns a record whenever it's updated, letting the
+        live stream push refreshed copies that the portal merges into one card.
+    """
+
     def __init__(self):
-        self._records: list[FlowRecord] = []
-        self._seq = 0
+        self._records: dict[int, FlowRecord] = {}   # id -> record (deduped)
+        self._ver: dict[int, int] = {}              # id -> version at last update
+        self._seq = 0      # record-id sequence
+        self._vseq = 0     # global version sequence
         self._lock = threading.Lock()
 
     def next_id(self) -> int:
@@ -81,18 +95,33 @@ class _Recorder:
             return self._seq
 
     def add(self, record: FlowRecord) -> None:
+        """Insert or update a record (deduped by id), bumping its version so the
+        live stream re-sends the refreshed copy."""
         with self._lock:
-            self._records.append(record)
+            self._vseq += 1
+            self._records[record.id] = record
+            self._ver[record.id] = self._vseq
             if len(self._records) > _MAX_RECORDS:
-                self._records = self._records[-_MAX_RECORDS:]
+                for rid in sorted(self._records)[:len(self._records) - _MAX_RECORDS]:
+                    self._records.pop(rid, None)
+                    self._ver.pop(rid, None)
 
-    def since(self, after_id: int) -> list[dict]:
+    def current_version(self) -> int:
         with self._lock:
-            return [r.to_dict() for r in self._records if r.id > after_id]
+            return self._vseq
+
+    def since(self, after_version: int) -> list[dict]:
+        """Records changed since `after_version`, oldest change first."""
+        with self._lock:
+            changed = [(self._ver[rid], r) for rid, r in self._records.items()
+                       if self._ver[rid] > after_version]
+        changed.sort(key=lambda vr: vr[0])
+        return [r.to_dict() for _, r in changed]
 
     def recent(self, limit: int = 50) -> list[dict]:
         with self._lock:
-            return [r.to_dict() for r in self._records[-limit:]]
+            ids = sorted(self._records)[-limit:]
+            return [self._records[rid].to_dict() for rid in ids]
 
 
 _recorder = _Recorder()

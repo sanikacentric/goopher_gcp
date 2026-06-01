@@ -54,12 +54,41 @@ function addMessage(text, who, meta) {
 
 const _delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Staged checkout confirmation shown to the customer:
-//   1) "✅ Payment successful" (+ details)
-//   2) "⏳ Order placement is in progress…"
-//   3) "🎉 ORDER PLACED SUCCESSFULLY" (only if the backend wrote ORDER_PLACED)
+// Build a readable cart "receipt" from the structured cart lines.
+function cartText(c) {
+  const lines = (c.cart && c.cart.length
+    ? c.cart
+    : (c.items || []).map((s) => ({ name: s, qty: 1 }))
+  ).map((it) => {
+    if (it.unit_price != null) {
+      const opt = [it.color, it.size].filter(Boolean).join(", ");
+      return `• ${it.name}${opt ? ` (${opt})` : ""} × ${it.qty}` +
+        `  —  $${Number(it.unit_price).toFixed(2)} ea = $${Number(it.line_total).toFixed(2)}`;
+    }
+    return `• ${it.name}`;
+  });
+  const subtotal = c.subtotal != null ? c.subtotal : c.total;
+  return `🛒 Your cart\n${lines.join("\n")}\n──────────\nSubtotal: $${Number(subtotal).toFixed(2)}`;
+}
+
+// Staged checkout confirmation shown to the customer, in order:
+//   1) "🛒 Your cart"            — the item(s) added to the cart
+//   2) "💳 Processing payment…"  — payment in progress
+//   3) "✅ Payment successful"   — amount charged (+ txn)
+//   4) "🎉 ORDER PLACED SUCCESSFULLY" (only if the backend wrote ORDER_PLACED)
 async function renderCheckout(c, meta) {
   const items = (c.items || []).join("; ");
+
+  // 1) Cart
+  addMessage(cartText(c), "bot");
+  await _delay(700);
+
+  // 2) Processing payment…
+  const pay = addMessage("💳 Processing payment…", "bot");
+  await _delay(1100);
+
+  // 3) Payment successful
+  pay.firstChild.nodeValue = "💳 Processing payment… done.";
   addMessage(
     `✅ Payment successful — $${Number(c.total).toFixed(2)} charged` +
       (c.transaction_id ? ` (txn ${c.transaction_id}).` : "."),
@@ -67,6 +96,7 @@ async function renderCheckout(c, meta) {
   );
   await _delay(700);
 
+  // 4) Order placement → ORDER PLACED
   const progress = addMessage("⏳ Order placement is in progress…", "bot");
   await _delay(1100);
 

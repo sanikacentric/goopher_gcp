@@ -97,6 +97,16 @@ def healthz() -> dict:
     return {"status": "ok", "app": settings.app_name, "env": settings.environment}
 
 
+# Build marker — bump when verifying a deploy actually rolled out. Hit
+# GET /version on the live service to confirm which code Cloud Run is running.
+BUILD_VERSION = "2026-06-01-checkout-receipt"
+
+
+@app.get("/version")
+def version() -> dict:
+    return {"build": BUILD_VERSION}
+
+
 @app.get("/metrics")
 def metrics() -> dict:
     """Plain JSON metrics (scrape-friendly). Cloud Monitoring can ingest these."""

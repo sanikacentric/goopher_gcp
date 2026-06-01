@@ -226,6 +226,12 @@ class AgentService:
         ft.record.customer_id = customer_id
         ft.record.user_message = req.message
 
+        # Names of the specialist sub-agents (wrapped as ADK AgentTools). When the
+        # ADK path runs, these come back in `used_tools` and ARE the real agent
+        # invocations — so we render them as SUB-AGENT steps and the rest as TOOL
+        # steps, attributing each exactly once.
+        SUBAGENT_NAMES = {"modality_agent", "language_agent", "channel_agent"}
+
         with span("chat_turn", session=req.session_id, channel=req.channel,
                   customer=customer_id) as trace_id:
             ft.record.trace_id = trace_id
@@ -233,30 +239,22 @@ class AgentService:
             ft.step("session", "memory.get",
                     f"session_id={req.session_id} (backend={_settings.db_backend})")
 
-            # 1) MODALITY subagent: fold any attachments into text.
-            _t0 = _time.perf_counter()
+            # Deterministic detection runs silently to populate response metadata
+            # (modality/language/channel). These are cheap pure-Python helpers, NOT
+            # the LLM agents — when ADK is active the real agent work is done by the
+            # AgentTools below, so we do NOT emit portal steps for these here (that
+            # was the source of the duplicate modality/language/channel entries).
             mem = self.memory.get(req.session_id, customer_id)
             modality = modality_agent.classify_modality(req.message, req.attachments)
             text = modality_agent.normalize_to_text(
                 req.message, req.attachments, _settings.gemini_model
             )
-            ft.step("subagent", "modality_agent",
-                    f"modality={modality}; normalized {len(req.attachments)} attachment(s)",
-                    ms=(_time.perf_counter() - _t0) * 1000, modality=modality)
-
-            # 2) LANGUAGE subagent: detect or honor preferred language.
-            _t0 = _time.perf_counter()
             language = req.language or language_agent.detect_language(
                 text, default=self.memory.recall(req.session_id, "language", "en")
             )
             self.memory.remember(req.session_id, "language", language)
-            ft.step("subagent", "language_agent", f"language={language}",
-                    ms=(_time.perf_counter() - _t0) * 1000, language=language)
-
-            # 3) CHANNEL subagent: build a style directive.
             channel = req.channel
             self.memory.remember(req.session_id, "channel", channel)
-            ft.step("subagent", "channel_agent", f"channel={channel}", channel=channel)
 
             # Record the user turn BEFORE answering (memory / context).
             self.memory.add_turn(
@@ -265,15 +263,33 @@ class AgentService:
                      language=language, modality=modality),
             )
 
-            # 4) Generate the reply (ADK path or fallback), with tools.
+            # 4) Generate the reply via the ADK agents (real AgentTools) or the
+            #    deterministic backup engine.
             _t0 = _time.perf_counter()
-            reply, used_tools = self._generate(req.session_id, text, customer_id,
-                                               channel, language)
+            reply, used_tools, path = self._generate(req.session_id, text,
+                                                     customer_id, channel, language)
             gen_ms = (_time.perf_counter() - _t0) * 1000
-            for tool in used_tools:
-                ft.step("tool", tool, "inventory/order tool executed", tool=tool)
-            ft.step("llm", f"generate ({_settings.llm_provider})",
-                    "natural-language reply from tool results", ms=gen_ms)
+
+            if path == "adk":
+                # Attribute each invocation once: sub-agents vs retail tools, in
+                # the order the orchestrator actually called them.
+                for name in used_tools:
+                    if name in SUBAGENT_NAMES:
+                        ft.step("subagent", name, "invoked by ADK orchestrator", tool=name)
+                    else:
+                        ft.step("tool", name, "inventory/order tool executed", tool=name)
+                ft.step("llm", "ADK orchestrator (gemini)",
+                        "multi-agent reasoning + reply", ms=gen_ms)
+            else:
+                # Backup path: deterministic helpers did the routing. Show them
+                # once here (they didn't run as AgentTools in this path).
+                ft.step("subagent", "modality_agent (backup)", f"modality={modality}")
+                ft.step("subagent", "language_agent (backup)", f"language={language}")
+                ft.step("subagent", "channel_agent (backup)", f"channel={channel}")
+                for name in used_tools:
+                    ft.step("tool", name, "inventory/order tool executed", tool=name)
+                ft.step("llm", f"phrase ({_settings.llm_provider})",
+                        "reply from tool results (backup engine)", ms=gen_ms)
 
             # 5) CHANNEL post-processing for phone (voice-safe text).
             if channel == "phone":
@@ -317,25 +333,31 @@ class AgentService:
 
     # ----- generation paths ----- #
     def _generate(self, session_id: str, text: str, customer_id: str,
-                  channel: str, language: str) -> tuple[str, list[str]]:
+                  channel: str, language: str) -> tuple[str, list[str], str]:
+        """
+        Returns (reply, used_tools, path) where path is "adk" or "fallback".
+
+        Preference: the ADK multi-agent path (the real AgentTools do the work)
+        when USE_ADK_PATH is on and ADK is ready. The deterministic engine is the
+        BACKUP — used only if ADK is off or errors — so the specialist agents are
+        invoked exactly once, by ADK, not duplicated.
+        """
         directives = (
             channel_agent.channel_directive(channel)
             + "\n"
             + language_agent.language_directive(language)
             + f"\nThe signed-in customer_id is {customer_id}."
         )
-        # Choose the generation path. By default we use the grounded
-        # "tools + Gemini phrasing" path (reliable: it always routes to the right
-        # tool and never refuses/hallucinates, while still using Gemini for the
-        # reply). The raw ADK multi-agent path is opt-in via USE_ADK_PATH=true.
         if self._adk_ready and _settings.use_adk_path:
             try:
-                return self._generate_adk(session_id, text, customer_id, directives)
+                reply, used = self._generate_adk(session_id, text, customer_id, directives)
+                return reply, used, "adk"
             except Exception as exc:
                 log_event("adk_turn_failed", reason=str(exc))
                 incr("errors_total")
-        return self._generate_fallback(session_id, text, customer_id, directives,
-                                      channel, language)
+        reply, used = self._generate_fallback(session_id, text, customer_id,
+                                              directives, channel, language)
+        return reply, used, "fallback"
 
     def _generate_adk(self, session_id: str, text: str, customer_id: str,
                       directives: str) -> tuple[str, list[str]]:

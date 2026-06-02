@@ -56,6 +56,12 @@ while preserving conversation context.
   product (never substitutes), and either answers the price or **places the
   order** — through the same structured checkout gate as a typed order.
 - **Voice in + speaker out.** Speak the command; GOOPHER reads the answer aloud.
+- **Durable session memory (T3).** Every turn **loads prior context** at the start
+  and **persists the new turn** at the end (`MEMORY · session updated` in `/dev`)
+  — to **Firestore** in the cloud (durable + shared across Cloud Run instances,
+  surviving scale-to-zero). So "is it in navy?" → "order it" resolves *"it"*
+  correctly, and language/channel carry across turns (start Web/English, continue
+  Phone/Spanish, same thread).
 - **Phone (Voice) channel renders a mobile-device simulator** (bezel, status bar,
   home indicator) with all the same features as Web.
 - **Cart / orders panel.** A 🛒 button in the extension header shows everything

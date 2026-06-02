@@ -86,6 +86,42 @@ modality are all read from and written to the same `SessionMemory`, a shopper
 can start on web in English, continue on phone in Spanish, and the agent keeps
 the thread.
 
+### 2a. Session memory — the `MEMORY · session updated` step (T3)
+
+The **last stage of every chat turn** is `MEMORY · session updated`: the agent
+**saves the conversation to memory**. After GOOPHER answers, it writes **both
+sides of the exchange** — the user's question *and* the assistant's reply — into
+**session memory**, keyed by the turn's `session_id` (e.g. `sess-nst14x8icr…`,
+shown in the `/dev` header).
+
+> dev-portal card: `MEMORY · session updated · persisted user + assistant turns
+> to session memory`
+
+**Why it matters — conversational continuity.** Because each turn is persisted,
+context carries across turns:
+- "what's the price of the tiered midi dress?" → "is it in **navy**?" → "**order
+  it**" — the agent knows what *"it"* refers to.
+- It also remembers the **language and channel**, so a shopper can start on Web in
+  English and continue on Phone in Spanish and keep the thread.
+
+**Where the memory lives:**
+- **Cloud:** **Firestore** — durable and shared across Cloud Run instances, so
+  context survives even if the next request lands on a different container or
+  after scale-to-zero. (The earlier `SESSION · memory.get` step shows
+  `backend=firestore`.)
+- **Local:** an in-process store.
+
+So the full pipeline reads end-to-end as:
+```
+AUTH → SESSION (memory.get: load prior context)
+     → PRE-PROCESS (modality · language · channel)
+     → ORCHESTRATOR → inventory_agent (answer)
+     → MEMORY (session updated: save this turn)   ← persists the exchange
+```
+*Every turn loads prior context at the start and persists the new turn at the
+end (to Firestore in the cloud), so the agent has real, durable memory and stays
+coherent across turns, channels, and languages.*
+
 ---
 
 ## 3. Components & requirement mapping

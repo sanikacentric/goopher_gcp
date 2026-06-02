@@ -441,6 +441,30 @@ modality:
   (emoji crashed eval output on Windows) were solved with ASCII-safe output and
   writing results to files.
 
+### Clarification: the `MEMORY · session updated` step (it's a feature, not a bug)
+A reviewer watching `/dev` asked what the final `MEMORY · session updated` step
+is. It's the agent **saving the conversation to memory at the end of every turn**
+— it persists **both sides** of the exchange (user question + assistant reply)
+into **session memory**, keyed by the turn's `session_id` (e.g. `sess-nst14x8icr…`
+shown in the header).
+- **Why it matters — continuity.** Because each turn is persisted, context
+  carries across turns: "price of the tiered midi dress?" → "is it in **navy**?"
+  → "**order it**" — the agent knows what *"it"* is. It also remembers the
+  **language and channel**, so a shopper can start on Web/English and continue on
+  Phone/Spanish and keep the thread.
+- **Where it lives:** **Firestore** in the cloud (durable + shared across Cloud
+  Run instances, surviving a different container or scale-to-zero — the earlier
+  `SESSION · memory.get` step shows `backend=firestore`); an in-process store
+  locally.
+- **The pipeline, end to end:** `AUTH → SESSION (memory.get: load context) →
+  PRE-PROCESS (modality·language·channel) → ORCHESTRATOR → inventory_agent →
+  MEMORY (session updated: save this turn)`.
+- **Lesson / takeaway:** *every turn loads prior context at the start and
+  persists the new turn at the end* — that's the **T3 "memory / context across
+  switches"** requirement working live. When something in the pipeline looks
+  surprising, it's often the system doing exactly what it should; the dev portal
+  makes that legible.
+
 ---
 
 ## 7. Final architecture (after all the iteration)

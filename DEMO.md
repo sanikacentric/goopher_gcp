@@ -96,6 +96,24 @@ pipeline and a real `ORDER_PLACED` write.
 > orchestrator pick a worker sub-agent, the tools fire, the fulfillment pipeline
 > run, and a real database row get written. Full observability, built in."*
 
+### 5b. 🧠 Durable memory — point at the `MEMORY · session updated` step
+**Do:** Ask *"what's the price of the tiered midi dress?"* → then just *"is it in
+**navy**?"* → then *"**order it**."* Point at the last pipeline step,
+`MEMORY · session updated`.
+
+**They see:** the agent resolves *"it"* correctly across turns; each turn's
+pipeline ends with `MEMORY · session updated · persisted user + assistant turns`.
+
+> 🗣️ *"Every turn **loads prior context** at the start and **persists the new
+> turn** at the end — to **Firestore** in the cloud, so it's durable and shared
+> across Cloud Run instances even after scale-to-zero. That's why I can say 'is
+> it in navy?' then 'order it' and it knows what 'it' is. It also remembers
+> **language and channel** — start on Web in English, continue on Phone in
+> Spanish, same thread. Real, durable conversational memory."*
+
+> 💡 WOW line: *"This is the T3 'context-across-switches' requirement — the agent
+> has genuine memory, and you can watch it save every turn live."*
+
 ---
 
 ## 6. 🛡️ THE FINALE — the self-healing Guardian (the jaw-dropper)

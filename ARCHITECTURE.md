@@ -224,6 +224,14 @@ goopher_orchestrator   ◄── MAIN agent (ROOT LlmAgent, decides + delegates)
 The dev portal labels the deterministic steps "PRE-PROCESS" and the orchestrator
 "ORCHESTRATOR (gold)" so the two layers are never confused.
 
+**Cloud Trace note:** the deterministic steps are *not* ADK agents, so they don't
+produce ADK/`GenAI` spans. They ARE wrapped in lightweight OpenTelemetry child
+spans (`preprocess.modality_agent`, `preprocess.language_agent`,
+`preprocess.channel_agent`, `preprocess.adapt_for_phone`, `session.memory_get`,
+`memory.session_update`) so they still appear under `chat_turn` in Cloud Trace —
+fast, no-LLM, alongside the genuine ADK + Gemini spans. So Cloud Trace shows the
+full picture: deterministic glue *and* the real agent reasoning.
+
 ---
 
 ## 5b. Why checkout is deterministic — the transactional gate

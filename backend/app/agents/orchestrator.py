@@ -319,31 +319,37 @@ class AgentService:
 
             import time as _time
 
-            mem = self.memory.get(req.session_id, customer_id)
+            with span("session.memory_get", backend=_settings.db_backend):
+                mem = self.memory.get(req.session_id, customer_id)
 
             # --- PHASE 1: deterministic pre-processing (fast Python, no LLM) ---
             # modality / language / channel / memory are handled here reliably —
-            # NOT as ADK sub-agents. Shown as "pre-process" in the portal.
+            # NOT as ADK sub-agents. They're still wrapped in lightweight trace
+            # spans so they ALSO appear in Cloud Trace (not just the dev portal),
+            # while staying plain, instant, no-LLM Python.
             _t0 = _time.perf_counter()
-            modality = modality_agent.classify_modality(req.message, req.attachments)
-            if getattr(req, "voice", False) and modality == "text":
-                modality = "voice"
-            text = modality_agent.normalize_to_text(
-                req.message, req.attachments, _settings.gemini_model
-            )
+            with span("preprocess.modality_agent"):
+                modality = modality_agent.classify_modality(req.message, req.attachments)
+                if getattr(req, "voice", False) and modality == "text":
+                    modality = "voice"
+                text = modality_agent.normalize_to_text(
+                    req.message, req.attachments, _settings.gemini_model
+                )
             ft.step("preprocess", "modality_agent",
                     f"modality={modality}", ms=(_time.perf_counter() - _t0) * 1000,
                     modality=modality)
 
-            language = req.language or language_agent.detect_language(
-                text, default=self.memory.recall(req.session_id, "language", "en")
-            )
-            self.memory.remember(req.session_id, "language", language)
+            with span("preprocess.language_agent"):
+                language = req.language or language_agent.detect_language(
+                    text, default=self.memory.recall(req.session_id, "language", "en")
+                )
+                self.memory.remember(req.session_id, "language", language)
             ft.step("preprocess", "language_agent", f"language={language}",
                     language=language)
 
-            channel = req.channel
-            self.memory.remember(req.session_id, "channel", channel)
+            with span("preprocess.channel_agent", channel=req.channel):
+                channel = req.channel
+                self.memory.remember(req.session_id, "channel", channel)
             ft.step("preprocess", "channel_agent", f"channel={channel}", channel=channel)
 
             self.memory.add_turn(
@@ -411,14 +417,16 @@ class AgentService:
                 path = "fallback"
 
             if channel == "phone":
-                reply = channel_agent.adapt_for_phone(reply)
+                with span("preprocess.adapt_for_phone"):
+                    reply = channel_agent.adapt_for_phone(reply)
                 ft.step("preprocess", "adapt_for_phone", "voice-safe text")
 
-            self.memory.add_turn(
-                req.session_id,
-                Turn(role="assistant", content=reply, channel=channel,
-                     language=language, modality=modality),
-            )
+            with span("memory.session_update", backend=_settings.db_backend):
+                self.memory.add_turn(
+                    req.session_id,
+                    Turn(role="assistant", content=reply, channel=channel,
+                         language=language, modality=modality),
+                )
 
             # (User + assistant turns are persisted inside the path helpers.)
             ft.step("memory", "session updated",

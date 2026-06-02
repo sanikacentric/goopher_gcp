@@ -28,6 +28,7 @@ os.environ.update(
         "ALLOWED_EMAILS": "demo@goopher.app",
         "MASTER_PASSWORD": "test-master-password",
         "FULFILLMENT_STAGE_DELAY": "0",   # no demo delays in tests
+        "GUARDIAN_HEAL_DELAY": "0",        # Guardian heals instantly in tests
         "ENABLE_TRACING": "false",
         "ENVIRONMENT": "test",
         # The whole suite logs in many times within one minute; a low login

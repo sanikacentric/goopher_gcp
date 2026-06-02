@@ -54,9 +54,11 @@
       .g-comp { display: flex; align-items: center; gap: 10px; background: #0f1117;
         border: 1px solid var(--border); border-radius: 10px; padding: 9px 14px; font-size: 12.5px; min-width: 210px; }
       .g-comp .led { width: 15px; height: 15px; border-radius: 50%; flex: none; }
-      .g-comp .led.healthy { background: var(--green); box-shadow: 0 0 10px var(--green); }
-      .g-comp .led.healing { background: var(--amber); box-shadow: 0 0 12px var(--amber); animation: pulse 1s infinite; }
-      .g-comp .led.down { background: var(--accent); box-shadow: 0 0 14px var(--accent); animation: pulse .6s infinite; }
+      .g-comp .led.healthy { background: #1f8a3b; box-shadow: 0 0 10px #2ea043; }
+      .g-comp .led.down { background: var(--accent); box-shadow: 0 0 14px var(--accent); animation: pulse .55s infinite; }
+      .g-comp .led.degraded { background: #f0d000; box-shadow: 0 0 13px #f0d000; animation: pulse .9s infinite; }
+      .g-comp .led.healing { background: #e8851a; box-shadow: 0 0 13px #e8851a; animation: pulse .8s infinite; }
+      .g-comp .led.restarting { background: #7be88f; box-shadow: 0 0 14px #7be88f; animation: pulse .7s infinite; }
       .g-comp .c-name { font-weight: 700; }
       .g-comp .c-detail { color: var(--muted); font-size: 11px; }
       .g-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
@@ -248,8 +250,15 @@
       // time (repeatable). The separate "Run request" buttons stay for replays.
       async function killAndHeal(component) {
         await chaos(component, "inject");                 // LED → 🔴 down
-        await new Promise(r => setTimeout(r, 800));        // a beat, so it lands
-        await simulate(component);                         // → streams the HEAL card
+        // Fast-poll health so the LED animates through the stages (down → degraded
+        // → healing → restarting → restored) in real time as the heal streams.
+        const fast = setInterval(refreshHealth, 450);
+        try {
+          await new Promise(r => setTimeout(r, 700));      // let the red land first
+          await simulate(component);                       // staged heal streams ~6s
+        } finally {
+          setTimeout(() => clearInterval(fast), 1500);
+        }
       }
       document.querySelectorAll(".g-btn.chaos").forEach(b =>
         b.addEventListener("click", () => killAndHeal(b.dataset.comp)));

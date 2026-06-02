@@ -27,12 +27,17 @@ serve concurrent requests).
 """
 from __future__ import annotations
 
+import os
 import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
 from ..observability.telemetry import incr, log_event
+
+# Per-stage pause so the heal animates in real time on the dev portal. Tests set
+# GUARDIAN_HEAL_DELAY=0 to stay fast.
+_HEAL_DELAY = float(os.environ.get("GUARDIAN_HEAL_DELAY", "1.1"))
 
 # Components Guardian watches (shown as the health strip in /dev).
 COMPONENTS = ("vertex", "catalog", "fulfillment")
@@ -134,9 +139,10 @@ class Guardian:
                 for c, cc in self._comps.items()
             }
         overall = "healthy"
-        if any(v["state"] == "down" for v in comps.values()):
+        states = {v["state"] for v in comps.values()}
+        if "down" in states:
             overall = "degraded"
-        elif any(v["state"] == "healing" for v in comps.values()):
+        elif states & {"degraded", "healing", "restarting"}:
             overall = "healing"
         return {"overall": overall, "components": comps,
                 "labels": {c: _PLAYBOOK[c]["label"] for c in COMPONENTS},
@@ -186,60 +192,85 @@ class Guardian:
             return self._heal(component, exc, primary, fallback, repair, label)
 
     def _heal(self, component, exc, primary, fallback, repair, label) -> Any:
-        from ..observability.flow_recorder import TurnTrace
+        """
+        Staged, real-time self-healing. Each stage walks the component LED through
+        a state AND streams a step to the dev portal HEAL card, with a pause in
+        between so a stakeholder watches the recovery happen live:
+          🔴 DOWN → 🟡 DEGRADED → 🟠 HEALING → 🟢 RESTARTING → 🟢 RESTORED
+        """
+        from ..observability.flow_recorder import TurnTrace, commit_record
         incr("guardian_heals_total")
         pb = _PLAYBOOK.get(component, {})
+        label_h = pb.get("label", component)
         ft = TurnTrace(kind="heal")
-        ft.record.user_message = f"⚠️ fault in {pb.get('label', component)}"
+        ft.record.user_message = f"⚠️ fault in {label_h}"
         ft.record.customer_id = "guardian"
-        ft.step("heal", "1. DETECT",
-                f"{label or component} failed: {type(exc).__name__}: {str(exc)[:160]}")
-        self._mark(component, "healing", f"fault: {str(exc)[:80]}")
         self._bump_failure(component)
-        ft.step("heal", "2. DIAGNOSE", pb.get("diagnose", "unknown fault"))
 
-        # 3) REMEDIATE — self-repair (root cause) then retry with backoff.
+        def stage(state, detail, step_name, step_detail, delay=_HEAL_DELAY):
+            self._mark(component, state, detail)
+            with self._lock:
+                self._comps[component].last_event = step_detail
+            ft.step("heal", step_name, step_detail)
+            commit_record(ft.record)        # stream the card AS IT GROWS
+            if delay:
+                time.sleep(delay)
+
+        # 1) DETECT — 🔴 server down
+        stage("down", f"🔴 {label_h} server DOWN",
+              "1. DETECT",
+              f"{label or component} failed: {type(exc).__name__}: {str(exc)[:140]}")
+        # 2) DIAGNOSE — 🟡 degraded
+        stage("degraded", f"🟡 {label_h} degraded",
+              "2. DIAGNOSE", pb.get("diagnose", "unknown fault"))
+
+        # 3) REMEDIATE — 🟠 healing (optional self-repair, then retries, then failover)
         if repair is not None:
             try:
                 repair()
-                ft.step("heal", "3. REMEDIATE · self-repair", pb.get("remedy", "repaired"))
+                stage("healing", "🟠 self-repairing (re-seed)…",
+                      "3. REMEDIATE · self-repair", pb.get("remedy", "repaired"))
             except Exception as rexc:  # noqa: BLE001
-                ft.step("heal", "3. REMEDIATE · self-repair FAILED", str(rexc)[:120])
+                stage("healing", "🟠 self-repair failed",
+                      "3. REMEDIATE · self-repair FAILED", str(rexc)[:120])
 
         result, recovered, via = None, False, ""
         for attempt in range(1, self._MAX_RETRIES + 1):
-            time.sleep(self._BACKOFF_S * attempt)
             try:
                 result = primary()
                 recovered, via = True, f"retry #{attempt}"
-                ft.step("heal", "3. REMEDIATE · retry", f"succeeded on {via}")
+                stage("restarting", "🟢 recovered on retry",
+                      "3. REMEDIATE · retry", f"succeeded on {via}")
                 break
             except Exception as rexc:  # noqa: BLE001
-                ft.step("heal", f"3. REMEDIATE · retry #{attempt} failed",
-                        f"{type(rexc).__name__}: {str(rexc)[:100]}")
+                stage("healing", "🟠 healing in progress…",
+                      f"3. REMEDIATE · retry #{attempt} failed",
+                      f"{type(rexc).__name__}: {str(rexc)[:90]}")
 
-        # Still failing → fail over so the CUSTOMER never sees an error.
         if not recovered and fallback is not None:
             try:
                 result = fallback()
                 recovered, via = True, "failover"
-                ft.step("heal", "3. REMEDIATE · failover",
-                        "served from the fallback path — customer unaffected")
+                stage("restarting", "🟢 failed over — customer served",
+                      "3. REMEDIATE · failover",
+                      "served from the fallback path — customer unaffected")
             except Exception as fexc:  # noqa: BLE001
-                ft.step("heal", "3. REMEDIATE · failover FAILED", str(fexc)[:120])
+                stage("down", "🔴 failover failed",
+                      "3. REMEDIATE · failover FAILED", str(fexc)[:120])
 
-        # 4) VERIFY.
+        # 4) VERIFY + heal forward — 🟢 restarting → 🟢 RESTORED
         if recovered:
-            # If we recovered via retry the primary is healthy; via failover we're
-            # degraded-but-serving until the background probe heals forward.
-            state = "healthy" if via.startswith("retry") else "healing"
-            detail = ("recovered on the primary" if state == "healthy"
-                      else "degraded → serving via failover; probing to heal forward")
-            self._mark(component, state, detail)
-            if state == "healthy":
-                self._reset_circuit(component)
-            ft.step("heal", "4. VERIFY", f"{detail} (via {via})")
-            ft.record.reply = f"✅ self-healed via {via}"
+            stage("restarting", f"🟢 trying to restart {label_h}…",
+                  "4. VERIFY",
+                  "serving via failover; probing the primary to heal forward")
+            # The dependency comes back → clear the fault, restore the primary.
+            self.chaos.clear(component)
+            self._reset_circuit(component)
+            stage("healthy", "✅ operational",
+                  "✅ RESTORED",
+                  f"{label_h} is back → closed the circuit, restored to primary",
+                  delay=0)
+            ft.record.reply = f"✅ self-healed via {via} → restored"
         else:
             self._mark(component, "down", "no fallback succeeded")
             ft.step("heal", "4. VERIFY", "could not recover — escalated")
@@ -248,7 +279,7 @@ class Guardian:
         with self._lock:
             self._comps[component].heals += 1
             self._comps[component].last_event = ft.record.reply
-        ft.commit()
+        commit_record(ft.record)
         log_event("guardian_heal", component=component, recovered=recovered, via=via)
 
         if not recovered:

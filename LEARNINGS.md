@@ -382,6 +382,39 @@ modality:
   3. **Synthetic transactions** are a legitimate, low-risk way to demonstrate (and
      monitor) resilience.
 
+### 3.20 Conversational ordering — context, quantities, and sticky language
+Three closely-related defects surfaced once people ordered the way they actually
+talk (phone + voice + Spanish):
+
+- **Quantity leaked into product search.** "place an order of **above 10**
+  items" ordered **Play-Doh ×10** — because the "10" was left in the product
+  string and matched "Play-Doh **10**-Pack". Fix: `_extract_order_product` now
+  strips quantities (anywhere) and filler/contextual words before searching.
+- **"above" was treated as a product name.** It's actually a *reference to the
+  item just discussed*. Fix: the inventory tools record the **last-viewed product**
+  (`get_last_viewed`, set in `search_inventory`/`get_product_details`, so it works
+  in BOTH the ADK and deterministic paths), and `_try_checkout` resolves
+  contextual references ("order it", "the above item") to that — never a random
+  item; if nothing was viewed it asks "which item?". This turned a bug into a
+  feature: *ask about a product, then say "order it."*
+- **Sticky language.** After a Spanish conversation the session remembered
+  `language=es`; English had **no positive fingerprint**, so an English message
+  scored 0 and fell back to the remembered Spanish → English in, Spanish out.
+  Fix: add an English function-word fingerprint and let "en" win when it has the
+  top/tied score, so a clearly-English message overrides the sticky default
+  (real es/fr/hi/zh still detect correctly).
+- **Lessons:**
+  1. **Separate the quantity from the product** — a number in the utterance is a
+     count, not part of the item name; don't let it reach the catalog search.
+  2. **Resolve references with memory, not guesses** — "it/this/above" means "the
+     thing we just discussed"; track last-viewed and use it (or ask), never
+     substitute.
+  3. **Don't let remembered state get stuck** — a sensible default (remembered
+     language) must still yield to a clear current signal; give the "baseline"
+     option (English) a positive way to win.
+  4. **Test with how people actually talk** — voice + a second language exposed
+     all three; exact-phrase unit tests would have missed them.
+
 ---
 
 ## 4. Key trade-offs and decisions
@@ -561,6 +594,9 @@ developer portal, 53 unit tests + 8 evals.
     behind a flag.
 22. **Self-healing is only a "wow" if it's visible** — ship the chaos button and
     the live DETECT→DIAGNOSE→REMEDIATE→VERIFY stream, not just the recovery code.
+23. **Keep quantity out of the product name, resolve "it/above" from memory, and
+    don't let remembered state get stuck** — conversational ordering breaks in
+    all three ways when people talk naturally (voice + a second language).
 
 ---
 

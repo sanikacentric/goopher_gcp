@@ -114,6 +114,21 @@ pipeline ends with `MEMORY · session updated · persisted user + assistant turn
 > 💡 WOW line: *"This is the T3 'context-across-switches' requirement — the agent
 > has genuine memory, and you can watch it save every turn live."*
 
+### 5c. 🗣️ Contextual ordering — "order it" / "order the above item"
+**Do:** Ask about a product (e.g. *"do you have oreos?"*). Then just say
+*"order it"* — or *"place an order of the above 10 items."*
+
+**They see:** GOOPHER orders **the exact product you were just looking at** (10 ×
+Oreo), not a random item — because it remembers the last item you viewed.
+
+> 🗣️ *"Watch — I ask about a product, then I just say 'order it.' It remembers
+> what I was looking at and orders exactly that. That's contextual memory turning
+> conversation into action."*
+
+> ⚠️ Guardrail to mention: *"If I'd never looked at anything, it asks 'which
+> item?' rather than guessing — and it never substitutes the wrong product. And
+> the quantity ('10') never bleeds into product matching."*
+
 ---
 
 ## 6. 🛡️ THE FINALE — the self-healing Guardian (the jaw-dropper)

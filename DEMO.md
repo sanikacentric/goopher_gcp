@@ -238,3 +238,34 @@ run op ─┤  ✅ success → 🟢 healthy                          │
   the system never breaks in front of them."*
 - **Business CTO:** *"Production-grade agent on free-tier infra, with autonomous
   recovery that removes 2 a.m. pages."*
+
+---
+
+## ✅ Requirements coverage (use if the CTO asks "is everything done?")
+Every acceptance criterion is implemented, deployed, and tested (**88 passing**).
+
+| # | Criterion | Status / where to show it |
+|---|---|---|
+| 2A | Chrome extension (MV3 side panel) | the GOOPHER side panel |
+| 2A-4 | Multi-channel (web / phone) | Channel dropdown → **phone simulator** |
+| 2A-5 | Multi-lingual | ask in Spanish; auto-detect + dropdown |
+| 2A-6 | Multi-modal (text / voice / image / **camera vision**) | 🎤 voice, 📷 camera, 📎 file |
+| T1 | Authentication + **single-user lockdown** (fail-closed) | sign-in; allowlist + master pw |
+| T2 | ADK orchestrator + worker sub-agents | `/dev` ORCHESTRATOR → workers; Cloud Trace |
+| T3 | Memory / context across switches | `MEMORY · session updated`; "order it" |
+| T4 | Agent skills | `agents/skills/` |
+| T5 | Tools (in-process function tools) | inventory / order / checkout tools |
+| T6 | Gemini LLM (free tier / Vertex) | `gemini-2.5-flash` |
+| T7 | Google Cloud free tier | Firestore + Cloud Run + Trace |
+| T8 | Evals | `python evals/run_evals.py` |
+| T9 | Unit tests | `pytest` — 88 passing |
+| T10 | Observability + **dev portal** + **self-healing Guardian** | `/dev`, Cloud Trace, `/metrics`, `/version` |
+| T11 / T12 | README / Architecture | `README.md`, `ARCHITECTURE.md` |
+| T14 / T16 | Production-grade, Dockerized, Cloud Run | live URL |
+| T15 | Commented code | throughout |
+| T17 | CI/CD (GitHub Actions) | push → test → build → deploy |
+| 3 | Individual **& high-volume** orders (chat, `/orders/bulk`, **file upload**) | bulk order from `order.txt` |
+| 4 | Self-service ordering — single + **structured checkout gate** | "place an order"; staged cart |
+| 5 | Order management — 9-stage fulfillment → `ORDER_PLACED` | `/dev` fulfillment pipeline |
+| Sec | Abuse protection (rate limit + request-size limits) | `middleware.py` |
+| ✨ | **Self-healing** (circuit breaker · failover · chaos · heal-forward) | `/dev` 🛡️ Guardian — the finale |

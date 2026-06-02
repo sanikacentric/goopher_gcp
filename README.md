@@ -25,7 +25,7 @@ while preserving conversation context.
 | **ADK orchestrator** + 3 subagents | [`backend/app/agents/`](backend/app/agents/) | T2 |
 | Memory agent — context across switches | [`backend/app/memory/memory_agent.py`](backend/app/memory/memory_agent.py) | T3 |
 | Agent skills (inventory, orders) | [`backend/app/agents/skills/`](backend/app/agents/skills/) | T4 |
-| **MCP tools** (inventory + order status) | [`backend/app/mcp/`](backend/app/mcp/) | T5 / 2A-1,2 |
+| **In-process function tools** (inventory + order status) | [`backend/app/tools/`](backend/app/tools/) | T5 / 2A-1,2 |
 | Gemini LLM (free tier) | `gemini-2.5-flash` | T6 |
 | Google Cloud (Firestore + Cloud Run + Trace) | — | T7 / T14 |
 | Multi-channel subagent (phone/web) | [`channel_agent.py`](backend/app/agents/channel_agent.py) | 2A-4 |
@@ -37,12 +37,20 @@ while preserving conversation context.
 | **Bulk order from an uploaded file** | [`orchestrator.py`](backend/app/agents/orchestrator.py) `_try_file_bulk_order` | 3 |
 | **Cart / orders panel** in the extension | [`extension/`](extension/) + `/orders/mine` | 2A |
 | **Phone channel = mobile-device simulator** | [`extension/sidepanel.*`](extension/) | 2A-4 |
+| **Contextual ordering** ("order it" / "the above item") | [`orchestrator.py`](backend/app/agents/orchestrator.py) + `get_last_viewed` | 4 |
+| **Self-service GenAI front end** (chat) | [`extension/`](extension/) + `/chat` | 4 |
 | **Self-healing Guardian** (circuit breaker, failover, chaos demo) | [`guardian.py`](backend/app/agents/guardian.py) + `/dev` | T10 |
-| Individual **& high-volume** orders | [`order_tool.py`](backend/app/mcp/order_tool.py) + `/orders/bulk` | 3 |
+| **Developer portal** — live end-to-end flow visualizer | [`static/dev_portal.html`](backend/app/static/dev_portal.html) + `/dev` | T10 |
+| **Single-user lockdown** (email allowlist + master pw, fail-closed) | [`auth.py`](backend/app/auth/auth.py), `config.allowed_emails` | T1 / Sec |
+| **Abuse protection** (rate limiting + request-size limits, DoS) | [`middleware.py`](backend/app/middleware.py) | Sec |
+| Individual **& high-volume** orders | [`order_tool.py`](backend/app/tools/order_tool.py) + `/orders/bulk` | 3 |
 | Evals | [`evals/`](evals/) | T8 |
-| Unit tests | [`tests/`](tests/) | T9 |
-| Observability (traces/logs/metrics) | [`telemetry.py`](backend/app/observability/telemetry.py) | T10 |
+| Unit tests (88 passing) | [`tests/`](tests/) | T9 |
+| Observability (traces/logs/metrics + `/version`) | [`telemetry.py`](backend/app/observability/telemetry.py) | T10 |
+| README | this file | T11 |
 | Architecture writeup | [`ARCHITECTURE.md`](ARCHITECTURE.md) | T12 |
+| Production-grade, Cloud-deployable | Dockerfile + Cloud Run | T14 |
+| Comments explaining logic | throughout | T15 |
 | Dockerized + Cloud Run | [`Dockerfile`](Dockerfile), [`docker-compose.yml`](docker-compose.yml) | T14 / T16 |
 | CI/CD (GitHub Actions) | [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) | T17 |
 

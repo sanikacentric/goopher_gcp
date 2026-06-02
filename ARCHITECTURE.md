@@ -133,7 +133,7 @@ coherent across turns, channels, and languages.*
 | ADK orchestrator | `backend/app/agents/orchestrator.py` | **T2** |
 | Memory agent (context) | `backend/app/memory/memory_agent.py` | **T3**, global |
 | Agent skills | `backend/app/agents/skills/*` | **T4** |
-| MCP tools (inventory/order) | `backend/app/mcp/*` | **T5**, 2A-1, 2A-2 |
+| In-process function tools (inventory/order) | `backend/app/tools/*` | **T5**, 2A-1, 2A-2 |
 | Gemini LLM (free tier) | `config.gemini_model`, orchestrator | **T6** |
 | Google Cloud stack (free tier) | Firestore + Cloud Run + Cloud Trace | **T7**, T14 |
 | Channel subagent (phone/web) | `backend/app/agents/channel_agent.py` | **2A-4** |
@@ -143,8 +143,15 @@ coherent across turns, channels, and languages.*
 | Checkout (single + bulk, transactional gate) | `backend/app/tools/checkout_tool.py`, `_try_checkout` | **4** |
 | Order management (9-stage fulfillment) | `backend/app/tools/order_mgmt_tool.py` | **5** |
 | Cart / orders panel | `extension/`, `/orders/mine` | **2A** |
+| Phone channel = mobile-device simulator | `extension/sidepanel.*` | **2A-4** |
+| Bulk order from an uploaded file | `orchestrator._try_file_bulk_order` | **3** |
+| Contextual ordering ("order it") | `orchestrator`, `inventory_tool.get_last_viewed` | **4** |
 | Individual + high-volume orders | `order_tool.bulk_order_status`, `/orders/bulk` | **3** |
 | Self-service GenAI front end | extension + `/chat` | **4** |
+| **Self-healing Guardian** (circuit breaker, failover, chaos) | `backend/app/agents/guardian.py`, `/dev` | **T10** |
+| Developer portal (live flow visualizer) | `backend/app/static/dev_portal.html`, `/dev` | **T10** |
+| Single-user lockdown (allowlist + master pw, fail-closed) | `backend/app/auth/auth.py`, `config` | **T1 / Sec** |
+| Abuse protection (rate limit + size limit, DoS) | `backend/app/middleware.py` | **Sec** |
 | Evals | `evals/` | **T8** |
 | Unit tests | `tests/` | **T9** |
 | Observability | `backend/app/observability/telemetry.py` | **T10** |

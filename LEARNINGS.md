@@ -554,10 +554,25 @@ Storefront "Marketplace" served at /  ·  Developer portal at /dev (live SSE)
 
 ## 8. What's done vs. deliberately deferred
 
-**Done & verified:** mock data (2 departments), search relevance, multi-agent
-ADK orchestration on Vertex (traced), Firestore data + memory, single-user
-lockdown, rate limiting/size limits, Docker, **fully automated CI/CD**, live
-developer portal, 53 unit tests + 8 evals.
+**Done & verified:** mock catalog (3 departments — clothing/food/toys), search
+relevance, multi-agent ADK orchestration on Vertex (traced, with the
+deterministic pre-process steps also span-traced), Firestore data + durable
+session memory, single-user lockdown, rate limiting/size limits, Docker,
+**fully automated CI/CD**, live developer portal, **88 unit tests** + 8 evals.
+
+**Added since the original build (all done & verified):**
+- **Vision subagent** — camera "see it, shop it" (Gemini Vision on Vertex).
+- **Structured checkout gate** (single + bulk) → simulated payment →
+  `ORDER_PLACED` → 9-stage fulfillment; **never substitutes**.
+- **Bulk order from an uploaded file**; **contextual ordering** ("order it").
+- **Cart / orders panel**; **phone-channel mobile simulator**; voice in/out.
+- **Self-healing Guardian** — circuit breaker · failover · self-repair · chaos
+  injection · heal-forward, with a live animated `/dev` panel.
+- **`/version`** build marker for deploy verification.
+
+**Acceptance-criteria coverage:** every criterion (2A, 2A-4/5/6, T1–T17, Req
+3/4/5, security) is implemented — see the coverage table in `DEMO.md` and the
+component map in `ARCHITECTURE.md §3`.
 
 **Deferred (with honest reasons):**
 - **Secret Manager** (currently Cloud Run env vars) — standard hardening, not yet

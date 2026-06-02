@@ -24,6 +24,14 @@ import re
 # product/English text ("Jessica" -> would have matched "je" under substring
 # matching, which caused a French misdetection bug).
 _FINGERPRINTS = {
+    # English function words — so a clearly-English message returns "en" even
+    # when the session's remembered language is something else (otherwise the
+    # remembered language would "stick" because English had no positive signal).
+    "en": {"the", "you", "what", "is", "are", "do", "does", "have", "want",
+           "where", "show", "please", "can", "could", "would", "order", "buy",
+           "place", "your", "with", "how", "much", "this", "that", "above",
+           "give", "need", "and", "of", "in", "stock", "price", "available",
+           "yes", "no", "it", "them", "cookies", "dress"},
     "es": {"hola", "gracias", "pedido", "vestido", "dónde", "está", "cuánto",
            "tengo", "quiero", "mi", "el", "la", "para", "cuál", "precio"},
     "fr": {"bonjour", "merci", "commande", "robe", "où", "combien", "veux",
@@ -74,13 +82,21 @@ def detect_language(text: str, default: str = "en") -> str:
     for lang, vocab in _FINGERPRINTS.items():
         scores[lang] = len(words & vocab)
 
-    best = max(scores, key=scores.get) if scores else default
-    best_score = scores.get(best, 0)
+    # English is the safe baseline: if the message carries a clear English signal
+    # AND no other language scores higher, return "en". This stops a remembered
+    # non-English session language from "sticking" when the shopper switches back
+    # to English (English otherwise has no positive signal to override it).
+    en_score = scores.get("en", 0)
+    non_en = {k: v for k, v in scores.items() if k != "en"}
+    best_other = max(non_en, key=non_en.get) if non_en else default
+    best_other_score = non_en.get(best_other, 0)
+    if en_score >= 1 and en_score >= best_other_score:
+        return "en"
 
-    # Require either 2+ matching words, or 1 match that carries an accent — a
-    # lone common token shouldn't flip an English sentence to another language.
-    if best_score >= 2 or (best_score == 1 and has_accent):
-        return best
+    # Otherwise: require 2+ matching words, or 1 match that carries an accent —
+    # a lone common token shouldn't flip a sentence to another language.
+    if best_other_score >= 2 or (best_other_score == 1 and has_accent):
+        return best_other
     return default
 
 

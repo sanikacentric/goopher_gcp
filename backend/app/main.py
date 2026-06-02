@@ -120,7 +120,7 @@ def healthz() -> dict:
 
 # Build marker — bump when verifying a deploy actually rolled out. Hit
 # GET /version on the live service to confirm which code Cloud Run is running.
-BUILD_VERSION = "2026-06-01-contextual-order"
+BUILD_VERSION = "2026-06-01-language-unstick"
 
 
 @app.get("/version")

@@ -29,6 +29,16 @@ def test_detect_english_default():
     assert language_agent.detect_language("where is my order") == "en"
 
 
+def test_english_overrides_sticky_non_english_default():
+    """A clearly-English message must return 'en' even when the session's
+    remembered (default) language is Spanish — no language stickiness."""
+    assert language_agent.detect_language("place an order of above 10 oreos",
+                                          default="es") == "en"
+    assert language_agent.detect_language("order it", default="es") == "en"
+    # But a genuinely Spanish message still detects as Spanish.
+    assert language_agent.detect_language("el precio del vestido", default="en") == "es"
+
+
 def test_language_directive():
     d = language_agent.language_directive("es")
     assert "Spanish" in d

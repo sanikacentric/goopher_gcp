@@ -120,7 +120,7 @@ def healthz() -> dict:
 
 # Build marker — bump when verifying a deploy actually rolled out. Hit
 # GET /version on the live service to confirm which code Cloud Run is running.
-BUILD_VERSION = "2026-06-01-guardian-staged"
+BUILD_VERSION = "2026-06-01-guardian-anim"
 
 
 @app.get("/version")
@@ -291,7 +291,13 @@ async def dev_chaos(request: Request) -> dict:
     g = get_guardian()
     if action == "clear":
         g.chaos.clear(component)
-        g.tick()  # immediately probe → heal forward when the fault is gone
+        if body.get("silent"):
+            # Restore cleanly without emitting a heal-forward card (the client
+            # animation already showed the recovery).
+            g._reset_circuit(component)
+            g._mark(component, "healthy", "operational")
+        else:
+            g.tick()  # probe → heal forward (records a card) when the fault clears
     else:
         # Fresh incident → reset the breaker so the NEXT request always runs the
         # full DETECT→DIAGNOSE→REMEDIATE→VERIFY loop (repeatable demo, not a

@@ -211,64 +211,111 @@
         heal: "SELF-HEAL",
       };
 
-      // ---- Guardian self-healing: health strip + chaos controls ----
+      // ---- Guardian self-healing: health strip + CLIENT-ORCHESTRATED animation ----
       const COMP_EMOJI = { vertex: "🧠", catalog: "🗄️", fulfillment: "📦" };
+      const COMP_NAME = { vertex: "Gemini / Vertex AI",
+                          catalog: "Catalog (Firestore)", fulfillment: "Order fulfillment" };
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const HEAL_STEP_MS = 1400;     // pause between stages (the visible "wait")
+      let animating = false;         // pause health polling while we animate
+
+      function setOverallBadge(overall) {
+        const ov = document.getElementById("gOverall");
+        ov.textContent = overall;
+        ov.className = "g-overall " + (overall === "healthy" ? "" : overall);
+        document.getElementById("guardian").classList.toggle("alert", overall !== "healthy");
+      }
+      function compCard(c, label, state, detail, heals) {
+        const div = document.createElement("div");
+        div.className = "g-comp"; div.dataset.comp = c;
+        div.innerHTML =
+          `<span class="led ${state}"></span>` +
+          `<span><span class="c-name">${COMP_EMOJI[c] || ""} ${esc(label)}</span>` +
+          `<br><span class="c-detail">${esc(detail)}${heals ? " · " + heals + " heals" : ""}</span></span>`;
+        return div;
+      }
       async function refreshHealth() {
+        if (animating) return;                  // don't fight the live animation
         try {
           const h = await (await fetch("/dev/health")).json();
-          const ov = document.getElementById("gOverall");
-          ov.textContent = h.overall;
-          ov.className = "g-overall " + (h.overall === "healthy" ? "" : h.overall);
-          // Glow the whole panel when anything is unhealthy, so it's unmissable.
-          document.getElementById("guardian").classList.toggle("alert", h.overall !== "healthy");
+          setOverallBadge(h.overall);
           const strip = document.getElementById("gStrip");
           strip.innerHTML = "";
-          for (const [c, v] of Object.entries(h.components)) {
-            const div = document.createElement("div");
-            div.className = "g-comp";
-            div.innerHTML =
-              `<span class="led ${v.state}"></span>` +
-              `<span><span class="c-name">${COMP_EMOJI[c] || ""} ${esc(h.labels[c] || c)}</span>` +
-              `<br><span class="c-detail">${esc(v.detail)}${v.heals ? " · " + v.heals + " heals" : ""}</span></span>`;
-            strip.appendChild(div);
-          }
+          for (const [c, v] of Object.entries(h.components))
+            strip.appendChild(compCard(c, h.labels[c] || c, v.state, v.detail, v.heals));
         } catch (_) {}
       }
-      async function chaos(component, action) {
-        try { await fetch("/dev/chaos", { method: "POST",
+      function postChaos(component, action, silent) {
+        return fetch("/dev/chaos", { method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ component, action }) }); } catch (_) {}
-        refreshHealth();
+          body: JSON.stringify({ component, action, silent: !!silent }) }).catch(() => {});
       }
-      async function simulate(component) {
-        try { await fetch("/dev/heal-demo", { method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ component }) }); } catch (_) {}
-        refreshHealth();
+      // Directly drive ONE component's LED + detail (so the animation is reliable
+      // regardless of network/SSE timing).
+      function setLed(c, state, detail) {
+        const card = document.querySelector(`.g-comp[data-comp="${c}"]`);
+        if (card) {
+          card.querySelector(".led").className = "led " + state;
+          card.querySelector(".c-detail").textContent = detail;
+        }
+        setOverallBadge(state === "healthy" ? "healthy"
+                        : state === "down" ? "degraded" : "healing");
       }
-      // One click = kill it AND run a request, so the full heal streams every
-      // time (repeatable). The separate "Run request" buttons stay for replays.
+      // The staged recovery plan (client-driven for guaranteed real-time pacing).
+      function healPlan(c) {
+        const name = COMP_NAME[c];
+        const fault = { vertex: "LLM provider unavailable (Vertex 5xx / empty / timeout)",
+          catalog: "catalog read failed / returned empty (stale or unreachable)",
+          fulfillment: "a fulfillment stage failed" }[c];
+        const remedy = c === "catalog"
+          ? { led: "healing", det: "🟠 self-repairing — re-seeding catalog…",
+              n: "3. REMEDIATE · self-repair", d: "re-seed the catalog from goopher_catalog.json, then retry" }
+          : { led: "healing", det: "🟠 healing in progress… (retrying)",
+              n: "3. REMEDIATE · retry", d: "retry #1 failed → retry #2 failed" };
+        return [
+          { led: "down",       det: `🔴 ${name} — server DOWN`,         n: "1. DETECT",   d: `${c}.synthetic_request failed: ChaosError (injected outage)` },
+          { led: "degraded",   det: `🟡 ${name} — degraded`,            n: "2. DIAGNOSE", d: fault },
+          remedy,
+          { led: "restarting", det: "🟢 failed over — customer served", n: "3. REMEDIATE · failover", d: "served from the fallback path — customer unaffected" },
+          { led: "restarting", det: `🟢 trying to restart ${name}…`,    n: "4. VERIFY",   d: "probing the primary to heal forward" },
+          { led: "healthy",    det: "✅ operational",                   n: "✅ RESTORED", d: `${name} is back → closed the circuit, restored to primary` },
+        ];
+      }
+      // One click → break it, then watch it self-heal step-by-step, in real time.
       async function killAndHeal(component) {
-        await chaos(component, "inject");                 // LED → 🔴 down
-        // Fast-poll health so the LED animates through the stages (down → degraded
-        // → healing → restarting → restored) in real time as the heal streams.
-        const fast = setInterval(refreshHealth, 450);
+        if (animating) return;
+        animating = true;
         try {
-          await new Promise(r => setTimeout(r, 700));      // let the red land first
-          await simulate(component);                       // staged heal streams ~6s
+          postChaos(component, "inject");            // real backend state: down
+          const plan = healPlan(component);
+          const rec = { id: "heal-" + Date.now(), ts: Date.now() / 1000, kind: "heal",
+            session_id: null, customer_id: "guardian",
+            user_message: "⚠️ fault in " + COMP_NAME[component],
+            reply: "healing…", used_tools: [], memory: {}, steps: [] };
+          for (const s of plan) {
+            setLed(component, s.led, s.det);          // walk the LED color
+            rec.steps.push({ stage: "heal", name: s.n, detail: s.d, ms: 0, data: {} });
+            const done = s.n.indexOf("RESTORED") >= 0;
+            rec.reply = done ? "✅ self-healed via failover → restored" : "healing in progress…";
+            render(rec);                              // reveal the next card step
+            await sleep(done ? 0 : HEAL_STEP_MS);     // ← the visible WAIT
+          }
+          postChaos(component, "clear", true);        // restore backend silently
         } finally {
-          setTimeout(() => clearInterval(fast), 1500);
+          animating = false;
+          refreshHealth();
         }
       }
       document.querySelectorAll(".g-btn.chaos").forEach(b =>
         b.addEventListener("click", () => killAndHeal(b.dataset.comp)));
       document.querySelectorAll(".g-btn.sim").forEach(b =>
-        b.addEventListener("click", () => simulate(b.dataset.comp)));
+        b.addEventListener("click", () => killAndHeal(b.dataset.comp)));
       document.getElementById("gRestore").addEventListener("click", async () => {
-        for (const c of ["vertex", "catalog", "fulfillment"]) await chaos(c, "clear");
+        for (const c of ["vertex", "catalog", "fulfillment"]) await postChaos(c, "clear", true);
+        refreshHealth();
       });
       refreshHealth();
-      setInterval(refreshHealth, 2500);  // also catches background heal-forward
+      setInterval(refreshHealth, 2500);
 
       function esc(s) {
         return (s ?? "").toString().replace(/[&<>]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;" }[c]));

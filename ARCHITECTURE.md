@@ -377,11 +377,36 @@ run primary()
      the circuit once the fault clears.
 ```
 
+**The 4 steps, as they stream to the `/dev` HEAL card:**
+1. **🔎 DETECT** — `1. DETECT — vertex.synthetic_request failed: ChaosError…`
+2. **🧠 DIAGNOSE** — `2. DIAGNOSE — LLM provider unavailable (Vertex 5xx / empty / timeout)`
+3. **🔧 REMEDIATE** — `retry #1 failed → retry #2 failed → failover (customer unaffected)`
+4. **✅ VERIFY** — `4. VERIFY — serving via failover; probing to heal forward`
+…and on recovery: `PROBE → HEAL FORWARD (primary is back → closed the circuit)`.
+
+The whole flow at a glance:
+```
+        ┌──────────────── circuit breaker ────────────────┐
+run op ─┤  ✅ success → 🟢 healthy                          │
+        │  ❌ failure → DETECT → DIAGNOSE → REMEDIATE       │
+        │               (self-repair → retry → failover)   │
+        │               → VERIFY (🟢 healthy / 🟠 healing)  │
+        └──────────────────────────────────────────────────┘
+                 ▲                                   │
+                 └── HEAL FORWARD ◀── background probe┘
+                     (fault cleared → restore primary, close circuit)
+```
+
 **Patterns:** circuit breaker · retry-with-jittered-backoff · failover / graceful
 degrade · self-repair · health-probe-driven recovery · chaos injection (an
 on-demand, deterministic fault injector — like Chaos Monkey — so the demo is
 repeatable). The `/dev` portal renders a **health strip** (🧠 Vertex · 🗄️ Catalog
 · 📦 Fulfillment) plus chaos buttons; recoveries appear as purple `heal` records.
+
+**Demo control (where the buttons are):** open `/dev` → the **🛡️ Guardian** panel
+(pinned under the legend) → **💥 Kill Vertex** (the Vertex LED goes 🟠) → **▶
+Vertex** (a synthetic request streams the HEAL card) → **✅ Restore all** (heals
+forward to 🟢).
 
 **Why isolated (design choice):** the existing flows were already working and
 demo-critical, so Guardian was built to *never* be able to break them — it wraps

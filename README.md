@@ -77,10 +77,20 @@ while preserving conversation context.
 - **🛡️ Self-healing Guardian.** A separate, isolated agent that wraps work in a
   resilience policy — **circuit breaker · retry-with-backoff · failover ·
   self-repair · health probes**. The `/dev` portal has a live **health strip**
-  and **chaos buttons** ("Kill Vertex"): break a subsystem on demand and watch
-  Guardian **DETECT → DIAGNOSE → REMEDIATE → VERIFY** and *heal forward* once it
-  recovers — the customer never sees an error. See
-  [`ARCHITECTURE.md` §5e](ARCHITECTURE.md) and the **[demo script](DEMO.md)**.
+  and **chaos buttons** ("Kill Vertex"): break a subsystem on demand and watch it
+  self-heal. The recovery is a **4-step loop** streamed live as a HEAL card:
+  1. **🔎 DETECT** — catch the failure, mark the component 🟠, bump the breaker.
+  2. **🧠 DIAGNOSE** — classify the fault against a playbook (root cause).
+  3. **🔧 REMEDIATE** — self-repair (e.g. re-seed) → retry with backoff → fail
+     over, so the **customer is still served**.
+  4. **✅ VERIFY** — 🟢 if recovered on the primary, 🟠 if serving via failover.
+
+  Wrapped by a **⚡ circuit breaker** (open after N failures, serve the fallback)
+  and a **🔄 background probe** that **heals forward** — restores the primary and
+  closes the circuit once the fault clears, autonomously. To find the buttons:
+  open `/dev` → the **🛡️ Guardian** panel under the legend → **💥 Kill Vertex** →
+  **▶ Vertex** → **✅ Restore all**. See [`ARCHITECTURE.md` §5e](ARCHITECTURE.md)
+  and the **[demo script](DEMO.md)**.
 
 > 🎬 **Presenting this?** See **[DEMO.md](DEMO.md)** for a full CTO walkthrough
 > with the exact lines to say.

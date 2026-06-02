@@ -135,6 +135,50 @@ Oreo), not a random item — because it remembers the last item you viewed.
 > This is the closer. Slow down and let it land. It's **isolated** — it drives
 > synthetic transactions and touches no live flow, so it's 100% safe to run live.
 
+### 📍 Where the buttons are
+The **💥 Kill Vertex** button is in the **Developer Portal** (`…/dev`), **not** the
+extension. Just under the colored legend you'll see the **🛡️ Guardian —
+self-healing** panel:
+- a row of health LEDs: 🧠 Gemini/Vertex AI · 🗄️ Catalog · 📦 Order fulfillment
+- below them, the controls:
+```
+💥 Inject fault:  [ Kill Vertex ]  [ Corrupt catalog ]  [ Fail fulfillment ]
+▶ Run request:    [ Vertex ]       [ Catalog ]          [ Fulfillment ]
+                                                          [ ✅ Restore all ]
+```
+"Kill Vertex" is the first **red-outlined** button under **💥 Inject fault**. It's
+pinned at the **top** of `/dev`, above the live feed — scroll up if needed. If you
+don't see it, confirm `…/version` is `2026-06-01-guardian` (or later) and
+hard-refresh (Ctrl+F5).
+
+### 🔁 The 4 self-healing steps (what streams into the purple HEAL card)
+A 4-step loop wrapped in a circuit breaker:
+1. **🔎 DETECT** — the protected op fails; Guardian catches it, marks the
+   component 🟠 healing, bumps the breaker. → `1. DETECT — vertex.synthetic_request failed: ChaosError…`
+2. **🧠 DIAGNOSE** — classifies the fault against a playbook (root cause), doesn't
+   retry blindly. → `2. DIAGNOSE — LLM provider unavailable (Vertex 5xx / empty / timeout)`
+3. **🔧 REMEDIATE** (escalating, stops at the first that works): self-repair (e.g.
+   re-seed) → retry with backoff → fail over so the customer is still served. →
+   `retry #1 failed → retry #2 failed → failover (customer unaffected)`
+4. **✅ VERIFY** — set the state: recovered on primary → 🟢; serving via failover →
+   🟠 (degraded but up), keep probing. → `4. VERIFY — serving via failover; probing to heal forward`
+
+Wrapped by **⚡ circuit breaker** (after N failures, open the circuit and serve the
+fallback directly) and **🔄 heal forward** (a background probe restores the primary
+and closes the circuit once the fault clears — autonomously).
+
+```
+        ┌──────────────── circuit breaker ────────────────┐
+run op ─┤  ✅ success → 🟢 healthy                          │
+        │  ❌ failure → DETECT → DIAGNOSE → REMEDIATE       │
+        │               (self-repair → retry → failover)   │
+        │               → VERIFY (🟢 healthy / 🟠 healing)  │
+        └──────────────────────────────────────────────────┘
+                 ▲                                   │
+                 └── HEAL FORWARD ◀── background probe┘
+                     (fault cleared → restore primary, close circuit)
+```
+
 **Do, step by step (≈90 sec):**
 1. On `/dev`, point at the **🛡️ Guardian health strip** — all 🟢.
    > *"Guardian continuously watches our critical dependencies — the LLM, the

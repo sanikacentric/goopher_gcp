@@ -382,6 +382,33 @@ modality:
   3. **Synthetic transactions** are a legitimate, low-risk way to demonstrate (and
      monitor) resilience.
 
+**Reference — the 4 self-healing steps** (what streams to the purple HEAL card):
+1. **🔎 DETECT** — protected op fails; mark 🟠, bump the breaker. → `1. DETECT —
+   vertex.synthetic_request failed: ChaosError…`
+2. **🧠 DIAGNOSE** — classify against a playbook (root cause), don't retry blindly.
+   → `2. DIAGNOSE — LLM provider unavailable (Vertex 5xx / empty / timeout)`
+3. **🔧 REMEDIATE** (stops at the first that works) — self-repair (e.g. re-seed) →
+   retry with backoff → fail over so the customer is still served. → `retry #1
+   failed → retry #2 failed → failover (customer unaffected)`
+4. **✅ VERIFY** — 🟢 if recovered on primary, 🟠 if serving via failover. → `4.
+   VERIFY — serving via failover; probing to heal forward`
+
+Wrapped by **⚡ circuit breaker** (open after N failures → serve the fallback
+directly) and **🔄 heal forward** (a background probe restores the primary and
+closes the circuit once the fault clears) → `PROBE → HEAL FORWARD (primary is
+back → closed the circuit)`.
+
+**Where the buttons are (operational note):** the chaos controls live in the
+**dev portal**, not the extension — `…/dev` → the **🛡️ Guardian** panel pinned
+under the legend → **💥 Kill Vertex** (LED 🟠) → **▶ Vertex** (streams the HEAL
+card) → **✅ Restore all** (heals forward to 🟢). If the panel is missing, the
+deployed build predates Guardian (check `…/version`) — hard-refresh `/dev`.
+
+**One-liner for the CTO:** *"Detect → Diagnose → Remediate → Verify, with a
+circuit breaker and a background probe that heals forward — it recovers, keeps
+the customer served, and restores itself when the dependency comes back. No
+pager, no human."*
+
 ### 3.20 Conversational ordering — context, quantities, and sticky language
 Three closely-related defects surfaced once people ordered the way they actually
 talk (phone + voice + Spanish):

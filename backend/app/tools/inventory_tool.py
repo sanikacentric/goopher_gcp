@@ -11,6 +11,23 @@ from __future__ import annotations
 from ..db.database import get_repository
 from ..observability.telemetry import incr, log_event
 
+# The most recently shown product — lets the agent resolve contextual orders
+# ("order it", "order the above item") to what the shopper was just looking at.
+# Process-global is fine for this single-user demo; both the ADK worker and the
+# deterministic path call these tools, so it's populated either way.
+_LAST_VIEWED: dict | None = None
+
+
+def get_last_viewed() -> dict | None:
+    """{'name', 'sku'} of the most recently shown product, or None."""
+    return _LAST_VIEWED
+
+
+def _set_last_viewed(name: str, sku: str) -> None:
+    global _LAST_VIEWED
+    _LAST_VIEWED = {"name": name, "sku": sku}
+    log_event("last_viewed_set", sku=sku)
+
 
 def search_inventory(query: str = "", color: str = "", size: str = "",
                      max_price: float | None = None) -> dict:
@@ -30,6 +47,8 @@ def search_inventory(query: str = "", color: str = "", size: str = "",
     products = repo.search_products(query=query, color=color, size=size, max_price=max_price)
     log_event("inventory_search", query=query, color=color, size=size,
               max_price=max_price, results=len(products))
+    if products:  # remember the top result for contextual orders ("order it")
+        _set_last_viewed(products[0].name, products[0].sku)
     return {
         "count": len(products),
         "products": [
@@ -79,4 +98,5 @@ def get_product_details(sku: str) -> dict:
     log_event("inventory_product_details", sku=sku, found=p is not None)
     if p is None:
         return {"found": False, "sku": sku}
+    _set_last_viewed(p.name, p.sku)   # remember for contextual orders
     return {"found": True, **p.model_dump()}

@@ -108,6 +108,26 @@ def test_checkout_is_structured_even_with_adk_path_on(monkeypatch):
     assert "oreo" in resp.reply.lower()
 
 
+def test_contextual_order_uses_last_viewed_not_a_stray_number():
+    """'order above 10 items' after looking at Oreos orders 10 OREOS — not a
+    product whose NAME happens to contain '10' (the qty must not leak into the
+    product search), and 'above' resolves to the last-viewed item."""
+    from backend.app.tools.inventory_tool import search_inventory
+    svc = AgentService()
+    search_inventory(query="oreo cookies")          # shopper views Oreos
+    out = svc._try_checkout("can u place an order of above 10 items", "CUST-1001")
+    assert out is not None
+    pay = svc._last_checkout
+    assert pay and pay.get("ok") is True
+    line = pay["cart"][0]
+    assert "oreo" in line["name"].lower()           # NOT play-doh
+    assert line["qty"] == 10
+    # "order it" resolves to whatever was viewed most recently.
+    search_inventory(query="lego")
+    out2 = svc._try_checkout("order it", "CUST-1001")
+    assert "lego" in svc._last_checkout["cart"][0]["name"].lower()
+
+
 def test_natural_phrasing_order_triggers_structured_checkout():
     """Conversational order phrasings (not just "place an order") must hit the
     structured gate so the cart payload is produced — and status queries must

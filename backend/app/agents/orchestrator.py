@@ -713,6 +713,9 @@ class AgentService:
                 # cookies")? Resolve it by name and order THAT product. We must
                 # never substitute a different item.
                 product = self._extract_order_product(text)
+                contextual = bool(re.search(
+                    r"\b(above|this|that|these|those|them|it|same|last|previous|"
+                    r"the one)\b", lowered))
                 if product:
                     res = resolve_variant_by_name(product)
                     if not res.get("ok"):
@@ -721,6 +724,19 @@ class AgentService:
                             {"ok": False, "message": res["message"]}, bulk=False)
                         return res["message"], ["checkout_agent"]
                     data = place_order(customer_id, variant_id=res["variant_id"], qty=qty)
+                elif contextual:
+                    # "order it" / "order the above item" → the product the shopper
+                    # was just looking at (from session memory), never a random item.
+                    from ..tools.inventory_tool import get_last_viewed
+                    lv = get_last_viewed()
+                    vid = self._resolve_id_to_variant(lv["sku"]) if lv else None
+                    if vid is None:
+                        msg = ("Which item would you like to order? Tell me the "
+                               "product name, or ask me about it first.")
+                        self._last_checkout = self._checkout_payload(
+                            {"ok": False, "message": msg}, bulk=False)
+                        return msg, ["checkout_agent"]
+                    data = place_order(customer_id, variant_id=vid, qty=qty)
                 else:
                     # Bare "place an order" with no product named -> default demo item.
                     data = place_order(customer_id, variant_id="", qty=qty)
@@ -957,10 +973,15 @@ class AgentService:
             m = re.search(pat, low)
             if m:
                 prod = m.group(1)
-                prod = re.sub(r"^\d{1,3}\s+", "", prod)  # drop leading qty
-                prod = re.sub(r"\b(please|now|thanks|thank you|today|asap|"
-                              r"for me|for us|to me|right now)\b", "", prod)
-                prod = prod.strip(" .,!?\"'")
+                prod = re.sub(r"\b\d{1,4}\b", " ", prod)  # drop quantities anywhere
+                # Drop filler + contextual-reference words so they're never
+                # mistaken for a product (e.g. "above 10 items" → "").
+                prod = re.sub(
+                    r"\b(please|now|thanks|thank you|today|asap|for me|for us|"
+                    r"to me|right now|above|below|item|items|of|the|those|these|"
+                    r"them|some|that|this|it|same|one|ones|last|previous|order)\b",
+                    " ", prod)
+                prod = re.sub(r"\s+", " ", prod).strip(" .,!?\"'")
                 if prod in {"", "this", "it", "that", "one", "this item", "order"}:
                     return ""
                 return prod

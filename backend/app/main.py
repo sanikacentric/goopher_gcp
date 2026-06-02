@@ -120,7 +120,7 @@ def healthz() -> dict:
 
 # Build marker — bump when verifying a deploy actually rolled out. Hit
 # GET /version on the live service to confirm which code Cloud Run is running.
-BUILD_VERSION = "2026-06-01-language-unstick"
+BUILD_VERSION = "2026-06-01-guardian-repeatable"
 
 
 @app.get("/version")
@@ -293,7 +293,14 @@ async def dev_chaos(request: Request) -> dict:
         g.chaos.clear(component)
         g.tick()  # immediately probe → heal forward when the fault is gone
     else:
+        # Fresh incident → reset the breaker so the NEXT request always runs the
+        # full DETECT→DIAGNOSE→REMEDIATE→VERIFY loop (repeatable demo, not a
+        # silent short-circuit from a still-open circuit).
+        g._reset_circuit(component)
         g.chaos.inject(component, body.get("fault", "outage"))
+        # Reflect the outage on the strip immediately (LED → red) so "Kill X" is
+        # visibly felt before the next request comes in and self-heals.
+        g._mark(component, "down", "💥 fault injected — next request self-heals")
     return g.health()
 
 

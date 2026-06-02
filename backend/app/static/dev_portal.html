@@ -34,32 +34,40 @@
       .chip { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
       .chip i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 
-      /* Guardian self-healing panel */
-      .guardian { background: #14101a; border-bottom: 1px solid var(--border); padding: 10px 22px; }
+      /* Guardian self-healing panel — prominent, with a glow when unhealthy */
+      .guardian { background: linear-gradient(180deg, #1a1226, #140f1c);
+        border: 1px solid #4b2e7a; border-radius: 12px; margin: 12px 22px;
+        padding: 14px 18px; box-shadow: 0 0 0 1px rgba(137,87,229,.15); }
+      .guardian.alert { border-color: var(--amber);
+        box-shadow: 0 0 26px rgba(210,153,34,.35); animation: gpulse 1.4s infinite; }
+      @keyframes gpulse { 50% { box-shadow: 0 0 12px rgba(210,153,34,.15); } }
       .g-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-      .g-title { font-weight: 700; color: #e9d5ff; font-size: 13px; }
-      .g-overall { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 10px;
+      .g-title { font-weight: 800; color: #d8b4fe; font-size: 16px; letter-spacing: .5px; }
+      .g-overall { font-size: 12px; font-weight: 800; padding: 3px 12px; border-radius: 11px;
         text-transform: uppercase; background: var(--green); color: #fff; }
       .g-overall.degraded { background: var(--accent); }
-      .g-overall.healing { background: var(--amber); }
+      .g-overall.healing { background: var(--amber); color: #1a1a1a; }
       .g-hint { font-size: 11px; color: var(--muted); }
-      .g-strip { display: flex; gap: 10px; flex-wrap: wrap; margin: 9px 0; }
-      .g-comp { display: flex; align-items: center; gap: 8px; background: var(--panel);
-        border: 1px solid var(--border); border-radius: 9px; padding: 6px 12px; font-size: 12px; min-width: 180px; }
-      .g-comp .led { width: 11px; height: 11px; border-radius: 50%; flex: none; }
-      .g-comp .led.healthy { background: var(--green); box-shadow: 0 0 8px var(--green); }
-      .g-comp .led.healing { background: var(--amber); box-shadow: 0 0 9px var(--amber); animation: pulse 1s infinite; }
-      .g-comp .led.down { background: var(--accent); box-shadow: 0 0 9px var(--accent); animation: pulse .7s infinite; }
-      .g-comp .c-name { font-weight: 600; }
-      .g-comp .c-detail { color: var(--muted); font-size: 10.5px; }
-      .g-controls { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
-      .g-ctl-label { font-size: 11px; color: var(--muted); }
+      .g-instruct { font-size: 12.5px; color: #cbb6e8; margin: 8px 0 4px; }
+      .g-instruct b { color: #fff; }
+      .g-strip { display: flex; gap: 12px; flex-wrap: wrap; margin: 10px 0; }
+      .g-comp { display: flex; align-items: center; gap: 10px; background: #0f1117;
+        border: 1px solid var(--border); border-radius: 10px; padding: 9px 14px; font-size: 12.5px; min-width: 210px; }
+      .g-comp .led { width: 15px; height: 15px; border-radius: 50%; flex: none; }
+      .g-comp .led.healthy { background: var(--green); box-shadow: 0 0 10px var(--green); }
+      .g-comp .led.healing { background: var(--amber); box-shadow: 0 0 12px var(--amber); animation: pulse 1s infinite; }
+      .g-comp .led.down { background: var(--accent); box-shadow: 0 0 14px var(--accent); animation: pulse .6s infinite; }
+      .g-comp .c-name { font-weight: 700; }
+      .g-comp .c-detail { color: var(--muted); font-size: 11px; }
+      .g-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+      .g-ctl-label { font-size: 12px; color: var(--muted); font-weight: 600; }
+      .g-ctl-label.g-replay { margin-left: 14px; font-weight: 400; }
       .g-btn { border: 1px solid var(--border); background: #21262d; color: var(--text);
-        border-radius: 7px; padding: 5px 10px; font-size: 12px; cursor: pointer; }
-      .g-btn:hover { filter: brightness(1.2); }
-      .g-btn.chaos { border-color: #7d2230; color: #ffb3b3; }
-      .g-btn.sim { border-color: #1f6feb; color: #9cc4ff; }
-      .g-btn.restore { border-color: #2ea043; color: #9be8a8; }
+        border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
+      .g-btn:hover { filter: brightness(1.18); transform: translateY(-1px); }
+      .g-btn.chaos { border-color: #b3263b; background: #7d1626; color: #ffd9de; font-weight: 700; }
+      .g-btn.sim { border-color: #1f6feb; color: #9cc4ff; padding: 5px 10px; font-weight: 400; font-size: 12px; }
+      .g-btn.restore { border-color: #2ea043; background: #18351f; color: #9be8a8; font-weight: 700; }
 
       main { flex: 1; overflow-y: auto; padding: 18px 22px; }
       .empty { color: var(--muted); text-align: center; margin-top: 60px; font-size: 15px; }
@@ -158,21 +166,26 @@
     <!-- Self-healing Guardian: live health strip + chaos controls (isolated). -->
     <section id="guardian" class="guardian">
       <div class="g-row">
-        <span class="g-title">🛡️ Guardian — self-healing</span>
+        <span class="g-title">🛡️ GUARDIAN — SELF-HEALING AGENT</span>
         <span id="gOverall" class="g-overall">—</span>
         <span class="g-hint">isolated synthetic monitor · does not touch live flows</span>
       </div>
+      <div class="g-instruct">
+        ⬇️ Click a red <b>Kill</b> button — Guardian will <b>DETECT → DIAGNOSE →
+        REMEDIATE → VERIFY</b> and stream the recovery as a purple <b>HEAL</b> card
+        below. Click <b>✅ Restore all</b> to heal forward to green. Repeatable.
+      </div>
       <div id="gStrip" class="g-strip"></div>
       <div class="g-controls">
-        <span class="g-ctl-label">💥 Inject fault:</span>
-        <button class="g-btn chaos" data-comp="vertex">Kill Vertex</button>
-        <button class="g-btn chaos" data-comp="catalog">Corrupt catalog</button>
-        <button class="g-btn chaos" data-comp="fulfillment">Fail fulfillment</button>
-        <span class="g-ctl-label" style="margin-left:10px">▶ Run request:</span>
+        <span class="g-ctl-label">💥 Break a dependency:</span>
+        <button class="g-btn chaos" data-comp="vertex">💥 Kill Vertex</button>
+        <button class="g-btn chaos" data-comp="catalog">💥 Corrupt catalog</button>
+        <button class="g-btn chaos" data-comp="fulfillment">💥 Fail fulfillment</button>
+        <button class="g-btn restore" id="gRestore">✅ Restore all</button>
+        <span class="g-ctl-label g-replay">↻ replay a request:</span>
         <button class="g-btn sim" data-comp="vertex">Vertex</button>
         <button class="g-btn sim" data-comp="catalog">Catalog</button>
         <button class="g-btn sim" data-comp="fulfillment">Fulfillment</button>
-        <button class="g-btn restore" id="gRestore" style="margin-left:10px">✅ Restore all</button>
       </div>
     </section>
 
@@ -204,6 +217,8 @@
           const ov = document.getElementById("gOverall");
           ov.textContent = h.overall;
           ov.className = "g-overall " + (h.overall === "healthy" ? "" : h.overall);
+          // Glow the whole panel when anything is unhealthy, so it's unmissable.
+          document.getElementById("guardian").classList.toggle("alert", h.overall !== "healthy");
           const strip = document.getElementById("gStrip");
           strip.innerHTML = "";
           for (const [c, v] of Object.entries(h.components)) {
@@ -229,8 +244,15 @@
           body: JSON.stringify({ component }) }); } catch (_) {}
         refreshHealth();
       }
+      // One click = kill it AND run a request, so the full heal streams every
+      // time (repeatable). The separate "Run request" buttons stay for replays.
+      async function killAndHeal(component) {
+        await chaos(component, "inject");                 // LED → 🔴 down
+        await new Promise(r => setTimeout(r, 800));        // a beat, so it lands
+        await simulate(component);                         // → streams the HEAL card
+      }
       document.querySelectorAll(".g-btn.chaos").forEach(b =>
-        b.addEventListener("click", () => chaos(b.dataset.comp, "inject")));
+        b.addEventListener("click", () => killAndHeal(b.dataset.comp)));
       document.querySelectorAll(".g-btn.sim").forEach(b =>
         b.addEventListener("click", () => simulate(b.dataset.comp)));
       document.getElementById("gRestore").addEventListener("click", async () => {

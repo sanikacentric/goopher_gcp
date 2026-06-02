@@ -163,8 +163,19 @@ class Guardian:
         cc = self._comps[component]
 
         # Circuit OPEN → skip the known-bad primary, serve the fallback directly.
+        # Still record it so the demo is never silent on a repeat run.
         if cc.open_until > _now() and fallback is not None:
             incr("guardian_shortcircuit_total")
+            from ..observability.flow_recorder import TurnTrace
+            ft = TurnTrace(kind="heal")
+            ft.record.customer_id = "guardian"
+            ft.record.user_message = f"⚡ {component} request (circuit OPEN)"
+            ft.step("heal", "CIRCUIT OPEN",
+                    "skipping the known-bad primary (breaker tripped)")
+            ft.step("heal", "FAILOVER",
+                    "served from the fallback path — customer unaffected")
+            ft.record.reply = "✅ served via fallback (fast path)"
+            ft.commit()
             return fallback()
 
         try:

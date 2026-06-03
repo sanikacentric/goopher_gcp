@@ -1,156 +1,197 @@
+/* ===========================================================================
+   GOOPHER · Chrome side panel — premium theme (matches the storefront).
+   All class names / IDs preserved so sidepanel.js keeps working.
+   =========================================================================== */
 :root {
-  --gp-primary: #c8102e;     /* JCPenney-ish red */
-  --gp-dark: #1a1a1a;
-  --gp-bg: #f7f7f8;
-  --gp-bubble-user: #c8102e;
+  --gp-primary: #e11d48;          /* rose */
+  --gp-primary-2: #fb7185;
+  --gp-accent: #7c3aed;           /* violet */
+  --gp-grad: linear-gradient(135deg, #e11d48, #7c3aed);
+  --gp-ink: #0f172a;
+  --gp-muted: #64748b;
+  --gp-bg: #f5f6fb;
+  --gp-bubble-user: #e11d48;
   --gp-bubble-bot: #ffffff;
-  --gp-border: #e2e2e6;
+  --gp-border: #e7e9f1;
 }
 
 * { box-sizing: border-box; }
-
-/* CRITICAL: make the HTML `hidden` attribute win over the display rules below,
-   so the login/chat views actually toggle. Without this, `.gp-login{display:flex}`
-   would override `hidden` and the sign-in form would stay visible after login. */
 [hidden] { display: none !important; }
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: var(--gp-bg);
-  color: var(--gp-dark);
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
+  font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--gp-ink);
+  background:
+    radial-gradient(520px 220px at 100% -5%, rgba(124, 58, 237, .10), transparent 60%),
+    radial-gradient(520px 220px at 0% -5%, rgba(225, 29, 72, .10), transparent 60%),
+    var(--gp-bg);
+  display: flex; flex-direction: column; height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
 
+/* ---------------- Header ---------------- */
 .gp-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 14px; background: #fff; border-bottom: 1px solid var(--gp-border);
+  padding: 12px 14px; background: rgba(255,255,255,.82);
+  backdrop-filter: saturate(160%) blur(12px); -webkit-backdrop-filter: saturate(160%) blur(12px);
+  border-bottom: 1px solid var(--gp-border); position: relative; z-index: 30;
 }
-.gp-brand { display: flex; align-items: center; gap: 10px; }
-.gp-logo { font-size: 22px; }
-.gp-title { font-weight: 800; letter-spacing: 0.5px; }
-.gp-subtitle { font-size: 11px; color: #777; }
-.gp-link { background: none; border: none; color: var(--gp-primary); cursor: pointer; font-size: 13px; }
+.gp-brand { display: flex; align-items: center; gap: 11px; }
+.gp-logo {
+  font-size: 19px; width: 38px; height: 38px; display: grid; place-items: center;
+  border-radius: 12px; background: var(--gp-grad); color: #fff;
+  box-shadow: 0 8px 16px -6px rgba(225, 29, 72, .55);
+}
+.gp-title {
+  font-weight: 800; letter-spacing: -.2px; font-size: 16px; line-height: 1;
+  background: linear-gradient(90deg, var(--gp-ink), #475569);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.gp-subtitle { font-size: 11px; color: var(--gp-muted); margin-top: 2px; }
+.gp-link { background: none; border: none; color: var(--gp-primary); cursor: pointer; font-size: 13px; font-weight: 600; }
+.gp-link:hover { text-decoration: underline; }
 
-.gp-login { padding: 24px 18px; display: flex; flex-direction: column; gap: 10px; }
-.gp-login h2 { margin: 0 0 4px; }
-.gp-hint { font-size: 12px; color: #666; margin: 0 0 8px; }
-.gp-login input { padding: 10px; border: 1px solid var(--gp-border); border-radius: 8px; font-size: 14px; }
+/* ---------------- Login ---------------- */
+.gp-login { padding: 28px 20px; display: flex; flex-direction: column; gap: 11px; }
+.gp-login h2 { margin: 0 0 2px; font-size: 22px; letter-spacing: -.3px; }
+.gp-hint { font-size: 12px; color: var(--gp-muted); margin: 0 0 8px; }
+.gp-login input {
+  padding: 12px; border: 1px solid var(--gp-border); border-radius: 11px; font-size: 14px;
+  background: #fff; transition: border-color .15s ease, box-shadow .15s ease;
+}
+.gp-login input:focus { outline: none; border-color: var(--gp-primary); box-shadow: 0 0 0 3px rgba(225,29,72,.14); }
 
 .gp-primary {
-  background: var(--gp-primary); color: #fff; border: none; border-radius: 8px;
-  padding: 10px 14px; font-weight: 600; cursor: pointer;
+  background: var(--gp-grad); color: #fff; border: none; border-radius: 11px;
+  padding: 11px 16px; font-weight: 700; cursor: pointer; font-family: inherit;
+  box-shadow: 0 10px 20px -8px rgba(225, 29, 72, .6); transition: transform .12s ease, filter .12s ease;
 }
-.gp-primary:hover { filter: brightness(0.95); }
-.gp-error { color: var(--gp-primary); font-size: 13px; }
+.gp-primary:hover { filter: brightness(1.05); transform: translateY(-1px); }
+.gp-primary:active { transform: translateY(0); }
+.gp-error { color: var(--gp-primary); font-size: 13px; font-weight: 600; }
 
+/* ---------------- Chat ---------------- */
 .gp-chat { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.gp-controls { display: flex; gap: 12px; padding: 8px 12px; background: #fff; border-bottom: 1px solid var(--gp-border); font-size: 12px; }
-.gp-controls label { display: flex; flex-direction: column; gap: 2px; color: #555; }
-.gp-controls select { padding: 4px; border: 1px solid var(--gp-border); border-radius: 6px; }
-/* The "Speak" toggle sits inline with its checkbox. */
-.gp-controls label.gp-speak-toggle { flex-direction: row; align-items: center; gap: 5px; }
+.gp-controls {
+  display: flex; gap: 14px; padding: 9px 14px; background: rgba(255,255,255,.7);
+  border-bottom: 1px solid var(--gp-border); font-size: 12px; align-items: flex-end;
+}
+.gp-controls label { display: flex; flex-direction: column; gap: 3px; color: var(--gp-muted); font-weight: 600; }
+.gp-controls select {
+  padding: 6px 8px; border: 1px solid var(--gp-border); border-radius: 9px; background: #fff;
+  font-family: inherit; font-size: 12.5px; color: var(--gp-ink);
+}
+.gp-controls label.gp-speak-toggle { flex-direction: row; align-items: center; gap: 6px; }
 
-.gp-messages { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
-.gp-msg { max-width: 85%; padding: 9px 12px; border-radius: 14px; font-size: 14px; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word; }
-.gp-msg.user { align-self: flex-end; background: var(--gp-bubble-user); color: #fff; border-bottom-right-radius: 4px; }
-.gp-msg.bot { align-self: flex-start; background: var(--gp-bubble-bot); border: 1px solid var(--gp-border); border-bottom-left-radius: 4px; }
-.gp-msg .gp-meta { display: block; margin-top: 4px; font-size: 10px; opacity: 0.6; }
-.gp-typing { font-style: italic; color: #888; font-size: 13px; padding: 0 14px 8px; }
+.gp-messages { flex: 1; overflow-y: auto; padding: 16px 14px; display: flex; flex-direction: column; gap: 11px; }
+.gp-msg {
+  max-width: 86%; padding: 11px 14px; border-radius: 18px; font-size: 14px;
+  line-height: 1.45; white-space: pre-wrap; word-wrap: break-word;
+  animation: gp-pop .2s cubic-bezier(.2,.7,.2,1);
+}
+@keyframes gp-pop { from { opacity: 0; transform: translateY(6px) scale(.98); } }
+.gp-msg.user {
+  align-self: flex-end; background: var(--gp-grad); color: #fff;
+  border-bottom-right-radius: 6px; box-shadow: 0 8px 18px -8px rgba(225,29,72,.55);
+}
+.gp-msg.bot {
+  align-self: flex-start; background: var(--gp-bubble-bot); color: var(--gp-ink);
+  border: 1px solid var(--gp-border); border-bottom-left-radius: 6px;
+  box-shadow: 0 6px 16px -10px rgba(16,24,40,.2);
+}
+.gp-msg .gp-meta { display: block; margin-top: 5px; font-size: 10px; opacity: .65; }
+.gp-typing { font-style: italic; color: var(--gp-muted); font-size: 13px; padding: 0 16px 8px; }
 
-.gp-attachbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px; }
-.gp-chip { background: #eee; border-radius: 12px; padding: 3px 8px; font-size: 11px; display: flex; gap: 6px; align-items: center; }
-.gp-chip button { border: none; background: none; cursor: pointer; color: #999; }
+.gp-attachbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px; }
+.gp-chip {
+  background: #eef0f6; border: 1px solid var(--gp-border); border-radius: 999px;
+  padding: 4px 10px; font-size: 11px; display: flex; gap: 6px; align-items: center;
+}
+.gp-chip button { border: none; background: none; cursor: pointer; color: var(--gp-muted); }
 
-.gp-composer { display: flex; gap: 8px; padding: 10px 12px; background: #fff; border-top: 1px solid var(--gp-border); align-items: center; }
-.gp-attach { cursor: pointer; font-size: 20px; }
-.gp-composer input[type="text"] { flex: 1; padding: 10px; border: 1px solid var(--gp-border); border-radius: 20px; font-size: 14px; }
+/* ---------------- Composer ---------------- */
+.gp-composer {
+  display: flex; gap: 8px; padding: 11px 12px; background: rgba(255,255,255,.85);
+  border-top: 1px solid var(--gp-border); align-items: center;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.gp-attach { cursor: pointer; font-size: 19px; opacity: .8; transition: opacity .12s ease; }
+.gp-attach:hover { opacity: 1; }
+.gp-composer input[type="text"] {
+  flex: 1; padding: 11px 14px; border: 1px solid var(--gp-border); border-radius: 999px;
+  font-size: 14px; font-family: inherit; background: #fff; min-width: 0;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.gp-composer input[type="text"]:focus { outline: none; border-color: var(--gp-primary); box-shadow: 0 0 0 3px rgba(225,29,72,.13); }
 
-/* Voice mic button */
 .gp-mic {
   border: 1px solid var(--gp-border); background: #fff; border-radius: 50%;
-  width: 38px; height: 38px; font-size: 17px; cursor: pointer; flex: none;
-  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; font-size: 17px; cursor: pointer; flex: none;
+  display: flex; align-items: center; justify-content: center; transition: all .12s ease;
 }
-.gp-mic:hover { background: #f2f2f2; }
-.gp-mic.listening { background: var(--gp-primary); border-color: var(--gp-primary); animation: gp-pulse 1s infinite; }
-@keyframes gp-pulse { 0% { box-shadow: 0 0 0 0 rgba(200,16,46,.5); } 70% { box-shadow: 0 0 0 8px rgba(200,16,46,0); } 100% { box-shadow: 0 0 0 0 rgba(200,16,46,0); } }
+.gp-mic:hover { background: #fff; border-color: var(--gp-primary); transform: translateY(-1px); box-shadow: 0 6px 14px -6px rgba(225,29,72,.4); }
+.gp-mic.listening { background: var(--gp-primary); border-color: var(--gp-primary); color: #fff; animation: gp-pulse 1s infinite; }
+@keyframes gp-pulse { 0% { box-shadow: 0 0 0 0 rgba(225,29,72,.5); } 70% { box-shadow: 0 0 0 9px rgba(225,29,72,0); } 100% { box-shadow: 0 0 0 0 rgba(225,29,72,0); } }
 
-/* ---- Header cart / orders button + panel ---- */
+/* ---------------- Header cart / orders ---------------- */
 .gp-header-actions { display: flex; align-items: center; gap: 12px; }
 .gp-cart-btn {
   position: relative; border: 1px solid var(--gp-border); background: #fff;
-  border-radius: 50%; width: 36px; height: 36px; font-size: 17px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; width: 38px; height: 38px; font-size: 17px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: all .12s ease;
 }
-.gp-cart-btn:hover { background: #f2f2f2; }
+.gp-cart-btn:hover { border-color: var(--gp-primary); transform: translateY(-1px); box-shadow: 0 6px 14px -6px rgba(225,29,72,.4); }
 .gp-cart-badge {
   position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px;
-  padding: 0 5px; border-radius: 9px; background: var(--gp-primary); color: #fff;
-  font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
+  padding: 0 5px; border-radius: 9px; background: var(--gp-grad); color: #fff;
+  font-size: 11px; font-weight: 800; line-height: 18px; text-align: center;
+  box-shadow: 0 4px 10px -3px rgba(225,29,72,.6);
 }
 
 .gp-orders-panel {
-  position: absolute; top: 56px; right: 8px; left: 8px; z-index: 20;
-  max-height: 65vh; overflow-y: auto; background: #fff;
-  border: 1px solid var(--gp-border); border-radius: 12px;
-  box-shadow: 0 8px 28px rgba(0,0,0,.18); padding: 10px 12px;
+  position: absolute; top: 60px; right: 10px; left: 10px; z-index: 40;
+  max-height: 66vh; overflow-y: auto; background: #fff;
+  border: 1px solid var(--gp-border); border-radius: 16px;
+  box-shadow: 0 24px 50px -18px rgba(16,24,40,.4); padding: 12px 14px;
 }
-.gp-orders-head {
-  display: flex; align-items: center; justify-content: space-between;
-  font-weight: 700; font-size: 14px; margin-bottom: 8px;
-}
-.gp-orders-empty { color: #777; font-size: 13px; }
-.gp-orders-list { display: flex; flex-direction: column; gap: 8px; }
-.gp-order-card { border: 1px solid var(--gp-border); border-radius: 10px; padding: 8px 10px; background: #fafafa; }
+.gp-orders-head { display: flex; align-items: center; justify-content: space-between; font-weight: 800; font-size: 15px; margin-bottom: 10px; }
+.gp-orders-empty { color: var(--gp-muted); font-size: 13px; }
+.gp-orders-list { display: flex; flex-direction: column; gap: 10px; }
+.gp-order-card { border: 1px solid var(--gp-border); border-radius: 13px; padding: 10px 12px; background: #fbfbfe; }
 .gp-order-top { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
-.gp-order-id { font-weight: 700; }
-.gp-order-status { font-size: 11px; color: #fff; background: #2e9e5b; border-radius: 10px; padding: 1px 8px; }
-.gp-order-items { margin: 6px 0; padding-left: 16px; font-size: 12.5px; color: #333; }
-.gp-order-items li { margin: 1px 0; }
-.gp-order-foot { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11.5px; color: #555; }
+.gp-order-id { font-weight: 800; letter-spacing: -.2px; }
+.gp-order-status { font-size: 11px; color: #fff; background: linear-gradient(135deg,#059669,#34d399); border-radius: 999px; padding: 2px 10px; font-weight: 700; }
+.gp-order-items { margin: 7px 0; padding-left: 16px; font-size: 12.5px; color: #334155; }
+.gp-order-items li { margin: 2px 0; }
+.gp-order-foot { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11.5px; color: var(--gp-muted); }
 
-/* ---- Device frame ----
-   Web mode: a transparent, full-height container (chat looks unchanged).
-   Phone mode (.gp-phone on #chatView): rendered as a mobile-device simulator. */
+/* ---------------- Device frame (phone simulator) ---------------- */
 .gp-device { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .gp-device-screen { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .gp-device-statusbar, .gp-device-home, .gp-device-notch { display: none; }
 
-/* Phone simulator */
 .gp-phone .gp-device {
-  margin: 10px auto; max-width: 332px; width: 100%;
+  margin: 12px auto; max-width: 332px; width: 100%;
   background: linear-gradient(160deg, #1d1d1f, #2c2c2e);
-  border-radius: 38px; padding: 10px 9px 9px; border: 2px solid #3a3a3c;
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.4), inset 0 0 0 2px #000;
+  border-radius: 40px; padding: 11px 10px 10px; border: 2px solid #3a3a3c;
+  box-shadow: 0 22px 50px -16px rgba(0,0,0,.55), inset 0 0 0 2px #000;
 }
 .gp-phone .gp-device-statusbar {
   display: flex; align-items: center; justify-content: space-between;
-  position: relative; color: #fff; font-size: 12px; font-weight: 600;
-  padding: 3px 16px 8px;
+  position: relative; color: #fff; font-size: 12px; font-weight: 700; padding: 3px 16px 8px;
 }
 .gp-phone .gp-device-notch {
-  display: block; position: absolute; left: 50%; top: -1px;
-  transform: translateX(-50%); width: 96px; height: 20px;
-  background: #000; border-radius: 0 0 14px 14px;
+  display: block; position: absolute; left: 50%; top: -1px; transform: translateX(-50%);
+  width: 100px; height: 21px; background: #000; border-radius: 0 0 14px 14px;
 }
 .gp-phone .gp-device-signal { letter-spacing: 1px; }
-.gp-phone .gp-device-screen {
-  background: var(--gp-bg); border-radius: 28px; overflow: hidden;
-}
-.gp-phone .gp-device-home {
-  display: block; width: 116px; height: 5px; border-radius: 3px;
-  background: #fff; opacity: 0.85; margin: 7px auto 2px;
-}
-/* A subtle "phone channel" banner cue at the top of the screen. */
+.gp-phone .gp-device-screen { background: var(--gp-bg); border-radius: 30px; overflow: hidden; }
+.gp-phone .gp-device-home { display: block; width: 116px; height: 5px; border-radius: 3px; background: #fff; opacity: .85; margin: 7px auto 2px; }
 .gp-phone .gp-device-screen::before {
-  content: "📱 GOOPHER Mobile · Voice + Camera";
-  display: block; text-align: center; font-size: 11px; font-weight: 700;
-  color: #fff; background: var(--gp-primary); padding: 5px;
+  content: "📱 GOOPHER Mobile · Voice + Camera"; display: block; text-align: center;
+  font-size: 11px; font-weight: 800; color: #fff; background: var(--gp-grad); padding: 6px;
 }
-/* Compact the composer so 📎 · input · 📷 · 🎤 · Send all fit the narrow screen. */
 .gp-phone .gp-composer { padding: 7px 7px; gap: 5px; }
 .gp-phone .gp-mic { width: 32px; height: 32px; font-size: 15px; }
 .gp-phone .gp-composer input[type="text"] { padding: 8px; min-width: 0; }

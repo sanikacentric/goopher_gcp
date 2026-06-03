@@ -7,7 +7,7 @@ import { getCustomer, getToken, getMyOrders, login, logout, sendChat, sendVision
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.5.4 — fresh session + refreshed cart on each sign-in");
+console.log("GOOPHER side panel v0.5.5 — cart split: Current orders (session) + Order history");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -185,6 +185,7 @@ async function deliverResponse(resp, viaVoice = false) {
   const meta = `${resp.channel} · ${resp.language}${resp.used_tools?.length ? " · " + resp.used_tools.join(",") : ""}`;
   if (resp.checkout && resp.checkout.ok) {
     await renderCheckout(resp.checkout, meta);
+    if (resp.checkout.order_id) currentIds.add(resp.checkout.order_id);  // this session
     refreshOrders();   // new order placed → update the cart badge/panel
     if (viaVoice && els.speakToggle?.checked) {
       speak(`Payment successful. Order ${resp.checkout.order_id} placed successfully.`, resp.language);
@@ -244,33 +245,31 @@ function fileToAttachment(file) {
 }
 
 // ---- cart / orders panel ----
-// A persistent header button (top corner) lets the customer open a panel of
-// everything they've already ordered. Data comes from the authoritative
-// /orders/mine endpoint, so it always reflects real placed orders.
+// /orders/mine returns the customer's FULL history (persisted). We split it into
+// two sections so a fresh sign-in is clean:
+//   • Current orders — placed in THIS sign-in session (the badge counts these)
+//   • Order history — orders that already existed at sign-in (previous sessions)
 let ordersCache = [];
+let currentIds = new Set();   // order ids placed in THIS sign-in session
 
 function setCartBadge(n) {
   els.cartCount.textContent = String(n);
   els.cartCount.hidden = !n;
 }
 
-function renderOrders(orders) {
-  els.ordersList.innerHTML = "";
-  if (!orders.length) {
-    els.ordersList.innerHTML =
-      `<p class="gp-orders-empty">No orders yet. Try “place an order of oreo cookies”.</p>`;
-    return;
-  }
-  for (const o of orders) {
-    const items = (o.items || [])
-      .map((it) => {
-        const opt = [it.color, it.size].filter(Boolean).join(", ");
-        return `<li>${it.name}${opt ? ` (${opt})` : ""} × ${it.qty} — $${Number(it.unit_price).toFixed(2)}</li>`;
-      })
-      .join("");
-    const card = document.createElement("div");
-    card.className = "gp-order-card";
-    card.innerHTML = `
+// Reset so this sign-in session starts at 0 current orders (everything already
+// in the account becomes "history").
+function startFreshOrders() { currentIds = new Set(); }
+
+function orderCard(o) {
+  const items = (o.items || [])
+    .map((it) => {
+      const opt = [it.color, it.size].filter(Boolean).join(", ");
+      return `<li>${it.name}${opt ? ` (${opt})` : ""} × ${it.qty} — $${Number(it.unit_price).toFixed(2)}</li>`;
+    })
+    .join("");
+  return `
+    <div class="gp-order-card">
       <div class="gp-order-top">
         <span class="gp-order-id">${o.order_id}</span>
         <span class="gp-order-status">${o.status || "Processing"}</span>
@@ -280,16 +279,30 @@ function renderOrders(orders) {
         <span>Total: <b>$${Number(o.total).toFixed(2)}</b></span>
         ${o.tracking_number ? `<span>📦 ${o.carrier || "UPS"} ${o.tracking_number}</span>` : ""}
         ${o.estimated_delivery ? `<span>ETA ${o.estimated_delivery}</span>` : ""}
-      </div>`;
-    els.ordersList.appendChild(card);
+      </div>
+    </div>`;
+}
+
+function renderOrders(orders) {
+  const current = orders.filter((o) => currentIds.has(o.order_id));
+  const history = orders.filter((o) => !currentIds.has(o.order_id));
+  let html = `<div class="gp-order-section">🛒 Current orders <span class="gp-sec-count">this session</span></div>`;
+  html += current.length
+    ? current.map(orderCard).join("")
+    : `<p class="gp-orders-empty">No orders yet this session. Try “place an order of oreo cookies”.</p>`;
+  if (history.length) {
+    html += `<div class="gp-order-section gp-order-section-hist">🧾 Order history <span class="gp-sec-count">${history.length} previous</span></div>`;
+    html += history.map(orderCard).join("");
   }
+  els.ordersList.innerHTML = html;
 }
 
 async function refreshOrders() {
   try {
     const data = await getMyOrders();
     ordersCache = data.orders || [];
-    setCartBadge(data.count || ordersCache.length);
+    setCartBadge(currentIds.size);   // badge = THIS session's orders only
+    renderOrders(ordersCache);
     return ordersCache;
   } catch (err) {
     if (err.message === "UNAUTHORIZED") { await logout(); showLogin(); }
@@ -579,7 +592,7 @@ els.loginBtn.addEventListener("click", async () => {
     // and a refreshed cart (showChat re-fetches /orders/mine for this customer).
     await newSession();
     els.messages.innerHTML = "";
-    ordersCache = [];
+    startFreshOrders();       // this session's "current orders" start empty
     setCartBadge(0);
     closeOrders();
     await showChat();

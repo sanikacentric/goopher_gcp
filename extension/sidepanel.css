@@ -161,6 +161,15 @@ body {
 .gp-orders-head { display: flex; align-items: center; justify-content: space-between; font-weight: 800; font-size: 15px; margin-bottom: 10px; }
 .gp-orders-empty { color: var(--gp-muted); font-size: 13px; }
 .gp-orders-list { display: flex; flex-direction: column; gap: 10px; }
+.gp-order-section {
+  display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 13px;
+  color: var(--gp-ink); margin: 6px 0 2px; padding-bottom: 4px;
+  border-bottom: 2px solid var(--gp-border);
+}
+.gp-order-section-hist { margin-top: 10px; color: var(--gp-muted); }
+.gp-sec-count { font-size: 10.5px; font-weight: 600; color: #fff; background: var(--gp-grad);
+  border-radius: 999px; padding: 2px 9px; }
+.gp-order-section-hist .gp-sec-count { background: #94a3b8; }
 .gp-order-card { border: 1px solid var(--gp-border); border-radius: 13px; padding: 10px 12px; background: #fbfbfe; }
 .gp-order-top { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
 .gp-order-id { font-weight: 800; letter-spacing: -.2px; }

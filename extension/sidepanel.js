@@ -7,7 +7,7 @@ import { getCustomer, getToken, getMyOrders, login, logout, sendChat, sendVision
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.5.0 — Phone (Voice) channel renders a mobile simulator");
+console.log("GOOPHER side panel v0.5.1 — Phone simulator + cancel TTS on mic/camera (no echo)");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -381,6 +381,9 @@ function setupMic() {
   });
 
   els.micBtn.addEventListener("click", async () => {
+    // Stop any answer still being read aloud, so it can't echo into the mic and
+    // garble/drop the recognition before you even start talking.
+    try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (_) {}
     const langCode = LANG_BCP47[els.language.value] || "en-US";
     const url = chrome.runtime.getURL(`mic.html?lang=${encodeURIComponent(langCode)}`);
 
@@ -451,6 +454,7 @@ function setupCamera() {
   });
 
   els.camBtn.addEventListener("click", async () => {
+    try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (_) {}
     // The customer can SPEAK the question in the camera window; whatever they
     // typed here is passed as a fallback. Pass the speech language too.
     const q = els.messageInput.value.trim();

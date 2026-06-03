@@ -7,7 +7,7 @@ import { getCustomer, getToken, getMyOrders, login, logout, sendChat, sendVision
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.5.6 — checkout asks to confirm before placing");
+console.log("GOOPHER side panel v0.5.7 — mic kept warm so it captures the first word");
 
 const els = {
   loginView: document.getElementById("loginView"),

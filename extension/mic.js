@@ -17,6 +17,8 @@ const lang = params.get("lang") || "en-US";
 
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
+let micStream = null;   // kept open so the mic stays WARM (captures the 1st word)
+
 function setStatus(msg) {
   statusEl.textContent = msg;
 }
@@ -28,6 +30,7 @@ function relayAndClose(payload) {
   } catch (_) {
     /* ignore */
   }
+  try { micStream && micStream.getTracks().forEach((t) => t.stop()); } catch (_) {}
   // Give the message a moment to flush before closing the window.
   setTimeout(() => window.close(), 250);
 }
@@ -39,11 +42,12 @@ async function run() {
     return;
   }
 
-  // 1) Obtain mic permission explicitly (popup windows can show this prompt).
+  // 1) Obtain mic permission AND keep the stream open so the mic stays warm.
+  // (Stopping it here makes SpeechRecognition re-acquire the device, and the
+  // ~300ms warmup swallows the first words. Keeping it open fixes that.)
   try {
     setStatus("Requesting microphone…");
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    stream.getTracks().forEach((t) => t.stop()); // we only needed the grant
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (err) {
     setStatus("Microphone blocked: " + (err?.name || err) + ". Allow it in Chrome settings.");
     retryBtn.hidden = false;
@@ -85,9 +89,12 @@ async function run() {
 
   recognition.onstart = () => {
     dot.classList.add("live");
-    setStatus("Listening… speak now");
+    setStatus("Starting…");
     doneBtn.hidden = false;
   };
+  // Fires when audio capture actually begins — only NOW is it safe to speak, so
+  // this is the real "go" cue (prevents losing the first words).
+  recognition.onaudiostart = () => setStatus("🎤 Listening — speak now");
   recognition.onresult = (e) => {
     let interim = "";
     for (let i = e.resultIndex; i < e.results.length; i++) {

@@ -43,13 +43,20 @@ function card(p) {
     p.department === "Food"
       ? `Ask GOOPHER: “is ${p.name.split(" ").slice(0, 2).join(" ")} in stock?”`
       : `Ask GOOPHER: “show me ${p.name.split(" ").slice(1, 3).join(" ").toLowerCase()}”`;
+  const off =
+    p.list_price > p.sale_price
+      ? Math.round((1 - p.sale_price / p.list_price) * 100)
+      : 0;
   return `
     <article class="card">
-      <div class="card-thumb">${iconFor(p)}</div>
+      <div class="card-thumb">
+        ${off ? `<span class="card-off">-${off}%</span>` : ""}
+        <span class="card-emoji">${iconFor(p)}</span>
+      </div>
       <div class="card-body">
         <div class="card-brand">${p.brand}</div>
         <div class="card-name">${p.name}</div>
-        <div>
+        <div class="card-pricerow">
           <span class="card-price">$${p.sale_price.toFixed(2)}</span>
           <span class="card-list">$${p.list_price.toFixed(2)}</span>
         </div>
@@ -62,7 +69,8 @@ function card(p) {
 }
 
 function section(dept, items) {
-  const cls = dept === "Food" ? "dept-section food" : "dept-section";
+  // Per-department class (clothing/food/toys) drives the accent color in CSS.
+  const cls = `dept-section ${dept.toLowerCase()}`;
   return `
     <section class="${cls}" id="${dept}">
       <h2 class="dept-title">${DEPT_ICON[dept] || ""} ${dept}

@@ -34,7 +34,7 @@ export async function logout() {
   await chrome.storage.local.remove([TOKEN_KEY, CUSTOMER_KEY]);
 }
 
-export async function sendChat({ message, sessionId, channel, language, attachments, voice }) {
+export async function sendChat({ message, sessionId, channel, language, attachments, voice, confirm }) {
   const token = await getToken();
   const res = await fetch(`${CONFIG.API_BASE}/chat`, {
     method: "POST",
@@ -48,6 +48,7 @@ export async function sendChat({ message, sessionId, channel, language, attachme
       channel,
       language: language || null,
       voice: !!voice,
+      confirm: !!confirm,
       attachments: attachments || [],
     }),
   });

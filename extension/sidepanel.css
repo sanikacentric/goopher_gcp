@@ -103,6 +103,16 @@ body {
 .gp-msg .gp-meta { display: block; margin-top: 5px; font-size: 10px; opacity: .65; }
 .gp-typing { font-style: italic; color: var(--gp-muted); font-size: 13px; padding: 0 16px 8px; }
 
+/* Confirm / Cancel buttons under a pending-order preview */
+.gp-confirm-row { display: flex; gap: 8px; padding: 0 14px 4px; align-self: flex-start; }
+.gp-confirm-yes { padding: 9px 16px; font-size: 13px; }
+.gp-confirm-no {
+  padding: 9px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--gp-border); background: #fff; color: var(--gp-muted);
+  border-radius: 11px; font-family: inherit;
+}
+.gp-confirm-no:hover { border-color: var(--gp-muted); }
+
 .gp-attachbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px; }
 .gp-chip {
   background: #eef0f6; border: 1px solid var(--gp-border); border-radius: 999px;

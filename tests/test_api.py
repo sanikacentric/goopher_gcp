@@ -84,8 +84,13 @@ def test_orders_mine_lists_customer_orders_including_new():
     token = _token()
     h = {"Authorization": f"Bearer {token}"}
     before = client.get("/orders/mine", headers=h).json()["count"]
+    # Checkout is two-step: preview, then confirm to actually place it.
+    prev = client.post("/chat", headers=h,
+                       json={"message": "place an order of oreo cookies", "session_id": "mine-1"})
+    assert prev.json()["checkout"]["pending"] is True
     client.post("/chat", headers=h,
-                json={"message": "place an order of oreo cookies", "session_id": "mine-1"})
+                json={"message": "place an order of oreo cookies", "session_id": "mine-1",
+                      "confirm": True})
     after = client.get("/orders/mine", headers=h).json()
     assert after["count"] >= before + 1
     # Each order carries the fields the panel renders.

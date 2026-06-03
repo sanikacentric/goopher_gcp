@@ -278,7 +278,9 @@ def handle_vision(question: str, image_b64: str, mime_type: str, customer_id: st
         # receipt + ORDER_PLACED write are identical to a typed order. (Vision
         # recognized the item; the gate executes the purchase.)
         qty = svc._extract_qty(question)
-        gate = svc._try_checkout(f"place an order of {qty} {sku}", customer_id)
+        # Camera "show & shop" is a deliberate capture → place immediately
+        # (confirm=True); no separate confirm step in the camera flow.
+        gate = svc._try_checkout(f"place an order of {qty} {sku}", customer_id, confirm=True)
         if gate is not None:
             reply, _ = gate
             checkout = svc._last_checkout

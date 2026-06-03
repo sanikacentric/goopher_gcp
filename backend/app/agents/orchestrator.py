@@ -375,7 +375,7 @@ class AgentService:
             # from the file's contents. Checked first since the file content (not
             # the chat text) holds the items. Falls back to normal checkout.
             checkout = (self._try_file_bulk_order(req.message, req.attachments, customer_id)
-                        or self._try_checkout(text, customer_id))
+                        or self._try_checkout(text, customer_id, confirm=req.confirm))
             if checkout is not None:
                 reply, used_tools = checkout
                 ft.step("orchestrator", "checkout (deterministic · structured)",
@@ -666,105 +666,153 @@ class AgentService:
                       + ", ".join(not_found[:10]))
         return reply, ["checkout_agent"]
 
-    def _try_checkout(self, text: str, customer_id: str):
+    def _try_checkout(self, text: str, customer_id: str, confirm: bool = False):
         """
-        Handle checkout intents ("place an order" / bulk) DETERMINISTICALLY with
-        structured output: it sets self._last_checkout (cart + staged payload for
-        the extension UI) and returns a deterministic receipt as the reply.
+        Handle checkout intents ("place an order" / bulk) DETERMINISTICALLY.
 
-        Used by BOTH the ADK and deterministic paths (called before either): a
-        purchase is transactional and must be grounded and structured — never
-        left to free-form LLM phrasing, which drops the cart and the fields the
-        staged extension UI needs. Returns (reply, used_tools) or None if `text`
-        is not a checkout intent.
+        TWO-STEP by default: it RESOLVES the item(s) and, unless `confirm=True`,
+        returns a CART PREVIEW asking the shopper to confirm — it does NOT charge
+        or place anything yet. When the shopper confirms (the extension re-sends
+        the same request with confirm=True), it actually places the order and
+        returns the staged receipt. Sets self._last_checkout (cart + payload the
+        extension UI needs). Returns (reply, used_tools) or None if not a checkout.
         """
         import re
-        from ..tools.checkout_tool import (place_bulk_order, place_order,
-                                           resolve_variant_by_name)
+        from ..tools.checkout_tool import place_bulk_order, place_order
 
         lowered = text.lower()
-        # Accept clothing (JCP-), food (FOOD-) and toys (TOY-) SKUs.
+        spec = self._resolve_order(text, lowered, customer_id)
+        if spec is None:
+            return None                      # not a checkout intent
+        if not spec.get("ok"):               # couldn't resolve → refuse, no substitution
+            self._last_checkout = self._checkout_payload(
+                {"ok": False, "message": spec["message"]}, bulk=spec.get("bulk", False))
+            return spec["message"], ["checkout_agent"]
+
+        bulk = spec["bulk"]
+        # STEP 1 — preview + ask to confirm (no charge yet).
+        if not confirm:
+            self._last_checkout = self._preview_payload(spec)
+            return self._format_preview(self._last_checkout), ["checkout_agent"]
+
+        # STEP 2 — confirmed → actually place the order.
+        vids, qtys = spec["variant_ids"], spec["quantities"]
+        if bulk or len(vids) > 1:
+            data = place_bulk_order(customer_id, variant_ids=vids, quantities=qtys)
+        else:
+            data = place_order(customer_id, variant_id=vids[0], qty=qtys[0])
+        self._last_checkout = self._checkout_payload(data, bulk=bulk)
+        return (self._format_bulk_checkout(data) if bulk
+                else self._format_checkout(data)), ["checkout_agent"]
+
+    def _resolve_order(self, text: str, lowered: str, customer_id: str):
+        """Resolve a checkout intent to a spec {ok, variant_ids, quantities, bulk}
+        WITHOUT placing anything. Returns None if `text` isn't a checkout intent,
+        or {ok: False, message, bulk} if it can't be fulfilled (never substitutes)."""
+        import re
+        from ..tools.checkout_tool import resolve_variant_by_name
+
         variant_ids = re.findall(r"JCP-[A-Z0-9\-]+|FOOD-[A-Z0-9\-]+|TOY-[A-Z0-9\-]+",
                                  text.upper())
+        qty = self._extract_qty(text)
+        bulk_intent = any(k in lowered for k in (
+            "bulk order", "place bulk", "order multiple", "buy several",
+            "buy multiple", "order several", "multiple items", "many items"))
 
-        # --- PLACE A BULK ORDER (many items) — checked before single ---
-        if any(k in lowered for k in ("bulk order", "place bulk", "order multiple",
-                                      "buy several", "buy multiple", "order several",
-                                      "multiple items", "many items")):
-            qty = self._extract_qty(text)
-            # "bulk order of <product>" → order THAT product in bulk (not a random
-            # default basket). Only fall back to the demo basket for a bare
-            # "place a bulk order" with no product named.
-            if not variant_ids:
-                product = self._extract_order_product(text)
-                if product:
-                    res = resolve_variant_by_name(product)
-                    if not res.get("ok"):
-                        self._last_checkout = self._checkout_payload(
-                            {"ok": False, "message": res["message"]}, bulk=True)
-                        return res["message"], ["checkout_agent"]
-                    data = place_bulk_order(customer_id, variant_ids=[res["variant_id"]],
-                                            qty_each=max(qty, 10))   # "bulk" ⇒ ≥10
-                    self._last_checkout = self._checkout_payload(data, bulk=True)
-                    return self._format_bulk_checkout(data), ["checkout_agent"]
-            data = place_bulk_order(customer_id, variant_ids=variant_ids or None,
-                                    qty_each=qty)
-            self._last_checkout = self._checkout_payload(data, bulk=True)
-            return self._format_bulk_checkout(data), ["checkout_agent"]
-
-        # --- PLACE AN ORDER (single item) ---
-        if self._is_order_intent(lowered):
-            qty = self._extract_qty(text)
+        # --- BULK ---
+        if bulk_intent:
             if variant_ids:
-                # Explicit SKU/variant token in the message. It may be a full
-                # variant_id OR a product SKU — resolve to a real in-stock
-                # variant; refuse (no substitution) if it matches neither.
-                vid = self._resolve_id_to_variant(variant_ids[0])
-                if vid is None:
-                    msg = (f'Sorry, "{variant_ids[0]}" isn\'t available, so no '
-                           f'order was placed and nothing was substituted.')
-                    self._last_checkout = self._checkout_payload(
-                        {"ok": False, "message": msg}, bulk=False)
-                    return msg, ["checkout_agent"]
-                data = place_order(customer_id, variant_id=vid, qty=qty)
+                vids = [self._resolve_id_to_variant(v) for v in variant_ids]
+                vids = [v for v in vids if v]
+                if vids:
+                    return {"ok": True, "variant_ids": vids,
+                            "quantities": [max(qty, 1)] * len(vids), "bulk": True}
             else:
-                # Did the shopper NAME a product (e.g. "place an order of oreo
-                # cookies")? Resolve it by name and order THAT product. We must
-                # never substitute a different item.
                 product = self._extract_order_product(text)
-                contextual = bool(re.search(
-                    r"\b(above|this|that|these|those|them|it|same|last|previous|"
-                    r"the one)\b", lowered))
                 if product:
                     res = resolve_variant_by_name(product)
                     if not res.get("ok"):
-                        # Not found / out of stock -> refuse cleanly, no substitution.
-                        self._last_checkout = self._checkout_payload(
-                            {"ok": False, "message": res["message"]}, bulk=False)
-                        return res["message"], ["checkout_agent"]
-                    data = place_order(customer_id, variant_id=res["variant_id"], qty=qty)
-                elif contextual:
-                    # "order it" / "order the above item" → the product the shopper
-                    # was just looking at (from session memory), never a random item.
-                    from ..tools.inventory_tool import get_last_viewed
-                    lv = get_last_viewed()
-                    vid = self._resolve_id_to_variant(lv["sku"]) if lv else None
-                    if vid is None:
-                        msg = ("Which item would you like to order? Tell me the "
-                               "product name, or ask me about it first.")
-                        self._last_checkout = self._checkout_payload(
-                            {"ok": False, "message": msg}, bulk=False)
-                        return msg, ["checkout_agent"]
-                    data = place_order(customer_id, variant_id=vid, qty=qty)
-                else:
-                    # Bare "place an order" with no product named -> default demo item.
-                    data = place_order(customer_id, variant_id="", qty=qty)
-            self._last_checkout = self._checkout_payload(data, bulk=False)
-            # Deterministic receipt (NOT via LLM) so the cart + staged lines
-            # always appear verbatim, in every path.
-            return self._format_checkout(data), ["checkout_agent"]
+                        return {"ok": False, "message": res["message"], "bulk": True}
+                    return {"ok": True, "variant_ids": [res["variant_id"]],
+                            "quantities": [max(qty, 10)], "bulk": True}  # "bulk" ⇒ ≥10
+            # bare "place a bulk order" → a representative default basket
+            vids = self._default_basket(3)
+            return {"ok": True, "variant_ids": vids,
+                    "quantities": [max(qty, 1)] * len(vids), "bulk": True}
 
-        return None
+        # --- SINGLE ---
+        if not self._is_order_intent(lowered):
+            return None
+        if variant_ids:
+            vid = self._resolve_id_to_variant(variant_ids[0])
+            if vid is None:
+                return {"ok": False, "bulk": False,
+                        "message": f'Sorry, "{variant_ids[0]}" isn\'t available, so '
+                                   f'nothing was ordered and nothing was substituted.'}
+            return {"ok": True, "variant_ids": [vid], "quantities": [qty], "bulk": False}
+
+        product = self._extract_order_product(text)
+        contextual = bool(re.search(
+            r"\b(above|this|that|these|those|them|it|same|last|previous|the one)\b", lowered))
+        if product:
+            res = resolve_variant_by_name(product)
+            if not res.get("ok"):
+                return {"ok": False, "message": res["message"], "bulk": False}
+            return {"ok": True, "variant_ids": [res["variant_id"]], "quantities": [qty], "bulk": False}
+        if contextual:
+            from ..tools.inventory_tool import get_last_viewed
+            lv = get_last_viewed()
+            vid = self._resolve_id_to_variant(lv["sku"]) if lv else None
+            if vid is None:
+                return {"ok": False, "bulk": False,
+                        "message": "Which item would you like to order? Tell me the "
+                                   "product name, or ask me about it first."}
+            return {"ok": True, "variant_ids": [vid], "quantities": [qty], "bulk": False}
+        # bare "place an order" → default demo item
+        vids = self._default_basket(1)
+        if not vids:
+            return {"ok": False, "bulk": False, "message": "No in-stock items available."}
+        return {"ok": True, "variant_ids": vids, "quantities": [qty], "bulk": False}
+
+    @staticmethod
+    def _default_basket(n: int) -> list[str]:
+        """First `n` in-stock variants (one per product) — for bare bulk/order demos."""
+        from ..db.database import get_repository
+        repo = get_repository()
+        out = []
+        for p in repo.list_products():
+            for v in p.variants:
+                if v.stock > 0:
+                    out.append(v.variant_id)
+                    break
+            if len(out) >= n:
+                break
+        return out
+
+    def _preview_payload(self, spec: dict) -> dict:
+        """Build a PENDING cart preview from a resolved spec — no order placed."""
+        from ..db.database import get_repository
+        repo = get_repository()
+        cart, total = [], 0.0
+        for vid, q in zip(spec["variant_ids"], spec["quantities"]):
+            info = repo.check_stock(vid)
+            if not info:
+                continue
+            line_total = round(info["sale_price"] * q, 2)
+            total += line_total
+            cart.append({"name": info["product"], "color": info["color"],
+                         "size": info["size"], "qty": q,
+                         "unit_price": info["sale_price"], "line_total": line_total})
+        total = round(total, 2)
+        return {"ok": True, "pending": True, "bulk": spec["bulk"], "cart": cart,
+                "items": [f'{c["name"]} ({c["color"]}, {c["size"]}) x{c["qty"]}' for c in cart],
+                "subtotal": total, "total": total}
+
+    @staticmethod
+    def _format_preview(payload: dict) -> str:
+        """Reply shown for STEP 1: the cart + an explicit confirm question."""
+        return (AgentService._cart_block(payload)
+                + "\n\n🟡 Please confirm — should I place this order?")
 
     def _generate_fallback(self, session_id: str, text: str, customer_id: str,
                            directives: str, channel: str, language: str

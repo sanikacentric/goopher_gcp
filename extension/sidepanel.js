@@ -7,7 +7,7 @@ import { getCustomer, getToken, getMyOrders, login, logout, sendChat, sendVision
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.5.5 — cart split: Current orders (session) + Order history");
+console.log("GOOPHER side panel v0.5.6 — checkout asks to confirm before placing");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -178,11 +178,17 @@ async function renderCheckout(c, meta) {
   }
 }
 
-// Render an agent response (from /chat OR /vision) the same way: staged checkout
-// when an order was placed, otherwise a plain reply. Speaks the reply only when
-// the turn came via voice and 🔊 is on.
-async function deliverResponse(resp, viaVoice = false) {
+// Render an agent response (from /chat OR /vision). `srcText` is the original
+// order text, re-sent (with confirm) if the customer confirms a pending order.
+async function deliverResponse(resp, viaVoice = false, srcText = "") {
   const meta = `${resp.channel} · ${resp.language}${resp.used_tools?.length ? " · " + resp.used_tools.join(",") : ""}`;
+  if (resp.checkout && resp.checkout.pending) {
+    // STEP 1: show the cart preview and ask to confirm (nothing charged yet).
+    addMessage(resp.reply, "bot", meta);
+    if (viaVoice && els.speakToggle?.checked) speak(resp.reply, resp.language);
+    renderConfirmButtons(srcText, viaVoice);
+    return;
+  }
   if (resp.checkout && resp.checkout.ok) {
     await renderCheckout(resp.checkout, meta);
     if (resp.checkout.order_id) currentIds.add(resp.checkout.order_id);  // this session
@@ -196,6 +202,40 @@ async function deliverResponse(resp, viaVoice = false) {
       speak(resp.reply, resp.language);
     }
   }
+}
+
+// Confirm / Cancel buttons under a pending-order preview.
+function renderConfirmButtons(srcText, viaVoice) {
+  const row = document.createElement("div");
+  row.className = "gp-confirm-row";
+  const yes = document.createElement("button");
+  yes.className = "gp-primary gp-confirm-yes"; yes.textContent = "✅ Confirm order";
+  const no = document.createElement("button");
+  no.className = "gp-confirm-no"; no.textContent = "✖ Cancel";
+  row.appendChild(yes); row.appendChild(no);
+  els.messages.appendChild(row);
+  els.messages.scrollTop = els.messages.scrollHeight;
+
+  yes.addEventListener("click", async () => {
+    row.remove();
+    addMessage("✅ Yes, place the order", "user");
+    showTyping();
+    try {
+      const resp = await sendChat({
+        message: srcText, sessionId, channel: els.channel.value,
+        language: els.language.value, voice: viaVoice, confirm: true,
+      });
+      hideTyping();
+      await deliverResponse(resp, viaVoice, srcText);
+    } catch (err) {
+      hideTyping();
+      addMessage("⚠️ " + err.message, "bot");
+    }
+  });
+  no.addEventListener("click", () => {
+    row.remove();
+    addMessage("Order cancelled — nothing was charged.", "bot");
+  });
 }
 
 function showTyping() {
@@ -374,7 +414,7 @@ async function send(text, attachments, viaVoice = false) {
   try {
     const resp = await sendChat({ message: text, sessionId, channel, language, attachments, voice: viaVoice });
     hideTyping();
-    await deliverResponse(resp, viaVoice);
+    await deliverResponse(resp, viaVoice, text);   // text re-sent if they confirm
   } catch (err) {
     hideTyping();
     if (err.message === "UNAUTHORIZED") {

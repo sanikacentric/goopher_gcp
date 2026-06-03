@@ -108,6 +108,24 @@ def test_checkout_is_structured_even_with_adk_path_on(monkeypatch):
     assert "oreo" in resp.reply.lower()
 
 
+def test_checkout_previews_then_confirms():
+    """Two-step checkout: a preview (no order placed) → confirm (places it)."""
+    from backend.app.db.database import get_repository
+    repo = get_repository()
+    svc = AgentService()
+    before = len(repo.list_orders_for_customer("CUST-1001"))
+    # Preview — nothing charged/placed.
+    prev = svc._try_checkout("place an order of oreo cookies", "CUST-1001", confirm=False)
+    assert svc._last_checkout.get("pending") is True
+    assert "confirm" in prev[0].lower()
+    assert len(repo.list_orders_for_customer("CUST-1001")) == before   # nothing placed
+    # Confirm — now it places.
+    done = svc._try_checkout("place an order of oreo cookies", "CUST-1001", confirm=True)
+    assert svc._last_checkout.get("ok") is True and not svc._last_checkout.get("pending")
+    assert "ORDER PLACED" in done[0]
+    assert len(repo.list_orders_for_customer("CUST-1001")) == before + 1
+
+
 def test_contextual_order_uses_last_viewed_not_a_stray_number():
     """'order above 10 items' after looking at Oreos orders 10 OREOS — not a
     product whose NAME happens to contain '10' (the qty must not leak into the
@@ -209,11 +227,20 @@ def test_place_bulk_order_persists_multi_item_order():
 
 def test_place_bulk_order_intent_routes_to_checkout():
     svc = AgentService()
-    resp = svc.run_turn(
+    # Step 1: preview asks to confirm (nothing placed yet).
+    prev = svc.run_turn(
         ChatRequest(message="place bulk order", session_id="bulk-intent"),
         customer_id="CUST-1001",
     )
-    assert "checkout_agent" in resp.used_tools
+    assert "checkout_agent" in prev.used_tools
+    assert prev.checkout and prev.checkout.get("pending") is True
+    assert "confirm" in prev.reply.lower()
+    # Step 2: confirm → places the bulk order.
+    resp = svc.run_turn(
+        ChatRequest(message="place bulk order", session_id="bulk-intent", confirm=True),
+        customer_id="CUST-1001",
+    )
+    assert resp.checkout and resp.checkout.get("ok") is True
     assert "bulk order" in resp.reply.lower()
 
 

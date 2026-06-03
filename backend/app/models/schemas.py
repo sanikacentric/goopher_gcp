@@ -115,6 +115,9 @@ class ChatRequest(BaseModel):
     # the browser). The transcript arrives as text, so this is the only signal
     # the backend has that the turn originated as voice.
     voice: bool = False
+    # True when the shopper has CONFIRMED a previewed order — the checkout gate
+    # then actually places it (otherwise it returns a cart preview to confirm).
+    confirm: bool = False
     attachments: list[Attachment] = Field(default_factory=list)
 
 

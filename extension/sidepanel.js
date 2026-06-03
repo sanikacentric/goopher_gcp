@@ -7,7 +7,7 @@ import { getCustomer, getToken, getMyOrders, login, logout, sendChat, sendVision
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.5.7 — mic kept warm so it captures the first word");
+console.log("GOOPHER side panel v0.5.8 — spoken/typed 'confirm' resolves the pending order");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -75,6 +75,25 @@ function setMuted(muted) {
 // One stable session id per browser profile keeps memory/context continuous.
 let sessionId = null;
 let pendingAttachments = [];
+// When a checkout preview is on screen we hold its confirm/cancel actions here,
+// so that a SPOKEN or typed "yes / confirm order / cancel" resolves THAT order
+// instead of being sent to the backend as a brand-new request.
+let pendingConfirm = null;
+
+// Does this short reply mean "yes, go ahead" or "no, stop"? Used only while a
+// checkout preview is waiting, to interpret voice/typed confirmations.
+function confirmIntent(text) {
+  const t = (text || "").toLowerCase().replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim();
+  if (!t) return null;
+  const YES = ["yes", "yeah", "yep", "yup", "ya", "confirm", "confirm order", "confirm it",
+    "confirm the order", "place it", "place order", "place the order", "go ahead", "sure",
+    "ok", "okay", "do it", "proceed", "yes please", "yes confirm", "confirmed", "absolutely"];
+  const NO = ["no", "nope", "cancel", "cancel order", "cancel it", "stop", "dont", "do not",
+    "never mind", "nevermind", "no thanks", "forget it"];
+  if (YES.includes(t) || /\b(yes|confirm|proceed|go ahead|place (it|the order|order))\b/.test(t)) return "yes";
+  if (NO.includes(t) || /\b(no|cancel|stop|nope|never ?mind)\b/.test(t)) return "no";
+  return null;
+}
 
 async function ensureSession() {
   const o = await chrome.storage.local.get("goopher_session");
@@ -216,26 +235,38 @@ function renderConfirmButtons(srcText, viaVoice) {
   els.messages.appendChild(row);
   els.messages.scrollTop = els.messages.scrollHeight;
 
-  yes.addEventListener("click", async () => {
+  // The actual confirm/cancel logic, reusable from the buttons AND from a spoken
+  // or typed "yes/confirm/cancel" (see send()). `spokenAs` echoes what was said.
+  const doConfirm = async (spokenAs, nowVoice) => {
+    const speak = nowVoice ?? viaVoice;
+    pendingConfirm = null;
     row.remove();
-    addMessage("✅ Yes, place the order", "user");
+    addMessage(spokenAs || "✅ Yes, place the order", "user");
     showTyping();
     try {
       const resp = await sendChat({
         message: srcText, sessionId, channel: els.channel.value,
-        language: els.language.value, voice: viaVoice, confirm: true,
+        language: els.language.value, voice: speak, confirm: true,
       });
       hideTyping();
-      await deliverResponse(resp, viaVoice, srcText);
+      await deliverResponse(resp, speak, srcText);
     } catch (err) {
       hideTyping();
       addMessage("⚠️ " + err.message, "bot");
     }
-  });
-  no.addEventListener("click", () => {
+  };
+  const doCancel = (spokenAs) => {
+    pendingConfirm = null;
     row.remove();
+    if (spokenAs) addMessage(spokenAs, "user");
     addMessage("Order cancelled — nothing was charged.", "bot");
-  });
+  };
+
+  // Register as the active pending confirmation so voice/typed replies resolve it.
+  pendingConfirm = { doConfirm, doCancel, srcText };
+
+  yes.addEventListener("click", () => doConfirm());
+  no.addEventListener("click", () => doCancel());
 }
 
 function showTyping() {
@@ -404,6 +435,16 @@ function showLogin() {
 async function send(text, attachments, viaVoice = false) {
   const channel = els.channel.value;
   const language = els.language.value;
+
+  // If a checkout preview is waiting, interpret "yes/confirm/cancel" (spoken or
+  // typed) as resolving THAT order — don't send it to the backend as a new turn.
+  if (pendingConfirm && (!attachments || attachments.length === 0)) {
+    const intent = confirmIntent(text);
+    if (intent === "yes") { await pendingConfirm.doConfirm(text, viaVoice); return; }
+    if (intent === "no")  { pendingConfirm.doCancel(text); return; }
+    // Anything else cancels the pending preview and proceeds as a normal request.
+    pendingConfirm = null;
+  }
 
   addMessage(text || "(attachment)", "user");
   els.messageInput.value = "";

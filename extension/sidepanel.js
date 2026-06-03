@@ -7,7 +7,7 @@ import { getCustomer, getToken, getMyOrders, login, logout, sendChat, sendVision
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.5.2 — voice captures the FULL sentence (no early cutoff)");
+console.log("GOOPHER side panel v0.5.3 — header mute button (🔊/🔇) for voice output");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -27,6 +27,7 @@ const els = {
   micBtn: document.getElementById("micBtn"),
   camBtn: document.getElementById("camBtn"),
   speakToggle: document.getElementById("speakToggle"),
+  muteBtn: document.getElementById("muteBtn"),
   cartBtn: document.getElementById("cartBtn"),
   cartCount: document.getElementById("cartCount"),
   ordersPanel: document.getElementById("ordersPanel"),
@@ -53,6 +54,23 @@ function applyChannelSkin() {
   if (isPhone) updatePhoneClock();
 }
 setInterval(updatePhoneClock, 30000);
+
+// ---- voice mute (🔊 / 🔇) ----
+// The header mute button mirrors the "Speak" toggle (speakToggle stays the
+// source of truth all the TTS checks already use) and stops any speech now.
+function reflectMute() {
+  if (!els.muteBtn) return;
+  const muted = !(els.speakToggle && els.speakToggle.checked);
+  els.muteBtn.textContent = muted ? "🔇" : "🔊";
+  els.muteBtn.title = muted ? "Voice muted — click to unmute" : "Mute voice";
+  els.muteBtn.classList.toggle("muted", muted);
+}
+function setMuted(muted) {
+  if (els.speakToggle) els.speakToggle.checked = !muted;
+  if (muted) { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (_) {} }
+  try { chrome.storage.local.set({ goopher_muted: muted }); } catch (_) {}
+  reflectMute();
+}
 
 // One stable session id per browser profile keeps memory/context continuous.
 let sessionId = null;
@@ -293,6 +311,14 @@ async function showChat() {
   els.chatView.hidden = false;
   els.logoutBtn.hidden = false;
   els.cartBtn.hidden = false;        // show the cart/orders button once signed in
+  if (els.muteBtn) {
+    els.muteBtn.hidden = false;      // show the mute button once signed in
+    try {
+      const o = await chrome.storage.local.get("goopher_muted");
+      if (els.speakToggle) els.speakToggle.checked = !o.goopher_muted;
+    } catch (_) {}
+    reflectMute();
+  }
   applyChannelSkin();                // honor the current channel (phone vs web)
   const customer = await getCustomer();
   if (els.messages.childElementCount === 0) {
@@ -309,6 +335,7 @@ function showLogin() {
   els.chatView.hidden = true;        // hide chat while logged out
   els.logoutBtn.hidden = true;
   els.cartBtn.hidden = true;
+  if (els.muteBtn) els.muteBtn.hidden = true;
   closeOrders();
 }
 
@@ -557,6 +584,12 @@ els.logoutBtn.addEventListener("click", async () => {
 
 els.cartBtn.addEventListener("click", toggleOrders);
 els.ordersClose.addEventListener("click", closeOrders);
+
+// Mute button toggles voice (and stops any current speech). The Speak checkbox
+// stays in sync either way.
+if (els.muteBtn) els.muteBtn.addEventListener("click", () =>
+  setMuted(els.speakToggle ? els.speakToggle.checked : false));
+if (els.speakToggle) els.speakToggle.addEventListener("change", () => setMuted(!els.speakToggle.checked));
 
 // Channel switch → toggle the phone simulator skin (Phone vs Web).
 els.channel.addEventListener("change", applyChannelSkin);

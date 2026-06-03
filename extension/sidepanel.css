@@ -142,6 +142,9 @@ body {
   display: flex; align-items: center; justify-content: center; transition: all .12s ease;
 }
 .gp-cart-btn:hover { border-color: var(--gp-primary); transform: translateY(-1px); box-shadow: 0 6px 14px -6px rgba(225,29,72,.4); }
+/* Mute button: dim + grey ring when muted. */
+.gp-mute-btn.muted { background: #f1f2f6; opacity: .75; }
+.gp-mute-btn.muted:hover { border-color: var(--gp-muted); box-shadow: none; }
 .gp-cart-badge {
   position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px;
   padding: 0 5px; border-radius: 9px; background: var(--gp-grad); color: #fff;

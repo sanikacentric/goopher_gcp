@@ -7,7 +7,7 @@ import { getCustomer, getToken, getMyOrders, login, logout, sendChat, sendVision
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.5.1 — Phone simulator + cancel TTS on mic/camera (no echo)");
+console.log("GOOPHER side panel v0.5.2 — voice captures the FULL sentence (no early cutoff)");
 
 const els = {
   loginView: document.getElementById("loginView"),

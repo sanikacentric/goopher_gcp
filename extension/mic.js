@@ -9,6 +9,7 @@
 const dot = document.getElementById("dot");
 const statusEl = document.getElementById("status");
 const retryBtn = document.getElementById("retry");
+const doneBtn = document.getElementById("done");
 
 // Target language is passed in the query string (?lang=en-US).
 const params = new URLSearchParams(location.search);
@@ -50,51 +51,76 @@ async function run() {
   }
 
   // 2) Run speech recognition.
+  // CONTINUOUS so a natural pause mid-sentence doesn't end capture early — we
+  // accumulate the full utterance and only finish after a real silence (or when
+  // the user clicks Done). This fixes "it closed while I was still talking".
   const recognition = new SR();
   recognition.lang = lang;
+  recognition.continuous = true;
   recognition.interimResults = true;
   recognition.maxAlternatives = 1;
+  activeRecognition = recognition;
 
-  // Guard so we relay exactly ONE transcript per session (the recognizer can
-  // fire multiple final results / the onend can race), preventing double answers.
   let sent = false;
+  let finalText = "";
+  let silenceTimer = null;
+  const SILENCE_MS = 1800;   // end this long after you stop speaking
+  const MAX_MS = 20000;      // hard cap so it never hangs
+
   const relayOnce = (transcript) => {
     if (sent) return;
     sent = true;
+    if (silenceTimer) clearTimeout(silenceTimer);
     relayAndClose({
       type: "goopher_transcript",
-      transcript: transcript.trim(),
+      transcript: (transcript || "").trim(),
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     });
+  };
+  // Stop a moment after the last speech so the whole sentence is captured.
+  const armSilence = () => {
+    if (silenceTimer) clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(() => { try { recognition.stop(); } catch (_) {} }, SILENCE_MS);
   };
 
   recognition.onstart = () => {
     dot.classList.add("live");
     setStatus("Listening… speak now");
+    doneBtn.hidden = false;
   };
   recognition.onresult = (e) => {
-    const result = e.results[e.results.length - 1];
-    const transcript = result[0].transcript;
-    setStatus("“" + transcript + "”");
-    if (result.isFinal) {
-      recognition.stop();        // stop capturing once we have the final result
-      relayOnce(transcript);     // relay exactly once
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (r.isFinal) finalText += r[0].transcript + " ";
+      else interim += r[0].transcript;
     }
+    setStatus("“" + (finalText + interim).trim() + "”");
+    armSilence();              // reset the silence countdown on every word
   };
   recognition.onerror = (e) => {
     dot.classList.remove("live");
     if (e.error === "no-speech") {
+      if (finalText.trim()) { relayOnce(finalText); return; }
       setStatus("Didn't catch that. Click Try again.");
     } else if (e.error === "not-allowed" || e.error === "service-not-allowed") {
       setStatus("Microphone not allowed. Enable it in Chrome settings, then retry.");
+    } else if (e.error === "aborted") {
+      return;                  // we stopped it on purpose
     } else {
       setStatus("Voice error: " + e.error);
     }
+    doneBtn.hidden = true;
     retryBtn.hidden = false;
   };
   recognition.onend = () => {
     dot.classList.remove("live");
+    const t = finalText.trim();
+    if (t) relayOnce(t);       // relay the FULL accumulated sentence
+    else if (!sent) { setStatus("Didn't catch that. Click Try again."); doneBtn.hidden = true; retryBtn.hidden = false; }
   };
+
+  setTimeout(() => { try { recognition.stop(); } catch (_) {} }, MAX_MS);
 
   try {
     recognition.start();
@@ -104,9 +130,15 @@ async function run() {
   }
 }
 
+let activeRecognition = null;
 retryBtn.addEventListener("click", () => {
   retryBtn.hidden = true;
+  doneBtn.hidden = true;
   run();
+});
+doneBtn.addEventListener("click", () => {
+  // Finish now and send what's been captured.
+  try { activeRecognition && activeRecognition.stop(); } catch (_) {}
 });
 
 run();

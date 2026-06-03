@@ -128,6 +128,18 @@ def test_contextual_order_uses_last_viewed_not_a_stray_number():
     assert "lego" in svc._last_checkout["cart"][0]["name"].lower()
 
 
+def test_bulk_order_of_named_product_not_default_basket():
+    """'bulk order of classic potato chips' orders THAT product in bulk, not a
+    random default basket."""
+    svc = AgentService()
+    out = svc._try_checkout("bulk order of classic potato chips", "CUST-1001")
+    assert out is not None
+    cart = svc._last_checkout["cart"]
+    assert len(cart) == 1
+    assert "potato chips" in cart[0]["name"].lower()
+    assert cart[0]["qty"] >= 10                       # "bulk" ⇒ ≥10
+
+
 def test_natural_phrasing_order_triggers_structured_checkout():
     """Conversational order phrasings (not just "place an order") must hit the
     structured gate so the cart payload is produced — and status queries must

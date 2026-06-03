@@ -45,7 +45,7 @@ The store sells clothing (dresses), food/snacks (chips, cookies, soda, peanuts,
 crackers, snack bars), AND toys (soccer ball, LEGO, NERF, Play-Doh, Hot Wheels,
 puzzles). NEVER say you only sell one category.
 Be concise and proactive. Surface low-stock warnings and the current sale price.
-Stay on the topic of the store's clothing & food products and order help.
+Stay on the topic of the store's clothing, food, and toy products and order help.
 """.strip()
 
 
@@ -125,11 +125,13 @@ def build_root_agent():
         description="Specialist that answers product availability, price, and "
                     "stock questions by calling the inventory tools.",
         instruction=(
-            "You are the inventory specialist for a store with women's casual "
-            "Clothing and Food/Snacks. Use your tools to answer the request:\n"
+            "You are the inventory specialist for a store with THREE departments — "
+            "Clothing, Food/Snacks, AND Toys (soccer ball, LEGO, NERF, Play-Doh, "
+            "Hot Wheels, puzzles). Use your tools to answer the request:\n"
             + inventory_skill.INSTRUCTION
-            + "\nReturn the concrete results (names, prices, stock). Trust tool "
-              "output; never claim the store only sells one category."
+            + "\nReturn the concrete results (names, prices, stock). ALWAYS trust "
+              "the tool output. NEVER say the store doesn't sell toys or only "
+              "sells one/two categories — it sells clothing, food, AND toys."
         ),
         tools=inventory_skill.get_tools(),
     )
@@ -689,7 +691,24 @@ class AgentService:
         if any(k in lowered for k in ("bulk order", "place bulk", "order multiple",
                                       "buy several", "buy multiple", "order several",
                                       "multiple items", "many items")):
-            data = place_bulk_order(customer_id, variant_ids=variant_ids or None, qty_each=1)
+            qty = self._extract_qty(text)
+            # "bulk order of <product>" → order THAT product in bulk (not a random
+            # default basket). Only fall back to the demo basket for a bare
+            # "place a bulk order" with no product named.
+            if not variant_ids:
+                product = self._extract_order_product(text)
+                if product:
+                    res = resolve_variant_by_name(product)
+                    if not res.get("ok"):
+                        self._last_checkout = self._checkout_payload(
+                            {"ok": False, "message": res["message"]}, bulk=True)
+                        return res["message"], ["checkout_agent"]
+                    data = place_bulk_order(customer_id, variant_ids=[res["variant_id"]],
+                                            qty_each=max(qty, 10))   # "bulk" ⇒ ≥10
+                    self._last_checkout = self._checkout_payload(data, bulk=True)
+                    return self._format_bulk_checkout(data), ["checkout_agent"]
+            data = place_bulk_order(customer_id, variant_ids=variant_ids or None,
+                                    qty_each=qty)
             self._last_checkout = self._checkout_payload(data, bulk=True)
             return self._format_bulk_checkout(data), ["checkout_agent"]
 

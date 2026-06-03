@@ -7,7 +7,7 @@ import { getCustomer, getToken, getMyOrders, login, logout, sendChat, sendVision
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.5.3 — header mute button (🔊/🔇) for voice output");
+console.log("GOOPHER side panel v0.5.4 — fresh session + refreshed cart on each sign-in");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -81,9 +81,15 @@ async function ensureSession() {
   if (o.goopher_session) {
     sessionId = o.goopher_session;
   } else {
-    sessionId = "sess-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
-    await chrome.storage.local.set({ goopher_session: sessionId });
+    await newSession();
   }
+}
+
+// Start a brand-new session id (a fresh conversation). Used on each sign-in so
+// each new sign-in session starts clean.
+async function newSession() {
+  sessionId = "sess-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  await chrome.storage.local.set({ goopher_session: sessionId });
 }
 
 // ---- message rendering ----
@@ -569,6 +575,13 @@ els.loginBtn.addEventListener("click", async () => {
   els.loginError.hidden = true;
   try {
     await login(els.email.value.trim(), els.password.value);
+    // Fresh start for each new sign-in session: new conversation, cleared chat,
+    // and a refreshed cart (showChat re-fetches /orders/mine for this customer).
+    await newSession();
+    els.messages.innerHTML = "";
+    ordersCache = [];
+    setCartBadge(0);
+    closeOrders();
     await showChat();
   } catch (e) {
     els.loginError.textContent = "Sign-in failed. Check your credentials and that the backend is running.";

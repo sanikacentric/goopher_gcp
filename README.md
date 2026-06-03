@@ -105,6 +105,25 @@ while preserving conversation context.
 
 ---
 
+## 🤖 LLM models
+
+| Model | Provider | Where | Used for |
+|---|---|---|---|
+| **`gemini-2.5-flash`** | Google (Gemini) | **Vertex AI** (cloud) / AI Studio (local) | The **primary model** — ADK orchestrator + worker sub-agents, grounded replies, multilingual phrasing, **and camera Vision** (it's natively multimodal) |
+| **`gpt-4o-mini`** | OpenAI | local only | Swappable alternate (`LLM_PROVIDER=openai`) for phrasing + a vision fallback |
+
+- **Production runs purely on `gemini-2.5-flash` via Vertex AI** (`LLM_PROVIDER=gemini`,
+  `USE_VERTEXAI=true`, **no OpenAI key** in the cloud) — one model does multi-agent
+  reasoning, language, *and* vision.
+- **No LLM at all** for: the deterministic intent router, the language/channel/
+  modality pre-processing, the transactional checkout gate, and the Guardian
+  self-healing. The LLM is used for understanding + phrasing, never to execute a
+  transaction.
+- Vision uses the same `gemini-2.5-flash` with `thinking_budget=0` (a short
+  classification — see `LEARNINGS.md §3.16`).
+
+---
+
 ## 🚀 Quick start (local, no cloud, no API key)
 
 The backend runs fully offline using SQLite + a deterministic fallback engine,

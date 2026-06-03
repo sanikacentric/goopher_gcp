@@ -241,6 +241,22 @@ run op ─┤  ✅ success → 🟢 healthy                          │
 
 ---
 
+## 🤖 The model story (if the CTO asks "what models?")
+- **Production runs on one model: `gemini-2.5-flash` on Vertex AI.** It does the
+  multi-agent reasoning, the multilingual replies, **and** the camera Vision —
+  one natively-multimodal model, on the $300 Vertex credit / free-tier.
+- **`gpt-4o-mini` (OpenAI)** is wired as a **swappable fallback** (`LLM_PROVIDER`)
+  but isn't used in the cloud — no key set there.
+- **The LLM never executes a transaction.** Checkout, fulfillment, and the
+  Guardian self-healing are deterministic code; the model only understands and
+  phrases. That's the "LLM orchestrates, code transacts" guardrail.
+
+> 🗣️ *"One model — Gemini 2.5-flash on Vertex AI — handles reasoning, language,
+> and vision. OpenAI is a one-flag fallback. And the model never touches the
+> money path: purchases run through deterministic, audited code."*
+
+---
+
 ## ✅ Requirements coverage (use if the CTO asks "is everything done?")
 Every acceptance criterion is implemented, deployed, and tested (**88 passing**).
 

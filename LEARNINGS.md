@@ -574,6 +574,17 @@ session memory, single-user lockdown, rate limiting/size limits, Docker,
 3/4/5, security) is implemented — see the coverage table in `DEMO.md` and the
 component map in `ARCHITECTURE.md §3`.
 
+**LLM models used (reference):**
+- **`gemini-2.5-flash`** (Google) — the PRIMARY model; production runs on it via
+  **Vertex AI** (`LLM_PROVIDER=gemini`, `USE_VERTEXAI=true`, no OpenAI key). One
+  natively-multimodal model does the ADK multi-agent reasoning, multilingual
+  phrasing, AND the camera Vision (with `thinking_budget=0`, §3.16).
+- **`gpt-4o-mini`** (OpenAI) — the `LLM_PROVIDER=openai` swappable alternate +
+  vision fallback; used locally, inactive in the cloud.
+- **No LLM** in the deterministic router, the language/channel/modality
+  pre-processing, the checkout gate, or the Guardian — the model understands and
+  phrases; deterministic code transacts.
+
 **Deferred (with honest reasons):**
 - **Secret Manager** (currently Cloud Run env vars) — standard hardening, not yet
   done.

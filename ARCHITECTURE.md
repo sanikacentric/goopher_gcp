@@ -179,6 +179,29 @@ coherent across turns, channels, and languages.*
 
 ---
 
+## 4a. LLM models used
+
+| Model | Provider | Where | Used for |
+|---|---|---|---|
+| **`gemini-2.5-flash`** | Google (Gemini) | **Vertex AI** (cloud) · AI Studio (local) | the **primary model** |
+| **`gpt-4o-mini`** | OpenAI | local only | swappable alternate + vision fallback |
+
+- **Production is single-model: `gemini-2.5-flash` on Vertex AI.** The cloud runs
+  `LLM_PROVIDER=gemini`, `USE_VERTEXAI=true`, authenticated by the Cloud Run
+  service account, **with no OpenAI key** — so OpenAI is never invoked in prod.
+- That one Gemini model powers **all three** intelligent paths: (1) the ADK
+  orchestrator + worker sub-agents and grounded reply phrasing, (2) multilingual
+  localization, and (3) **camera Vision** (it's natively multimodal — same model,
+  via the `google.genai` SDK with `thinking_budget=0`; see §5c).
+- `gpt-4o-mini` is the `LLM_PROVIDER=openai` alternate used locally and as a
+  vision fallback; wired but inactive in the cloud.
+- **No LLM is used** for: the deterministic intent router, the
+  language/channel/modality pre-processing, the transactional checkout gate, or
+  the Guardian self-healing — the model understands and phrases, deterministic
+  code executes (the "LLM orchestrates, code transacts" guardrail, §5b).
+
+---
+
 ## 5. Resilience / graceful degradation
 
 The orchestrator has **two execution paths** behind one interface:

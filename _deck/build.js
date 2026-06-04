@@ -293,14 +293,14 @@ function stat(s, o) {
   s.addShape(p.shapes.LINE, { x: lx + 0.18, y: 2.1, w: 0, h: 4.05, line: { color: C.border, width: 2 } });
   const steps = [
     ["1", "Input — GOOPHER extension", "text · 🎤 voice · 📷 camera · 📎 file  →  HTTPS + JWT", C.violet],
-    ["2", "Edge — Cloud Run · FastAPI", "auth (JWT) · rate-limit · request-size limit · CORS", C.muted],
-    ["3", "Pre-process — deterministic, no LLM", "detect modality · language · channel; LOAD memory by session_id", C.teal],
+    ["2", "Edge + Authentication — Cloud Run · FastAPI", "JWT · email allowlist · master-pw · fail-closed  ·  rate/size limits · CORS", C.muted],
+    ["3", "Pre-process (no LLM) + Memory Agent", "modality · language · channel agents  ·  Memory Agent LOADS session by session_id", C.teal],
     ["4", "Route", "purchase? → deterministic transactional gate (skip LLM)  ·  else → agent path", C.amber],
     ["5", "Agent Harness", "build agent · ensure ADK session · run (retry · degrade-once · structured result)", C.violet],
-    ["6", "ROOT orchestrator — Gemini 2.5 Flash (Vertex)", "selects ONE worker via agent-as-tool (stays in control)", C.amber],
-    ["7", "Worker sub-agent + skill", "picks a registry skill → calls its tools (native function-calling)", C.blue],
+    ["6", "ROOT sub-agent: goopher_orchestrator — Gemini 2.5 Flash (Vertex)", "selects ONE worker via agent-as-tool (stays in control)", C.amber],
+    ["7", "Worker sub-agent (e.g. inventory_agent) PICKS an agent skill", "skill (instruction + tools) → calls its tools via native function-calling", C.blue],
     ["8", "Tools → mock retail DB", "read/write Firestore: catalog · orders · ORDER_PLACED", C.teal],
-    ["9", "Respond", "channel-format reply · PERSIST memory · stream back · trace to Cloud Trace + /dev", C.violet],
+    ["9", "Respond", "channel-format reply · Memory Agent PERSISTS turn · stream back · trace (Cloud Trace + /dev)", C.violet],
   ];
   let y = 1.92; const rh = 0.475;
   steps.forEach(([n, head, detail, col]) => {
@@ -350,6 +350,75 @@ function stat(s, o) {
     "9) We channel-format the reply, PERSIST the turn to memory, stream it back, and trace the whole thing to Cloud Trace and the live /dev portal. " +
     "On the right are the three things true on EVERY turn: the deterministic gate, the isolated side-agents (vision, advisor, guardian), and full observability + resilience. " +
     "I can drill into any box."
+  );
+})();
+
+// ======================================== SLIDE 4c — INSIDE THE AGENT PLATFORM
+(() => {
+  const s = p.addSlide(); lightBG(s);
+  kicker(s, "Architecture deep-dive · components in detail", C.blue);
+  title(s, "Inside the platform — sub-agents, skills & the guard rails");
+
+  const panels = [
+    ["sitemap", C.blue, "Sub-agents  (the LLM agents)",
+      ["ROOT: goopher_orchestrator (routes)",
+       "inventory_agent — search · stock",
+       "order_agent — status · history · bulk",
+       "checkout_agent — cart · pay · place",
+       "order_management_agent — fulfillment",
+       "Isolated: vision_agent · advisor_agent · guardian"]],
+    ["layers", C.amber, "Agent skills  (registry — SEPARATE)",
+      ["A skill = INSTRUCTION + TOOLS",
+       "an agent PICKS a skill (≠ a sub-agent)",
+       "inventory · order  (read-only)",
+       "checkout · fulfillment  (transactional)",
+       "read-only flag enforced in code",
+       "introspect live → GET /skills"]],
+    ["lock", C.violet, "Authentication & edge",
+      ["JWT bearer token on every request",
+       "Email allowlist + master password",
+       "Fail-closed — no match → rejected",
+       "Rate-limit · request-size limit · CORS",
+       "Secrets in env / secret — never committed"]],
+    ["db", C.teal, "Memory agent  (shared state)",
+      ["One session store keyed by session_id",
+       "Firestore (cloud) / SQLite (local)",
+       "Turns + working-memory facts",
+       "LOAD at start · PERSIST at end of turn",
+       "Durable & shared across instances"]],
+    ["shield", C.rose, "Guardrails  (safety)",
+      ["Deterministic gate — LLM never pays",
+       "No substitution · confirm-before-charge",
+       "Loop prevention (agent-as-tool)",
+       "Bounded retries · graceful fallback",
+       "Self-healing Guardian (circuit breaker)"]],
+    ["check", C.green, "Quality — unit tests & evals",
+      ["117 unit tests (pytest) gate every change",
+       "8 evals on agent behaviour",
+       "CI/CD: push → test + eval → Cloud Run",
+       "CI-sim blocks google.* → tests fallback",
+       "Isolation asserts (advisor ∌ checkout)"]],
+  ];
+  const w = (CW - 0.6) / 3, h = 2.32;
+  panels.forEach(([icon, chip, head, lines], i) => {
+    const x = M + (i % 3) * (w + 0.3), y = 1.95 + Math.floor(i / 3) * (h + 0.28);
+    s.addShape(p.shapes.ROUNDED_RECTANGLE, { x, y, w, h, rectRadius: 0.09, fill: { color: C.white }, line: { color: C.border, width: 1 }, shadow: shadow() });
+    s.addShape(p.shapes.ROUNDED_RECTANGLE, { x: x + 0.24, y: y + 0.22, w: 0.54, h: 0.54, rectRadius: 0.11, fill: { color: chip } });
+    s.addImage({ path: ic(icon), x: x + 0.37, y: y + 0.35, w: 0.28, h: 0.28 });
+    s.addText(head, { x: x + 0.9, y: y + 0.2, w: w - 1.08, h: 0.58, margin: 0, fontFace: BF, fontSize: 12.5, bold: true, color: C.ink, valign: "middle" });
+    s.addText(lines.map((t) => ({ text: t, options: { bullet: { indent: 10 }, breakLine: true, paraSpaceAfter: 2 } })),
+      { x: x + 0.26, y: y + 0.88, w: w - 0.5, h: h - 0.98, margin: 0, fontFace: BF, fontSize: 10, color: C.muted, valign: "top" });
+  });
+  footer(s);
+  s.addNotes(
+    "Components in detail (3–4 min — the 'show me the rigor' slide). Six panels, each its own concern. " +
+    "1) Sub-agents are the LLM agents: the ROOT goopher_orchestrator and four named workers — inventory, order, checkout, order_management — plus three isolated ones (vision, advisor, guardian). " +
+    "2) Agent SKILLS are a SEPARATE concept: a skill is an instruction + a set of tools, registered once; an agent PICKS a skill. Browse-and-track skills are read-only; checkout/fulfillment are transactional — and the read-only flag is enforced in code so the advisor can never get a checkout tool. See GET /skills. " +
+    "3) Authentication: JWT on every call, an email allowlist plus master password, fail-closed, with rate/size limits and CORS; secrets never committed. " +
+    "4) The Memory Agent is one session store keyed by session_id, durable in Firestore, holding turns plus working-memory facts; loaded at the start and persisted at the end of every turn. " +
+    "5) Guardrails: the deterministic gate, no-substitution, confirm-before-charge, structural loop prevention, graceful fallback, and the self-healing Guardian. " +
+    "6) Quality: 117 unit tests and 8 evals gate every change via CI/CD, plus a CI-simulation that blocks the google packages to prove the production fallback path. " +
+    "The headline: sub-agents and skills are different layers, and safety/quality are first-class, not afterthoughts."
   );
 })();
 

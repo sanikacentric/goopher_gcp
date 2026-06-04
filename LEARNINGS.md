@@ -485,6 +485,93 @@ library?"* — clarified an important distinction we'd been conflating.
      tool-calling *and* explicit ReAct side-by-side signals you chose each
      deliberately — more convincing than either alone.
 
+### 3.22 The ReAct planner "plan but no answer" stall (and a grounded safety net)
+First live run of the advisor produced a `/*PLANNING*/` block + ONE tool call
+(`list_customer_orders`) and then **stopped** — no `/*ACTION*/` result, no
+`/*FINAL_ANSWER*/`. Same root cause as the Vision empty-answer bug:
+`gemini-2.5-flash` **thinking collides with `PlanReActPlanner`** — on the turn
+AFTER the first tool returns, thinking spends the output budget and the visible
+final answer never lands.
+
+- **Fix 1 — disable thinking on the agent.** A `GenerateContentConfig` with
+  `thinking_budget=0` + `max_output_tokens=4096` so the post-tool turn reliably
+  reasons over the observation and emits the answer. (The exact remedy from §3.16
+  on Vision — *the same model quirk bit us twice; recognizing it the second time
+  was instant.*)
+- **Fix 2 — a grounded synthesis safety net.** The harness captures tool
+  **observations** during the run; if a final answer is *ever* still missing, one
+  guaranteed completion call turns those observations into the recommendation. The
+  shopper always gets a real answer, with the plan still shown. *Belt and braces
+  for a live demo: a probabilistic planner gets a deterministic backstop.*
+- **Lesson:** when a model quirk has bitten one feature, **encode the remedy as a
+  reusable pattern** — and for demo-critical paths, pair the smart-but-flaky
+  component with a guaranteed fallback that uses the data already gathered.
+
+### 3.23 Recommendations must key off CONTEXT, not a hardcoded prompt
+The empty-🧠 tap first shipped with a prompt hardcoded to *"snacks under $4"*. With
+a **$17.99 soccer-ball (Toy)** as the last order it still suggested snacks — and
+even dug up an *older* Oreos order to justify the bias. Two hardcoded snack
+anchors (the default prompt **and** an example intro in the instruction) steered
+every answer toward food.
+
+- **Fix:** drive the recommendation from the **actual most-recent order** — read
+  its **department AND price**, recommend from the **same department at a
+  similar-or-lower price** ($17.99 Toy → other Toys ~≤ $18). Explicit user
+  constraints still win.
+- **Lesson:** an example in a prompt is **training-by-suggestion** — a snack
+  example makes a snack recommender. Keep instruction examples **department-neutral**
+  (or representative of the real distribution), and let **context**, not a baked-in
+  default, choose the category.
+
+### 3.24 Confirm-before-charge must hold across EVERY modality
+"Please confirm" worked for text and voice, but the **camera** path placed the
+order immediately (`confirm=True`) — a leftover "show & shop" shortcut. A customer
+showed a ball, said "place an order," and was charged with no confirmation.
+
+- **Fix:** vision now PREVIEWS (`_try_checkout(confirm=False)` → cart + "please
+  confirm") and carries `confirm_text` (the resolved SKU); the Confirm button (or a
+  spoken/typed "confirm order") re-sends THAT to `/chat` with `confirm=True`. An
+  end-to-end test asserts the round-trip places **exactly the recognized item**.
+- **Related voice fixes (same "make every modality equal" theme):** the mic is kept
+  **warm** so the first words aren't dropped (releasing the stream after the
+  permission grant made SpeechRecognition re-acquire the device and swallow the
+  opening words), and a spoken/typed **"confirm order"** now resolves the on-screen
+  pending preview instead of being treated as a brand-new order (which had ordered
+  a default basket — Cheez-It — instead of the previewed Oreos).
+- **Lesson:** a safety/UX invariant (confirm before charge; capture the whole
+  utterance) is only real if it holds on **every** input path. When you add a
+  modality, **re-audit the invariants**, and prefer routing all paths through the
+  SAME gate so the guarantee is structural, not per-path.
+
+### 3.25 Extract the shared scaffolding ONCE — skill registry + agent harness
+A CTO question — *"is there a skill registry, and do all agents share a harness?"*
+— exposed two bits of structure that existed only implicitly.
+
+- **Agent skill registry.** Skills were already a clean module pattern
+  (`INSTRUCTION` + `get_tools()`), but each agent imported its skill **directly** —
+  no single source of truth, no introspection. We added `agent_skill_registry.py`:
+  every skill registered once with metadata + a **`read_only` flag**; agents now
+  **pick skills by name**, and `GET /skills` exposes the map. Payoff beyond
+  tidiness: the read-only advisor composes **only read-only skills and asserts it**,
+  so the isolation guarantee is **enforced in code**, not just by convention.
+- **Agent harness (scaffolding).** The "build → ensure session → run-loop →
+  collect (text/tool-calls/observations) → resilience → structured result"
+  boilerplate was **copy-pasted** in the orchestrator's `_generate_adk` AND the
+  advisor. We extracted it into a dedicated `harness/` package (`AgentHarness` +
+  `AgentRunResult`) that BOTH now run through — the orchestrator (+ its 4 workers)
+  and the advisor. Pure refactor: identical behavior, verified by the full suite +
+  a CI-sim with the google packages blocked.
+- **Lessons:**
+  1. **Make implicit structure explicit when it earns its keep** — a registry buys
+     a `read_only` invariant + `/skills` introspection; a harness buys one tested,
+     observable run-loop instead of N drifting copies.
+  2. **Refactor behind a green suite.** Because the ADK path isn't exercised in CI
+     (no creds), the **CI-sim (block `google.*`, run everything via the fallback)**
+     was what gave confidence the production path was untouched.
+  3. **"Common for all agents" was an explicit requirement, not an afterthought** —
+     the user pushed back on an advisor-only harness. Shared infrastructure should
+     be *designed* shared, in its own folder, from the start.
+
 ---
 
 ## 4. Key trade-offs and decisions
@@ -601,16 +688,23 @@ Storefront "Marketplace" served at /  ·  Developer portal at /dev (live SSE)
 relevance, multi-agent ADK orchestration on Vertex (traced, with the
 deterministic pre-process steps also span-traced), Firestore data + durable
 session memory, single-user lockdown, rate limiting/size limits, Docker,
-**fully automated CI/CD**, live developer portal, **88 unit tests** + 8 evals.
+**fully automated CI/CD**, live developer portal, **113 unit tests** + 8 evals.
 
 **Added since the original build (all done & verified):**
-- **Vision subagent** — camera "see it, shop it" (Gemini Vision on Vertex).
+- **Vision subagent** — camera "see it, shop it" (Gemini Vision on Vertex), with
+  **confirm-before-charge** parity to text/voice (§3.24).
 - **Structured checkout gate** (single + bulk) → simulated payment →
   `ORDER_PLACED` → 9-stage fulfillment; **never substitutes**.
 - **Bulk order from an uploaded file**; **contextual ordering** ("order it").
-- **Cart / orders panel**; **phone-channel mobile simulator**; voice in/out.
+- **Cart / orders panel**; **phone-channel mobile simulator**; voice in/out
+  (mic kept warm so the whole sentence is captured; spoken "confirm order"
+  resolves the pending checkout — §3.24).
 - **Self-healing Guardian** — circuit breaker · failover · self-repair · chaos
   injection · heal-forward, with a live animated `/dev` panel.
+- **🧠 Shopping Advisor** — explicit ReAct (`PlanReActPlanner`), read-only,
+  context-aware recommendations (§3.21–§3.23).
+- **🗂 Agent Skill Registry** (`/skills`) + **🧰 Agent Harness** — the common
+  scaffolding every agent runs through (§3.25).
 - **`/version`** build marker for deploy verification.
 
 **Acceptance-criteria coverage:** every criterion (2A, 2A-4/5/6, T1–T17, Req
@@ -693,6 +787,25 @@ component map in `ARCHITECTURE.md §3`.
 23. **Keep quantity out of the product name, resolve "it/above" from memory, and
     don't let remembered state get stuck** — conversational ordering breaks in
     all three ways when people talk naturally (voice + a second language).
+24. **"ReAct" is a paradigm, not a class** — native function-calling *is* ReAct,
+    done better; reach for `PlanReActPlanner` only for read-only, multi-hop
+    reasoning you want to *show*, and keep it off the transactional path (§3.21).
+25. **A model quirk that bit once will bite again** — `thinking_budget=0` fixed
+    Vision *and* the advisor's "plan but no answer" stall; turn the remedy into a
+    reusable pattern, and back demo-critical LLM steps with a grounded fallback
+    that reuses the data already gathered (§3.22).
+26. **Examples in a prompt are training-by-suggestion** — a "snacks under $4"
+    example makes a snack recommender; drive choices from CONTEXT (the real last
+    order's department + price), keep instruction examples neutral (§3.23).
+27. **A safety/UX invariant is only real if it holds on EVERY modality** —
+    confirm-before-charge and whole-sentence capture had to be re-audited for the
+    camera and voice paths; route every path through the SAME gate (§3.24).
+28. **Make implicit structure explicit when it pays** — a skill **registry**
+    buys a `read_only` invariant + `/skills` introspection; a common **harness**
+    buys one tested, observable run-loop instead of N drifting copies (§3.25).
+29. **Refactor behind a green suite — including a CI-sim of the prod path** —
+    because the ADK path isn't exercised in CI, blocking `google.*` and running
+    everything through the fallback is what proved the refactor was safe (§3.25).
 
 ---
 

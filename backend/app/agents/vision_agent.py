@@ -16,8 +16,11 @@ Flow (kept deliberately simple and grounded):
      substitute a different item.
   3. ACT       — classify the customer's intent:
        - ORDER → delegate to the SAME deterministic transactional gate the chat
-         path uses (`AgentService._try_checkout`), so the cart + staged receipt +
-         `ORDER_PLACED` write are identical to a typed order.
+         path uses (`AgentService._try_checkout`) in PREVIEW mode (confirm=False),
+         so the shopper sees the cart and is asked to confirm BEFORE any charge —
+         identical to the text/voice flow. On confirm the extension re-sends the
+         resolved SKU to /chat (confirm=True) and the staged receipt + ORDER_PLACED
+         write are identical to a typed order.
        - PRICE/INFO → answer with the product's real price + availability.
 
 This is invoked by the `POST /vision` endpoint, not `/chat`, so it adds the
@@ -275,18 +278,24 @@ def handle_vision(question: str, image_b64: str, mime_type: str, customer_id: st
     if _wants_order(question):
         # Honor a spoken/typed quantity ("order 10 balls" → 10). Passing the SKU
         # routes through _try_checkout's SKU resolution, so the cart + staged
-        # receipt + ORDER_PLACED write are identical to a typed order. (Vision
-        # recognized the item; the gate executes the purchase.)
+        # receipt + ORDER_PLACED write are identical to a typed order.
         qty = svc._extract_qty(question)
-        # Camera "show & shop" is a deliberate capture → place immediately
-        # (confirm=True); no separate confirm step in the camera flow.
-        gate = svc._try_checkout(f"place an order of {qty} {sku}", customer_id, confirm=True)
+        order_text = f"place an order of {qty} {sku}"
+        # PREVIEW-then-CONFIRM (same as the text/voice flow): vision now shows a
+        # cart preview and asks "please confirm" (confirm=False) — it does NOT
+        # charge yet. The extension renders Confirm/Cancel; on confirm it re-sends
+        # `order_text` (the resolved SKU) to /chat with confirm=True, so exactly
+        # THIS recognized item is placed — never a substitute.
+        gate = svc._try_checkout(order_text, customer_id, confirm=False)
         if gate is not None:
             reply, _ = gate
             checkout = svc._last_checkout
+            # Carry the exact order text so the Confirm button re-places THIS item.
+            if isinstance(checkout, dict):
+                checkout = {**checkout, "confirm_text": order_text}
             used_tools.append("checkout_agent")
-            ft.step("vision", "action: place_order",
-                    f"ordered {product_name} (via transactional gate)")
+            ft.step("vision", "preview: place_order",
+                    f"previewed {product_name} — awaiting confirm")
             # Lead with what we saw so the customer trusts the recognition.
             reply = f"📷 I recognized **{product_name}**.\n\n{reply}"
             ft.record.reply = reply

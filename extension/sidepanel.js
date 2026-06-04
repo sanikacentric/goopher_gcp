@@ -7,7 +7,7 @@ import { getCustomer, getToken, getMyOrders, login, logout, sendAdvise, sendChat
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.6.1 — 🧠 Advisor recommends from your last order's department & price");
+console.log("GOOPHER side panel v0.6.2 — camera orders now ask 'please confirm' before charging");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -206,7 +206,11 @@ async function deliverResponse(resp, viaVoice = false, srcText = "") {
     // STEP 1: show the cart preview and ask to confirm (nothing charged yet).
     addMessage(resp.reply, "bot", meta);
     if (viaVoice && els.speakToggle?.checked) speak(resp.reply, resp.language);
-    renderConfirmButtons(srcText, viaVoice);
+    // For typed/voice orders srcText is the original message. For a VISION
+    // preview srcText is empty, so fall back to the resolved order text the
+    // backend carried (confirm_text) — the Confirm button re-places THAT item.
+    const confirmSrc = srcText || resp.checkout.confirm_text || "";
+    renderConfirmButtons(confirmSrc, viaVoice);
     return;
   }
   if (resp.checkout && resp.checkout.ok) {

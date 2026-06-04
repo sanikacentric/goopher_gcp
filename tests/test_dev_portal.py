@@ -62,3 +62,43 @@ def test_fulfillment_pipeline_is_one_record_not_duplicated():
     # The live stream (since a version) also yields each record id once.
     changed_ids = [r["id"] for r in rec.since(before_ver) if r["kind"] == "fulfillment"]
     assert len(set(changed_ids)) == len(changed_ids)
+
+
+def test_duplicate_turn_within_window_collapses_to_one_card():
+    """An identical turn (same session + same question) recorded again within the
+    window — e.g. a cold-start resend — must merge onto ONE card, not duplicate."""
+    import time
+    from backend.app.observability.flow_recorder import FlowRecord, get_recorder
+
+    rec = get_recorder()
+    t = time.time()
+    msg = "what is the price of oreo?"
+    rec.add(FlowRecord(id=rec.next_id(), ts=t, kind="turn",
+                       session_id="dup-A", user_message=msg, reply="$3.99"))
+    rec.add(FlowRecord(id=rec.next_id(), ts=t + 27, kind="turn",
+                       session_id="dup-A", user_message=msg, reply="$3.99"))
+    turns = [x for x in rec.recent(100)
+             if x["kind"] == "turn" and x["session_id"] == "dup-A"]
+    assert len(turns) == 1                      # collapsed onto one card
+
+    # A re-ask LONG after the window is a separate, legitimate card.
+    rec.add(FlowRecord(id=rec.next_id(), ts=t + 500, kind="turn",
+                       session_id="dup-A", user_message=msg, reply="$3.99"))
+    turns = [x for x in rec.recent(100)
+             if x["kind"] == "turn" and x["session_id"] == "dup-A"]
+    assert len(turns) == 2
+
+
+def test_distinct_questions_are_not_collapsed():
+    import time
+    from backend.app.observability.flow_recorder import FlowRecord, get_recorder
+
+    rec = get_recorder()
+    t = time.time()
+    rec.add(FlowRecord(id=rec.next_id(), ts=t, kind="turn",
+                       session_id="dup-B", user_message="price of oreo?", reply="a"))
+    rec.add(FlowRecord(id=rec.next_id(), ts=t + 2, kind="turn",
+                       session_id="dup-B", user_message="price of chips?", reply="b"))
+    turns = [x for x in rec.recent(100)
+             if x["kind"] == "turn" and x["session_id"] == "dup-B"]
+    assert len(turns) == 2                      # different questions → two cards

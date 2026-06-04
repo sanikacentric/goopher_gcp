@@ -20,6 +20,10 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 _MAX_RECORDS = 200  # ring-buffer size
+# Collapse an identical turn (same session + same question) recorded again within
+# this many seconds onto the SAME card — guards against an accidental duplicate
+# (e.g. a cold-start connection reset where the client re-sent the request).
+_DUP_WINDOW_S = 90
 
 
 @dataclass
@@ -98,6 +102,23 @@ class _Recorder:
         """Insert or update a record (deduped by id), bumping its version so the
         live stream re-sends the refreshed copy."""
         with self._lock:
+            # Collapse an accidental DUPLICATE turn: the SAME question in the SAME
+            # session recorded again within a short window (e.g. a cold-start
+            # connection reset where the client re-sent). Reuse the prior record's
+            # id so it UPDATES that card rather than inserting a second identical
+            # one. Only compared against the MOST RECENT turn, so a genuine re-ask
+            # after other turns (or much later) still shows separately.
+            if record.kind == "turn" and record.user_message:
+                for rid in sorted(self._records, reverse=True):
+                    prev = self._records[rid]
+                    if prev.kind != "turn":
+                        continue
+                    if (prev.id != record.id
+                            and prev.session_id == record.session_id
+                            and prev.user_message == record.user_message
+                            and 0 <= record.ts - prev.ts <= _DUP_WINDOW_S):
+                        record.id = prev.id          # merge onto the existing card
+                    break
             self._vseq += 1
             self._records[record.id] = record
             self._ver[record.id] = self._vseq

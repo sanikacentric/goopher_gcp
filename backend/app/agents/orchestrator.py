@@ -225,9 +225,8 @@ def build_root_agent():
 class AgentService:
     def __init__(self):
         self.memory = get_memory_store()
-        self._adk_runner = None
+        self._harness = None   # COMMON AgentHarness wrapping the ADK root agent
         self._adk_ready = False
-        self._adk_sessions: set[str] = set()  # session_ids already created in ADK
         self._openai = None   # active LLM client (OpenAI)
         self._gemini = None   # kept for future use (see commented init below)
         self._last_checkout = None  # structured checkout result for the last turn
@@ -268,18 +267,21 @@ class AgentService:
         # emits ADK traces. Point at Vertex AI to use the $300 credit / higher
         # Gemini quota (see .env: GOOGLE_GENAI_USE_VERTEXAI, GOOGLE_CLOUD_PROJECT).
         if provider == "gemini":
-            # ADK runner (Gemini multi-agent path) — built when use_adk_path on.
+            # ADK multi-agent path — built when use_adk_path on. The root agent
+            # runs through the COMMON AgentHarness (same scaffolding the advisor
+            # uses); ready() builds it once and degrades gracefully if ADK is
+            # absent (caller then uses the deterministic engine).
             if _settings.use_adk_path:
-                try:
-                    from google.adk.runners import InMemoryRunner
+                from .harness import AgentHarness
 
-                    root = build_root_agent()
-                    self._adk_runner = InMemoryRunner(agent=root, app_name="goopher")
-                    self._adk_ready = True
+                self._harness = AgentHarness(
+                    name="orchestrator", app_name="goopher",
+                    build_agent=build_root_agent,
+                )
+                self._adk_ready = self._harness.ready()
+                if self._adk_ready:
                     log_event("orchestrator_init", path="adk",
                               model=_settings.gemini_model)
-                except Exception as exc:
-                    log_event("adk_unavailable", reason=str(exc))
 
             # Raw Gemini client for the grounded phrasing path / fallback.
             if _settings.google_api_key or _settings.use_vertexai:
@@ -471,59 +473,22 @@ class AgentService:
     def _generate_adk(self, session_id: str, text: str, customer_id: str,
                       directives: str) -> tuple[str, list[str]]:
         """
-        Run the turn through the ADK Runner.
-
-        ADK's Runner requires a Session to exist before `run()` is called. The
-        session-service API is async in current ADK, so we create the session
-        (idempotently) via asyncio before streaming the turn. If ADK produces no
-        text we raise, so the caller falls back to the deterministic engine
-        rather than returning an empty apology.
+        Run the turn through the COMMON AgentHarness (the same scaffolding the
+        advisor uses): it ensures the ADK session exists, streams the turn, and
+        collects the text + tool calls. We prefer the final response, fall back to
+        the last text, and raise if ADK produced nothing — so the caller falls
+        back to the deterministic engine rather than returning an empty apology.
         """
-        import asyncio
-
-        from google.genai import types  # ADK uses google-genai content types
-
-        # Ensure the ADK session exists (create once per session_id).
-        if session_id not in self._adk_sessions:
-            try:
-                asyncio.run(
-                    self._adk_runner.session_service.create_session(
-                        app_name="goopher", user_id=customer_id, session_id=session_id
-                    )
-                )
-            except Exception as exc:
-                # Already exists or transient — log and continue to run().
-                log_event("adk_session_create_skipped", reason=str(exc))
-            self._adk_sessions.add(session_id)
-
         history = self.memory.history_text(session_id)
         prompt = f"{directives}\n\nConversation so far:\n{history}\n\nUser: {text}"
-        content = types.Content(role="user", parts=[types.Part(text=prompt)])
 
-        used_tools: list[str] = []
-        final_text = ""
-        last_text = ""  # last non-empty text from ANY event (resilience fallback)
-        for event in self._adk_runner.run(
-            user_id=customer_id, session_id=session_id, new_message=content
-        ):
-            # Collect tool calls for observability, and the final text.
-            if getattr(event, "get_function_calls", None):
-                for fc in event.get_function_calls() or []:
-                    used_tools.append(fc.name)
-            if event.content and event.content.parts:
-                txt = "".join(p.text or "" for p in event.content.parts)
-                if txt.strip():
-                    last_text = txt
-                if getattr(event, "is_final_response", lambda: False)():
-                    final_text = txt
-
-        # Prefer the final response; if it was empty (e.g. a tool-only sub-agent
-        # ended the stream), fall back to the last text the orchestrator emitted
-        # before raising — only raise if there is genuinely nothing to return.
-        reply = final_text.strip() or last_text.strip()
+        result = self._harness.run(
+            user_id=customer_id, session_id=session_id, prompt=prompt)
+        # Prefer the final response; fall back to the last text any event emitted.
+        reply = (result.final_text or result.last_text).strip()
         if not reply:
             raise RuntimeError("ADK produced no text response")
-        return reply, used_tools
+        return reply, result.used_tools
 
     @staticmethod
     def _resolve_id_to_variant(token: str):

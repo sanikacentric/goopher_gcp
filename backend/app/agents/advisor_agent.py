@@ -30,7 +30,7 @@ import os
 from typing import Optional
 
 from ..config import get_settings
-from ..observability.telemetry import incr, log_event, span
+from ..observability.telemetry import incr, log_event
 from .skills import agent_skill_registry as skills
 
 _settings = get_settings()
@@ -70,12 +70,16 @@ Rules:
 
 
 # --------------------------------------------------------------------------- #
-# Lazy singletons (built on first /advise call, reused thereafter)
+# The advisor runs through the COMMON AgentHarness (scaffolding) — the same
+# wrapper the orchestrator uses. Built lazily on first /advise call.
 # --------------------------------------------------------------------------- #
-_runner = None
-_ready = False
-_sessions: set[str] = set()
-_LAST_ERROR = ""
+from .harness import AgentHarness  # noqa: E402
+
+_HARNESS = AgentHarness(
+    name="advisor",
+    app_name="goopher-advisor",
+    build_agent=lambda: _build_advisor(),
+)
 
 
 def _configure_genai_env() -> None:
@@ -202,25 +206,6 @@ def _build_advisor():
     )
 
 
-def _ensure_runner() -> bool:
-    """Build the runner once. Returns True if the ReAct advisor is available."""
-    global _runner, _ready, _LAST_ERROR
-    if _ready:
-        return True
-    try:
-        from google.adk.runners import InMemoryRunner
-
-        agent = _build_advisor()
-        _runner = InMemoryRunner(agent=agent, app_name="goopher-advisor")
-        _ready = True
-        log_event("advisor_init", path="adk-react", model=_settings.gemini_model)
-        return True
-    except Exception as exc:  # noqa: BLE001 - degrade gracefully, never crash boot
-        _LAST_ERROR = f"{type(exc).__name__}: {str(exc)[:200]}"
-        log_event("advisor_unavailable", reason=str(exc))
-        return False
-
-
 # --------------------------------------------------------------------------- #
 # ReAct output parsing — split the PlanReActPlanner tags into a readable plan
 # and the customer-facing final answer.
@@ -282,88 +267,54 @@ def handle_advise(
                  think" panel). Empty string if the model didn't emit tags.
     """
     incr("advisor_requests_total")
-    if not _ensure_runner():
-        return {
-            "ok": False,
-            "reply": ("The Shopping Advisor needs the Gemini/ADK path enabled "
-                      "(LLM_PROVIDER=gemini). " + (_LAST_ERROR or "")).strip(),
-            "plan": "",
-            "used_tools": [],
-            "engine": "unavailable",
-        }
-
-    import asyncio
-
-    from google.genai import types
-
-    # Create the ADK session once per session_id (idempotent).
-    if session_id not in _sessions:
-        try:
-            asyncio.run(
-                _runner.session_service.create_session(
-                    app_name="goopher-advisor", user_id=customer_id, session_id=session_id
-                )
-            )
-        except Exception as exc:  # already exists / transient
-            log_event("advisor_session_skipped", reason=str(exc))
-        _sessions.add(session_id)
 
     # The advisor has no separate memory store; pass the signed-in id + the ask.
     prompt = (
         f"Signed-in customer_id: {customer_id}. Channel: {channel}. "
         f"Reply language: {language}.\n\nShopper: {question}"
     )
-    content = types.Content(role="user", parts=[types.Part(text=prompt)])
 
-    used_tools: list[str] = []
-    transcript: list[str] = []      # accumulate ALL model text (plan + final)
-    observations: list = []         # tool results, for the synthesis safety net
-    try:
-        with span("advisor.react_turn"):
-            for event in _runner.run(
-                user_id=customer_id, session_id=session_id, new_message=content
-            ):
-                if getattr(event, "get_function_calls", None):
-                    for fc in event.get_function_calls() or []:
-                        used_tools.append(fc.name)
-                if getattr(event, "get_function_responses", None):
-                    for fr in event.get_function_responses() or []:
-                        observations.append({"tool": getattr(fr, "name", "?"),
-                                             "result": getattr(fr, "response", None)})
-                if event.content and event.content.parts:
-                    txt = "".join(p.text or "" for p in event.content.parts)
-                    if txt.strip():
-                        transcript.append(txt)
-    except Exception as exc:  # noqa: BLE001
-        log_event("advisor_turn_failed", reason=str(exc))
+    # Run through the COMMON harness (build → session → run-loop → collect). The
+    # advisor is READ-ONLY, so a retry on a transient error is safe.
+    result = _HARNESS.run(user_id=customer_id, session_id=session_id,
+                          prompt=prompt, retries=2)
+
+    if not result.ok:
+        if not _HARNESS.ready():
+            # Couldn't even build the agent → ADK/Gemini path isn't enabled.
+            return {
+                "ok": False,
+                "reply": ("The Shopping Advisor needs the Gemini/ADK path enabled "
+                          "(LLM_PROVIDER=gemini). " + (result.error or "")).strip(),
+                "plan": "", "used_tools": [], "engine": "unavailable",
+            }
+        # Built fine but every attempt errored while reasoning.
+        log_event("advisor_turn_failed", reason=result.error)
         return {
             "ok": False,
             "reply": "Sorry — the advisor hit an error reasoning about that. "
                      "Please try rephrasing your request.",
-            "plan": "",
-            "used_tools": used_tools,
-            "engine": "adk-react",
+            "plan": "", "used_tools": result.used_tools, "engine": "adk-react",
         }
 
-    raw = "\n".join(transcript).strip()
-    reply, plan = _split_react(raw)
+    reply, plan = _split_react(result.transcript)
     # SAFETY NET: the planner produced a plan but no final answer (the classic
     # "plan but no action" stall). Synthesize a grounded recommendation from the
     # tool observations the agent already gathered, so the shopper still gets a
     # real answer — and keep the plan visible in the panel.
     if not reply:
-        synthesized = _synthesize_recommendation(question, observations, get_settings())
+        synthesized = _synthesize_recommendation(question, result.observations, get_settings())
         if synthesized:
             reply = synthesized
-            log_event("advisor_synthesized", tools=",".join(used_tools))
+            log_event("advisor_synthesized", tools=",".join(result.used_tools))
         else:
             reply = "I couldn't finalize a pick this time — tap 🧠 again, or give " \
                     "me a budget or category (e.g. \"a snack under $4\")."
-    log_event("advisor_reply", tools=",".join(used_tools), has_plan=bool(plan))
+    log_event("advisor_reply", tools=",".join(result.used_tools), has_plan=bool(plan))
     return {
         "ok": True,
         "reply": reply,
         "plan": plan,
-        "used_tools": used_tools,
+        "used_tools": result.used_tools,
         "engine": "adk-react",
     }

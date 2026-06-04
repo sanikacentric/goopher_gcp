@@ -527,6 +527,49 @@ picks the agent** (AgentTool), and each **agent picks the tool** within its skil
 (function-calling). The registry adds an explicit, inspectable **skill** layer
 beneath both.
 
+---
+
+## 5h. The Agent Harness (scaffolding) — common runtime for ALL agents
+
+Every ADK agent needs the same runtime "scaffolding" to go from *configured* to
+*reliably runnable*:
+
+```
+build the agent → create a Runner → ensure the session exists →
+stream the turn → collect (text / tool-calls / observations) →
+apply resilience (retry, graceful failure) → return a STRUCTURED result
+```
+
+That boilerplate used to be copy-pasted inside the orchestrator's `_generate_adk`
+**and** the advisor. It now lives ONCE in a dedicated package —
+**`backend/app/agents/harness/`** (`AgentHarness` + `AgentRunResult`) — and is the
+**common scaffolding shared by all agents**:
+
+| Caller | Harness | Runs |
+|---|---|---|
+| `AgentService` (production) | `AgentHarness("orchestrator", app="goopher", build_root_agent)` | orchestrator + its 4 worker sub-agents |
+| Shopping advisor | `AgentHarness("advisor", app="goopher-advisor", _build_advisor)` | the ReAct advisor |
+
+**`AgentHarness`** (`agent_harness.py`):
+- `ready()` — builds the Runner once; **degrades gracefully** (returns `False`,
+  never raises) when ADK/Gemini is absent, so the caller uses its fallback (the
+  orchestrator drops to the deterministic engine; the advisor returns an
+  "enable Gemini" message).
+- `run(user_id, session_id, prompt, retries=1)` — ensures the session, streams the
+  turn, and returns an **`AgentRunResult`**: `final_text`, `last_text`,
+  `transcript` (all text, for ReAct parsing), `used_tools`, `observations`
+  (tool results), plus `steps`/`attempts`/`error` for telemetry. `retries>1`
+  re-runs a turn on a transient error — used ONLY by the read-only advisor, never
+  on a transactional turn.
+- google-adk / google-genai are imported **lazily**, so importing the harness
+  never requires the heavy packages (CI runs without them).
+
+This is a pure refactor — behavior is identical (same Runner, same event loop,
+same "prefer final, fall back to last, raise if empty" semantics). The win is one
+tested, observable, resilient scaffold instead of two inline copies. Verified in
+`tests/test_agent_harness.py` (ready/unavailable, event collection, retry) with
+the rest of the suite unchanged.
+
 The planner emits `/*PLANNING*/ … /*ACTION*/ … /*REASONING*/ … /*FINAL_ANSWER*/`
 tags; `_split_react()` splits the **final recommendation** (shown as the reply)
 from the **reasoning trace** (shown in the extension's collapsible *"🧠 How

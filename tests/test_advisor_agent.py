@@ -6,10 +6,9 @@ The agent is exercised WITHOUT a live Gemini/ADK call: we test the ReAct output
 parser, the read-only isolation guarantee, the graceful-degradation path, and
 the endpoint wiring — all hermetic (no network, camera, or API key).
 """
-import pytest
-
 import backend.app.agents.advisor_agent as adv
 from backend.app.agents.advisor_agent import _split_react, handle_advise
+from backend.app.agents.harness import AgentRunResult
 from backend.app.agents.skills import checkout_skill, inventory_skill, order_skill
 from fastapi.testclient import TestClient
 from backend.app.main import app
@@ -67,8 +66,11 @@ def test_handle_advise_never_returns_a_checkout():
 
 
 # --- Graceful degradation when the ADK/ReAct path isn't available --------- #
-def test_handle_advise_graceful_when_runner_unavailable(monkeypatch):
-    monkeypatch.setattr(adv, "_ensure_runner", lambda: False)
+def test_handle_advise_graceful_when_harness_unavailable(monkeypatch):
+    # The common harness couldn't build the agent (no ADK) → unavailable message.
+    monkeypatch.setattr(adv._HARNESS, "run",
+                        lambda **k: AgentRunResult(ok=False, error="no adk"))
+    monkeypatch.setattr(adv._HARNESS, "ready", lambda: False)
     out = handle_advise("recommend a toy", "CUST-1001", "adv-1")
     assert out["ok"] is False
     assert out["plan"] == ""
@@ -76,33 +78,19 @@ def test_handle_advise_graceful_when_runner_unavailable(monkeypatch):
     assert "Gemini" in out["reply"] or "ADK" in out["reply"]
 
 
-# --- Happy path with a faked ADK runner (no network) ---------------------- #
-def test_handle_advise_parses_runner_output(monkeypatch):
-    # handle_advise builds a google.genai Content once the runner is "ready".
-    # CI runs WITHOUT the heavy google packages (requirements-dev.txt), so skip
-    # there — the graceful-path tests above already cover the no-ADK environment.
-    pytest.importorskip("google.genai")
-    class _Part:
-        def __init__(self, text): self.text = text
-    class _Content:
-        def __init__(self, text): self.parts = [_Part(text)]
-    class _Event:
-        def __init__(self, text): self.content = _Content(text)
-        def get_function_calls(self):
-            class _FC:  # one fake tool call
-                name = "search_inventory"
-            return [_FC()]
-    class _FakeRunner:
-        def run(self, **kwargs):
-            yield _Event(
-                "/*PLANNING*/ step 1\n/*ACTION*/ search_inventory(snacks)\n"
-                "/*FINAL_ANSWER*/ Try the Cheez-It at $3.49."
-            )
-
-    monkeypatch.setattr(adv, "_ensure_runner", lambda: True)
-    monkeypatch.setattr(adv, "_runner", _FakeRunner(), raising=False)
-    monkeypatch.setattr(adv, "_sessions", {"adv-2"}, raising=False)  # skip session create
-
+# --- Happy path: handle_advise parses the harness result (no network) ------ #
+def test_handle_advise_parses_harness_result(monkeypatch):
+    # Fake the COMMON harness's run() → handle_advise just parses the transcript.
+    # No google import needed (the harness is stubbed), so this runs in CI too.
+    result = AgentRunResult(
+        ok=True,
+        final_text="Try the Cheez-It at $3.49.",
+        transcript=("/*PLANNING*/ step 1\n/*ACTION*/ search_inventory(snacks)\n"
+                    "/*FINAL_ANSWER*/ Try the Cheez-It at $3.49."),
+        used_tools=["search_inventory"],
+        observations=[],
+    )
+    monkeypatch.setattr(adv._HARNESS, "run", lambda **k: result)
     out = handle_advise("a snack under $4", "CUST-1001", "adv-2")
     assert out["ok"] is True
     assert out["reply"] == "Try the Cheez-It at $3.49."
@@ -119,7 +107,9 @@ def test_advise_endpoint_requires_auth():
 def test_advise_endpoint_authorized(monkeypatch):
     # Force the graceful path so the test never needs a live Gemini call, but
     # still proves the route, schema, and auth all work end-to-end.
-    monkeypatch.setattr(adv, "_ensure_runner", lambda: False)
+    monkeypatch.setattr(adv._HARNESS, "run",
+                        lambda **k: AgentRunResult(ok=False, error="no adk"))
+    monkeypatch.setattr(adv._HARNESS, "ready", lambda: False)
     token = client.post("/auth/login", json=GOOD).json()["access_token"]
     r = client.post(
         "/advise",

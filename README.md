@@ -141,9 +141,11 @@ while preserving conversation context.
   **▶ Vertex** → **✅ Restore all**. See [`ARCHITECTURE.md` §5e](ARCHITECTURE.md)
   and the **[demo script](DEMO.md)**.
 
-> 🎬 **Presenting this?** See **[DEMO.md](DEMO.md)** for a full CTO walkthrough
-> with the exact lines to say, and **[QUESTION-ANSWER.md](QUESTION-ANSWER.md)** for
-> a Q&A bank of the most likely technical-team and stakeholder questions.
+> 🎬 **Presenting this?** Use **[PRESENTATION.md](PRESENTATION.md)** — an interactive
+> 10-slide deck (with live-demo cues) for the CTO, business, and technical teams.
+> See also **[DEMO.md](DEMO.md)** for the full word-for-word walkthrough and
+> **[QUESTION-ANSWER.md](QUESTION-ANSWER.md)** for a Q&A bank of the most likely
+> technical-team and stakeholder questions.
 
 ---
 

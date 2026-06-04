@@ -31,7 +31,7 @@ from typing import Optional
 
 from ..config import get_settings
 from ..observability.telemetry import incr, log_event, span
-from .skills import inventory_skill, order_skill
+from .skills import agent_skill_registry as skills
 
 _settings = get_settings()
 
@@ -172,6 +172,16 @@ def _synthesize_recommendation(question: str, observations: list, settings) -> s
     return ""
 
 
+def _advisor_tools() -> list:
+    """Pick the advisor's tools from the registry — ONLY read-only skills, so the
+    advisor can never be handed a checkout/place-order tool. We assert the skills
+    we use are flagged read_only, turning the isolation guarantee into code."""
+    chosen = ["inventory", "order"]
+    for name in chosen:
+        assert skills.get_skill(name).read_only, f"advisor skill '{name}' must be read-only"
+    return skills.get_tools(*chosen)
+
+
 def _build_advisor():
     """Construct the single ReAct LlmAgent (PlanReActPlanner) with READ-ONLY tools."""
     _configure_genai_env()
@@ -187,8 +197,8 @@ def _build_advisor():
         description="Read-only shopping advisor that plans, searches inventory and "
                     "order history, reasons, and recommends a product.",
         instruction=ADVISOR_INSTRUCTION,
-        # READ-ONLY tools only — NO checkout/place-order tool is ever given here.
-        tools=inventory_skill.get_tools() + order_skill.get_tools(),
+        # READ-ONLY skills only (from the registry) — NO checkout tool is ever given.
+        tools=_advisor_tools(),
     )
 
 

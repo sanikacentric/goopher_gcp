@@ -122,7 +122,7 @@ def healthz() -> dict:
 
 # Build marker — bump when verifying a deploy actually rolled out. Hit
 # GET /version on the live service to confirm which code Cloud Run is running.
-BUILD_VERSION = "2026-06-03-vision-confirm"
+BUILD_VERSION = "2026-06-03-skill-registry"
 
 
 @app.get("/version")
@@ -134,6 +134,15 @@ def version() -> dict:
 def metrics() -> dict:
     """Plain JSON metrics (scrape-friendly). Cloud Monitoring can ingest these."""
     return {"metrics": METRICS}
+
+
+@app.get("/skills")
+def skills() -> dict:
+    """Introspect the AGENT SKILL REGISTRY — the named capabilities (with their
+    tools) that agents pick from. Read-only metadata; powers docs / the dev portal
+    and proves which skills are read-only vs transactional."""
+    from .agents.skills import agent_skill_registry
+    return {"skills": agent_skill_registry.describe()}
 
 
 @app.get("/catalog")

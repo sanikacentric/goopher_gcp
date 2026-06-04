@@ -132,7 +132,7 @@ coherent across turns, channels, and languages.*
 | Customer authentication | `backend/app/auth/auth.py`, `/auth/*` | **T1** |
 | ADK orchestrator | `backend/app/agents/orchestrator.py` | **T2** |
 | Memory agent (context) | `backend/app/memory/memory_agent.py` | **T3**, global |
-| Agent skills | `backend/app/agents/skills/*` | **T4** |
+| Agent skills + **registry** | `backend/app/agents/skills/*`, `agent_skill_registry.py`, `GET /skills` | **T4** |
 | In-process function tools (inventory/order) | `backend/app/tools/*` | **T5**, 2A-1, 2A-2 |
 | Gemini LLM (free tier) | `config.gemini_model`, orchestrator | **T6** |
 | Google Cloud stack (free tier) | Firestore + Cloud Run + Cloud Trace | **T7**, T14 |
@@ -490,9 +490,42 @@ advisor = LlmAgent(
     model=settings.gemini_model,             # same Gemini 2.5 Flash
     planner=PlanReActPlanner(),              # <-- explicit ReAct (visible plan)
     instruction=ADVISOR_INSTRUCTION,        # "recommend only — never place an order"
-    tools=inventory_skill.get_tools() + order_skill.get_tools(),  # READ-ONLY
+    tools=skills.get_tools(*skills.read_only_skill_names()),  # READ-ONLY skills only
 )
 ```
+
+---
+
+## 5g. The Agent Skill Registry (T4)
+
+An **agent skill** = a named capability bundling an `INSTRUCTION` (teaches the LLM
+when/how to use it) + a set of callable `get_tools()`. The four skills —
+`inventory`, `order`, `checkout`, `fulfillment` — are registered ONCE in
+`agent_skill_registry.py` (`AGENT_SKILL_REGISTRY`), the single source of truth.
+
+Agents **pick their skills by name** from the registry instead of importing skill
+modules directly:
+
+| Agent | Skills it picks | |
+|---|---|---|
+| `inventory_agent` | `inventory` | `skills.get_skill("inventory")` |
+| `order_agent` | `order` | |
+| `checkout_agent` | `checkout` (transactional) | |
+| `order_management_agent` | `fulfillment` (transactional) | |
+| `shopping_advisor` (ReAct) | `inventory` + `order` | `skills.get_tools(*skills.read_only_skill_names())` |
+
+Each `AgentSkill` carries a `read_only` flag. Transactional skills (`checkout`,
+`fulfillment`) are `read_only=False`; browse/track skills are `read_only=True`.
+The read-only advisor composes **only read-only skills** and asserts it at build
+time — so it can never be handed a place-order tool (turning the isolation
+guarantee into code; verified in `tests/test_agent_skill_registry.py`).
+
+**Introspection:** `GET /skills` returns the whole registry (name, title,
+description, `read_only`, tool names) — a live capability map for the dev portal
+and the CTO. Two runtime "picking" levels remain unchanged: the **orchestrator
+picks the agent** (AgentTool), and each **agent picks the tool** within its skill
+(function-calling). The registry adds an explicit, inspectable **skill** layer
+beneath both.
 
 The planner emits `/*PLANNING*/ … /*ACTION*/ … /*REASONING*/ … /*FINAL_ANSWER*/`
 tags; `_split_react()` splits the **final recommendation** (shown as the reply)

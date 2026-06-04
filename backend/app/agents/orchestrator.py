@@ -30,7 +30,7 @@ from ..models.schemas import ChatRequest, ChatResponse
 from ..observability.flow_recorder import TurnTrace
 from ..observability.telemetry import incr, log_event, span
 from . import channel_agent, language_agent, modality_agent
-from .skills import checkout_skill, inventory_skill, order_mgmt_skill, order_skill
+from .skills import agent_skill_registry as skills
 
 _settings = get_settings()
 
@@ -118,6 +118,13 @@ def build_root_agent():
     model = _settings.gemini_model
 
     # --- Worker sub-agents that OWN the tools ---
+    # Each worker PICKS its skill from the agent skill registry (single source of
+    # truth) and binds that skill's tools + instruction.
+    inv = skills.get_skill("inventory")
+    order = skills.get_skill("order")
+    checkout = skills.get_skill("checkout")
+    fulfillment = skills.get_skill("fulfillment")
+
     # inventory_agent owns the inventory tools and calls them itself.
     inventory_agent = LlmAgent(
         name="inventory_agent",
@@ -128,12 +135,12 @@ def build_root_agent():
             "You are the inventory specialist for a store with THREE departments — "
             "Clothing, Food/Snacks, AND Toys (soccer ball, LEGO, NERF, Play-Doh, "
             "Hot Wheels, puzzles). Use your tools to answer the request:\n"
-            + inventory_skill.INSTRUCTION
+            + inv.instruction
             + "\nReturn the concrete results (names, prices, stock). ALWAYS trust "
               "the tool output. NEVER say the store doesn't sell toys or only "
               "sells one/two categories — it sells clothing, food, AND toys."
         ),
-        tools=inventory_skill.get_tools(),
+        tools=inv.get_tools(),
     )
 
     # order_agent owns the order tools and calls them itself.
@@ -144,10 +151,10 @@ def build_root_agent():
                     "questions (single or bulk) by calling the order tools.",
         instruction=(
             "You are the order-management specialist. Use your tools to answer:\n"
-            + order_skill.INSTRUCTION
+            + order.instruction
             + "\nThe signed-in customer_id is provided in context; never ask for it."
         ),
-        tools=order_skill.get_tools(),
+        tools=order.get_tools(),
     )
 
     # checkout_agent owns the checkout tools (add to cart, simulated payment,
@@ -159,10 +166,10 @@ def build_root_agent():
                     "(simulated) payment, and confirms the placed order.",
         instruction=(
             "You are the checkout specialist. Use your tools to place orders:\n"
-            + checkout_skill.INSTRUCTION
+            + checkout.instruction
             + "\nThe signed-in customer_id is provided in context; never ask for it."
         ),
-        tools=checkout_skill.get_tools(),
+        tools=checkout.get_tools(),
     )
 
     # order_management_agent owns the fulfillment pipeline (runs after payment):
@@ -177,10 +184,10 @@ def build_root_agent():
                     "delivery, invoice).",
         instruction=(
             "You manage order fulfillment after payment.\n"
-            + order_mgmt_skill.INSTRUCTION
+            + fulfillment.instruction
             + "\nThe signed-in customer_id is provided in context."
         ),
-        tools=order_mgmt_skill.get_tools(),
+        tools=fulfillment.get_tools(),
     )
 
     # --- ROOT: goopher_orchestrator — the MAIN unified agent ---

@@ -189,10 +189,14 @@ coherent across turns, channels, and languages.*
 - **Production is single-model: `gemini-2.5-flash` on Vertex AI.** The cloud runs
   `LLM_PROVIDER=gemini`, `USE_VERTEXAI=true`, authenticated by the Cloud Run
   service account, **with no OpenAI key** — so OpenAI is never invoked in prod.
-- That one Gemini model powers **all three** intelligent paths: (1) the ADK
+- That one Gemini model powers **all four** intelligent paths: (1) the ADK
   orchestrator + worker sub-agents and grounded reply phrasing, (2) multilingual
-  localization, and (3) **camera Vision** (it's natively multimodal — same model,
-  via the `google.genai` SDK with `thinking_budget=0`; see §5c).
+  localization, (3) **camera Vision** (it's natively multimodal — same model,
+  via the `google.genai` SDK with `thinking_budget=0`; see §5c), and (4) the
+  **explicit-ReAct Shopping Advisor** (`PlanReActPlanner`, read-only; see §5f).
+- **Two agent styles, one model:** native **function-calling `LlmAgent`s** for
+  the production/transactional paths, and an **explicit ReAct** agent
+  (`PlanReActPlanner`) for open-ended advice — see §5f.
 - `gpt-4o-mini` is the `LLM_PROVIDER=openai` alternate used locally and as a
   vision fallback; wired but inactive in the cloud.
 - **No LLM is used** for: the deterministic intent router, the
@@ -443,6 +447,62 @@ demo-critical, so Guardian was built to *never* be able to break them — it wra
 its own synthetic units of work, not the production calls. The same `protect()`
 API could later wrap real operations behind a flag, with zero change to the
 engine. See `LEARNINGS.md §3.19`.
+
+---
+
+## 5f. The Shopping Advisor — explicit ReAct (`PlanReActPlanner`), isolated
+
+GOOPHER deliberately runs **two agent styles on the same Gemini 2.5 Flash**, and
+picks the right one per job:
+
+| Style | Where | Why |
+|---|---|---|
+| **Native function-calling `LlmAgent`** | the 4 production workers + orchestrator (`orchestrator.py`) | Fast, reliable, no brittle text parsing. ReAct *paradigm* via Gemini's structured tool-calling. Used for search, orders, and the **transactional** checkout path. |
+| **Explicit ReAct (`PlanReActPlanner`)** | the **Shopping Advisor** (`advisor_agent.py`, `POST /advise`) | A read-only concierge that **visibly** PLANS → ACTS over tools → REASONS → ANSWERS. Surfaces the reasoning trace as a demo artifact. |
+
+**Why the advisor is the *right* place for explicit ReAct** — it's the only use
+case that is both **read-only** (it recommends, never places an order — no money
+moves) and **genuinely multi-hop** (*"a healthy snack under $4 that pairs with my
+last order"* needs order-history lookup → inventory search → price filter →
+compare → recommend). Everywhere else, ReAct would only add latency, tokens, and
+parsing fragility:
+- **checkout / fulfillment** are deliberately deterministic (the transactional
+  gate, §5b) — we never want the LLM *planning and executing* a payment;
+- **order status** is single-hop — nothing to plan;
+- the **orchestrator** just routes — a planner would slow *every* turn (incl.
+  voice). If we ever want model-side planning there, the right tool is ADK's
+  **`BuiltInPlanner`** (native Gemini thinking), **not** `PlanReActPlanner`.
+
+**Isolation guarantee** (same discipline as Vision/Guardian): a brand-new module
+with its **own `InMemoryRunner`** (`app_name="goopher-advisor"`), reached by its
+**own `POST /advise`** endpoint, given **READ-ONLY tools only** (inventory
+search/details + order lookup — the tool set is asserted **disjoint** from the
+checkout skill in `tests/test_advisor_agent.py`). It never touches `/chat`,
+`/vision`, the memory store, or any checkout code.
+
+```python
+# advisor_agent.py (essence)
+from google.adk.agents import LlmAgent
+from google.adk.planners import PlanReActPlanner
+
+advisor = LlmAgent(
+    name="shopping_advisor",
+    model=settings.gemini_model,             # same Gemini 2.5 Flash
+    planner=PlanReActPlanner(),              # <-- explicit ReAct (visible plan)
+    instruction=ADVISOR_INSTRUCTION,        # "recommend only — never place an order"
+    tools=inventory_skill.get_tools() + order_skill.get_tools(),  # READ-ONLY
+)
+```
+
+The planner emits `/*PLANNING*/ … /*ACTION*/ … /*REASONING*/ … /*FINAL_ANSWER*/`
+tags; `_split_react()` splits the **final recommendation** (shown as the reply)
+from the **reasoning trace** (shown in the extension's collapsible *"🧠 How
+GOOPHER reasoned (ReAct plan)"* panel — the 🧠 button on the composer).
+
+**The CTO talking point:** *"Native function-calling agents for transactions —
+reliable, deterministic where money moves — and an explicit ReAct agent for
+open-ended advice, with the plan shown live. We chose each deliberately, and kept
+ReAct strictly off the transactional path."*
 
 ---
 

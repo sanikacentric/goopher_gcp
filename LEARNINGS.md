@@ -442,6 +442,49 @@ talk (phone + voice + Spanish):
   4. **Test with how people actually talk** — voice + a second language exposed
      all three; exact-phrase unit tests would have missed them.
 
+### 3.21 Two agent styles on one model — native tool-calling vs explicit ReAct
+A CTO question — *"are these real ReAct agents, and are they imported from the
+library?"* — clarified an important distinction we'd been conflating.
+
+- **What the production agents are.** ADK's `LlmAgent` (imported from
+  `google.adk.agents`) runs the **ReAct *paradigm*** — reason → act → observe →
+  repeat — but via Gemini's **native structured function-calling**, not the
+  original text-scratchpad ReAct (`Thought:/Action:/Observation:`). The loop
+  lives inside ADK's `Runner`; we only *configure* the agent (name, model,
+  instruction, tools). So they're **"function-calling agents"**, the modern
+  successor to text-ReAct — strictly more reliable (no string parsing). We also
+  use the **agent-as-tool** composition (`AgentTool`), not `sub_agents`/transfer,
+  so the orchestrator *calls* a worker and stays in control to compose the reply.
+- **Why not `PlanReActPlanner` on the production agents.** It's a text-tag
+  planner (`/*PLANNING*/…/*FINAL_ANSWER*/`) for models *without* native planning.
+  On Gemini 2.5 Flash it would only **re-introduce brittle parsing** (the exact
+  "no text response" failure mode we'd fought), add **latency + tokens** (bad for
+  voice), and our task graph is **shallow** (orchestrator → one worker → tool) so
+  there's nothing to plan. If we ever want model-side planning there, the right
+  tool is **`BuiltInPlanner`** (native Gemini thinking), not `PlanReActPlanner`.
+- **The one place explicit ReAct earns its keep.** A new, isolated **Shopping
+  Advisor** (`advisor_agent.py`, `POST /advise`) — the only use case that is both
+  **read-only** (recommends, never places an order) *and* genuinely **multi-hop**
+  ("a snack under $4 that pairs with my last order" = history lookup → inventory
+  search → price filter → compare). There, `PlanReActPlanner`'s visible
+  `PLAN → ACTION → REASONING → FINAL_ANSWER` is a **feature**: we split the final
+  answer from the trace (`_split_react`) and show the reasoning in a collapsible
+  panel (the 🧠 button) — a genuine "watch it think" demo moment.
+- **Isolation discipline (again).** Same rule as Vision/Guardian: own module, own
+  `InMemoryRunner` (`app_name="goopher-advisor"`), own endpoint, **read-only tools
+  only** — a test asserts the advisor's tool set is **disjoint from the checkout
+  skill**, so it *cannot* transact. Existing flows untouched.
+- **Lessons:**
+  1. **"ReAct" is a paradigm, not a class.** Native function-calling *is* ReAct,
+     done better; don't bolt a text-scratchpad planner onto a model that already
+     plans natively.
+  2. **Match the planner to the job.** Explicit ReAct shines for **read-only,
+     multi-hop reasoning you want to show**; keep it **off the transactional
+     path**, where determinism matters more than visible reasoning.
+  3. **A "show both" feature is also an architecture argument.** Demoing native
+     tool-calling *and* explicit ReAct side-by-side signals you chose each
+     deliberately — more convincing than either alone.
+
 ---
 
 ## 4. Key trade-offs and decisions

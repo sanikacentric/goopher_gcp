@@ -1,13 +1,13 @@
 // GOOPHER side panel controller: login flow, chat rendering, multi-modal
 // attachments, channel/language switching, and VOICE input. Maintains a stable
 // session_id so the backend memory agent preserves context across switches.
-import { getCustomer, getToken, getMyOrders, login, logout, sendChat, sendVision } from "./api.js";
+import { getCustomer, getToken, getMyOrders, login, logout, sendAdvise, sendChat, sendVision } from "./api.js";
 
 // Version marker — confirms which build of the side panel Chrome has loaded.
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.5.8 — spoken/typed 'confirm' resolves the pending order");
+console.log("GOOPHER side panel v0.5.9 — 🧠 Shopping Advisor (explicit ReAct / PlanReActPlanner)");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -26,6 +26,7 @@ const els = {
   attachmentBar: document.getElementById("attachmentBar"),
   micBtn: document.getElementById("micBtn"),
   camBtn: document.getElementById("camBtn"),
+  adviseBtn: document.getElementById("adviseBtn"),
   speakToggle: document.getElementById("speakToggle"),
   muteBtn: document.getElementById("muteBtn"),
   cartBtn: document.getElementById("cartBtn"),
@@ -267,6 +268,53 @@ function renderConfirmButtons(srcText, viaVoice) {
 
   yes.addEventListener("click", () => doConfirm());
   no.addEventListener("click", () => doCancel());
+}
+
+// ---- Shopping Advisor (explicit ReAct / PlanReActPlanner) ----
+// A SEPARATE read-only agent (POST /advise) that PLANS → ACTS over tools →
+// REASONS → recommends. It never places an order. We show the recommendation
+// AND a collapsible "reasoning" panel with the visible ReAct plan — the demo
+// showcase of explicit ReAct alongside the production function-calling agents.
+async function askAdvisor(text) {
+  const q = (text || "").trim();
+  if (!q) {
+    addMessage("Tell me what you're after first — e.g. \"a healthy snack under $4 that pairs with my last order\" — then tap 🧠.", "bot");
+    return;
+  }
+  addMessage("🧠 " + q, "user");
+  els.messageInput.value = "";
+  const typing = document.createElement("div");
+  typing.className = "gp-typing"; typing.id = "typing";
+  typing.textContent = "Advisor is reasoning (plan → act → reason)…";
+  els.messages.appendChild(typing);
+  els.messages.scrollTop = els.messages.scrollHeight;
+  try {
+    const resp = await sendAdvise({
+      message: q, sessionId, channel: els.channel.value, language: els.language.value,
+    });
+    hideTyping();
+    const meta = `🧠 ReAct · ${resp.engine || "advisor"}${resp.used_tools?.length ? " · " + resp.used_tools.join(",") : ""}`;
+    addMessage(resp.reply, "bot", meta);
+    if (resp.plan) renderReactPlan(resp.plan);
+  } catch (err) {
+    hideTyping();
+    if (err.message === "UNAUTHORIZED") { await logout(); showLogin(); return; }
+    addMessage("⚠️ Advisor error: " + err.message, "bot");
+  }
+}
+
+// Render the visible ReAct trace as a collapsible "reasoning" card.
+function renderReactPlan(planText) {
+  const d = document.createElement("details");
+  d.className = "gp-react";
+  const s = document.createElement("summary");
+  s.textContent = "🧠 How GOOPHER reasoned (ReAct plan)";
+  const pre = document.createElement("pre");
+  pre.className = "gp-react-plan";
+  pre.textContent = planText;
+  d.appendChild(s); d.appendChild(pre);
+  els.messages.appendChild(d);
+  els.messages.scrollTop = els.messages.scrollHeight;
 }
 
 function showTyping() {
@@ -691,6 +739,10 @@ els.logoutBtn.addEventListener("click", async () => {
 
 els.cartBtn.addEventListener("click", toggleOrders);
 els.ordersClose.addEventListener("click", closeOrders);
+
+// 🧠 Shopping Advisor (ReAct) — routes the current input to /advise instead of
+// /chat, so it never places an order; it recommends and shows its reasoning.
+if (els.adviseBtn) els.adviseBtn.addEventListener("click", () => askAdvisor(els.messageInput.value));
 
 // Mute button toggles voice (and stops any current speech). The Speak checkbox
 // stays in sync either way.

@@ -36,6 +36,8 @@ from .observability.flow_recorder import get_recorder, record_login
 from .db.database import get_repository
 from .tools.order_tool import bulk_order_status
 from .models.schemas import (
+    AdviseRequest,
+    AdviseResponse,
     BulkOrderQuery,
     ChatRequest,
     ChatResponse,
@@ -120,7 +122,7 @@ def healthz() -> dict:
 
 # Build marker — bump when verifying a deploy actually rolled out. Hit
 # GET /version on the live service to confirm which code Cloud Run is running.
-BUILD_VERSION = "2026-06-01-confirm-checkout"
+BUILD_VERSION = "2026-06-03-react-advisor"
 
 
 @app.get("/version")
@@ -219,6 +221,35 @@ def vision(req: VisionRequest, claims: dict = Depends(current_customer)) -> Chat
         reply=result["reply"], session_id=req.session_id, language=lang,
         channel=req.channel, used_tools=result.get("used_tools", []),
         checkout=result.get("checkout"),
+    )
+
+
+@app.post("/advise", response_model=AdviseResponse)
+def advise(req: AdviseRequest, claims: dict = Depends(current_customer)) -> AdviseResponse:
+    """
+    Shopping-Advisor subagent — explicit ReAct (ADK PlanReActPlanner) on Gemini
+    2.5 Flash. The shopper asks for an open-ended recommendation; the agent
+    PLANS -> ACTS over read-only tools -> REASONS -> ANSWERS, and we return both
+    the recommendation AND the visible reasoning plan. Read-only: it never places
+    an order. Separate from /chat and /vision so existing flows are untouched.
+    """
+    if len(req.message or "") > settings.max_chat_message_chars:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Message too long (max {settings.max_chat_message_chars} characters).",
+        )
+    from .agents.advisor_agent import handle_advise
+    lang = req.language or "en"
+    result = handle_advise(
+        question=req.message, customer_id=claims["sub"], session_id=req.session_id,
+        channel=req.channel, language=lang,
+    )
+    log_event("advise_request", customer_id=claims["sub"], ok=result.get("ok"),
+              tools=",".join(result.get("used_tools", [])))
+    return AdviseResponse(
+        reply=result["reply"], session_id=req.session_id, language=lang,
+        plan=result.get("plan", ""), used_tools=result.get("used_tools", []),
+        engine=result.get("engine", "adk-react"),
     )
 
 

@@ -131,6 +131,29 @@ Oreo), not a random item — because it remembers the last item you viewed.
 
 ---
 
+### 5d. 🧠 Two agent styles — native tool-calling **and** explicit ReAct
+**Do:** Type *"a healthy snack under $4 that pairs with the cookies I ordered
+last time"* and tap the **🧠** button (the Shopping Advisor) — **not** Send.
+
+**They see:** a recommendation, plus a collapsible **"🧠 How GOOPHER reasoned
+(ReAct plan)"** panel showing **PLAN → ACTION → REASONING → FINAL ANSWER** — the
+agent looking up the order history, searching inventory, filtering by price, and
+explaining its pick.
+
+> 🗣️ *"Everything so far used **native function-calling agents** — fast,
+> reliable, and what we use for anything that moves money. But for open-ended
+> advice I run an **explicit ReAct agent** — ADK's `PlanReActPlanner` on the same
+> Gemini 2.5 Flash — and you can **watch it plan, act over tools, and reason**.
+> It's **read-only** — it recommends, it never places an order. We pick the right
+> agent style per job, and keep ReAct strictly **off the transactional path**."*
+
+> 💡 Why this lands: it shows architectural maturity — you didn't just reach for
+> ReAct because it's trendy; you chose **native tool-calling for transactions**
+> and **visible ReAct for reasoning**, deliberately. (Backed by
+> `ARCHITECTURE.md §5f`; isolation proven in `tests/test_advisor_agent.py`.)
+
+---
+
 ## 6. 🛡️ THE FINALE — the self-healing Guardian (the jaw-dropper)
 > This is the closer. Slow down and let it land. It's **isolated** — it drives
 > synthetic transactions and touches no live flow, so it's 100% safe to run live.

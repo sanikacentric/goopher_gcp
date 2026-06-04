@@ -79,6 +79,27 @@ export async function sendVision({ question, image_b64, mime_type, sessionId, ch
   return res.json();
 }
 
+// Shopping-Advisor subagent (explicit ReAct / PlanReActPlanner). Returns
+// { reply, plan, used_tools, engine } — `plan` is the visible PLAN -> ACTION ->
+// REASONING trace we show in the "watch GOOPHER reason" panel. Read-only: never
+// places an order. Separate endpoint so the main chat flow is untouched.
+export async function sendAdvise({ message, sessionId, channel, language }) {
+  const token = await getToken();
+  const res = await fetch(`${CONFIG.API_BASE}/advise`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      message,
+      session_id: sessionId,
+      channel,
+      language: language || null,
+    }),
+  });
+  if (res.status === 401) throw new Error("UNAUTHORIZED");
+  if (!res.ok) throw new Error(`Server error ${res.status}`);
+  return res.json();
+}
+
 // The signed-in customer's orders — backs the header cart/orders panel.
 export async function getMyOrders() {
   const token = await getToken();

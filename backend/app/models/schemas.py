@@ -135,6 +135,31 @@ class VisionRequest(BaseModel):
     language: Optional[str] = None
 
 
+class AdviseRequest(BaseModel):
+    """Shopping-advisor request for the ReAct subagent (POST /advise).
+
+    Separate from ChatRequest so this explicit-ReAct capability never touches the
+    production chat / checkout pipeline.
+    """
+    message: str = Field(..., description="The shopper's open-ended ask, e.g. "
+                         "'a healthy snack under $4 that pairs with my last order'.")
+    session_id: str
+    channel: Literal["web", "phone"] = "web"
+    language: Optional[str] = None
+
+
+class AdviseResponse(BaseModel):
+    """Advisor reply PLUS the visible ReAct reasoning trace."""
+    reply: str
+    session_id: str
+    language: str
+    # The PLAN -> ACTION -> REASONING trace from PlanReActPlanner (empty if none).
+    # Surfaced in the UI as a "watch GOOPHER reason" panel — the ReAct showcase.
+    plan: str = ""
+    used_tools: list[str] = Field(default_factory=list)
+    engine: str = "adk-react"
+
+
 class ChatResponse(BaseModel):
     reply: str
     session_id: str

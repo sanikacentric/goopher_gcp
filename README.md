@@ -121,6 +121,13 @@ while preserving conversation context.
   transaction.
 - Vision uses the same `gemini-2.5-flash` with `thinking_budget=0` (a short
   classification — see `LEARNINGS.md §3.16`).
+- **Two agent styles on the one model.** The production workers are **native
+  function-calling `LlmAgent`s** (the ReAct paradigm via Gemini's structured
+  tool-calling — reliable, used for the transactional path). A separate, isolated
+  **🧠 Shopping Advisor** (`advisor_agent.py`, `POST /advise`) uses ADK's
+  **explicit `PlanReActPlanner`** to visibly **plan → act → reason → recommend**
+  (read-only — it never places an order). Tap the **🧠** button in the extension
+  to see the live ReAct reasoning panel. See [`ARCHITECTURE.md` §5f](ARCHITECTURE.md).
 
 ---
 

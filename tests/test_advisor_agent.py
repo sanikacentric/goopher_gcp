@@ -6,6 +6,8 @@ The agent is exercised WITHOUT a live Gemini/ADK call: we test the ReAct output
 parser, the read-only isolation guarantee, the graceful-degradation path, and
 the endpoint wiring — all hermetic (no network, camera, or API key).
 """
+import pytest
+
 import backend.app.agents.advisor_agent as adv
 from backend.app.agents.advisor_agent import _split_react, handle_advise
 from backend.app.agents.skills import checkout_skill, inventory_skill, order_skill
@@ -66,6 +68,10 @@ def test_handle_advise_graceful_when_runner_unavailable(monkeypatch):
 
 # --- Happy path with a faked ADK runner (no network) ---------------------- #
 def test_handle_advise_parses_runner_output(monkeypatch):
+    # handle_advise builds a google.genai Content once the runner is "ready".
+    # CI runs WITHOUT the heavy google packages (requirements-dev.txt), so skip
+    # there — the graceful-path tests above already cover the no-ADK environment.
+    pytest.importorskip("google.genai")
     class _Part:
         def __init__(self, text): self.text = text
     class _Content:

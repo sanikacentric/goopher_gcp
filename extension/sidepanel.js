@@ -7,7 +7,7 @@ import { getCustomer, getToken, getMyOrders, login, logout, sendAdvise, sendChat
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.6.0 — 🧠 Advisor empty-tap auto-recommends from your last order");
+console.log("GOOPHER side panel v0.6.1 — 🧠 Advisor recommends from your last order's department & price");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -279,14 +279,16 @@ async function askAdvisor(text) {
   let q = (text || "").trim();
   const auto = !q;
   if (auto) {
-    // Empty tap → make a CONTEXTUAL recommendation off the customer's most
-    // recent order. The ReAct advisor looks up the order history itself, so we
-    // just ask for a short list of complementary items.
-    q = "Look at my most recent order and recommend a few snack items priced " +
-        "under $4 that pair well with it. Reply with a short bulleted list of " +
-        "just the product names and their prices — no long explanation.";
+    // Empty tap → make a CONTEXTUAL recommendation off the customer's MOST RECENT
+    // order. Don't hardcode a department/price — let the ReAct advisor read the
+    // actual last order (its department AND price) and recommend accordingly
+    // (e.g. last order was a $17.99 Toy → other Toys at/under ~$17.99).
+    q = "Look at my MOST RECENT order. Identify its department and price, then " +
+        "recommend a few other items from the SAME department priced at or below " +
+        "what I just bought. Reply with a short bulleted list of product names " +
+        "and prices only — no long explanation.";
   }
-  addMessage(auto ? "🧠 Recommend snacks under $4 based on my last order" : "🧠 " + q, "user");
+  addMessage(auto ? "🧠 Recommend items based on my last order" : "🧠 " + q, "user");
   els.messageInput.value = "";
   const typing = document.createElement("div");
   typing.className = "gp-typing"; typing.id = "typing";

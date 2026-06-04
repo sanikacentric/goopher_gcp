@@ -46,6 +46,24 @@ def test_place_an_order_intent_routes_to_checkout():
     assert "placed" in resp.reply.lower() or "order" in resp.reply.lower()
 
 
+def test_checkout_turn_records_skill_layer_in_dev_portal():
+    """The deterministic checkout path should still surface the checkout SKILL +
+    its tools in the dev portal (skill/tool parity with the ADK path)."""
+    from backend.app.observability.flow_recorder import _recorder
+
+    AgentService().run_turn(
+        ChatRequest(message="place an order", session_id="chk-portal"),
+        customer_id="CUST-1001",
+    )
+    # NB: placing an order also commits a separate "fulfillment" record, so scan
+    # recent records for the checkout TURN that carries the checkout skill step.
+    recs = _recorder.recent(20)
+    skill_steps = [s for r in recs for s in r["steps"]
+                   if s["stage"] == "skill" and "checkout" in s["name"]]
+    assert skill_steps, "checkout path did not record a checkout skill step"
+    assert any("transactional" in s["detail"] for s in skill_steps)
+
+
 def test_resolve_variant_by_name_finds_named_product():
     """Ordering by product name resolves to that product's in-stock variant."""
     res = resolve_variant_by_name("oreo cookies")

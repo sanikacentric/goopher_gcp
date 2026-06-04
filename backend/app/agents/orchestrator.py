@@ -392,11 +392,28 @@ class AgentService:
                         or self._try_checkout(text, customer_id, confirm=req.confirm))
             if checkout is not None:
                 reply, used_tools = checkout
-                ft.step("orchestrator", "checkout (deterministic · structured)",
-                        "placed order with cart + staged receipt")
+                # Checkout is the DETERMINISTIC transactional gate — NOT an LLM/ADK
+                # agent run, so there's no harness here (that's the point: "LLM
+                # orchestrates, code transacts"). We still surface the checkout
+                # SKILL + its tools so the path has skill/tool parity with ADK.
+                ft.step("orchestrator", "checkout — DETERMINISTIC transactional gate",
+                        "the gate transacts (cart → payment → ORDER_PLACED); the "
+                        "LLM never executes the purchase")
                 for name in used_tools:
-                    ft.step("subagent", f"↳ {name}",
-                            "checkout worker (structured)", tool=name)
+                    if name in SUBAGENT_NAMES:
+                        ft.step("subagent", f"↳ {name}",
+                                "checkout worker (structured, deterministic)", tool=name)
+                        sk_name = SUBAGENT_SKILL.get(name)
+                        if sk_name:
+                            sk = skills.get_skill(sk_name)
+                            ft.step("skill", f"   ↳ skill: {sk.name}",
+                                    f"{sk.title} — "
+                                    f"{'read-only' if sk.read_only else 'transactional'}"
+                                    f" · tools: {', '.join(sk.tool_names())}",
+                                    skill=sk.name, read_only=sk.read_only)
+                    else:
+                        ft.step("tool", f"↳ {name}",
+                                "checkout tool (deterministic gate)", tool=name)
                 path = "checkout"
             elif self._adk_ready and _settings.use_adk_path:
                 try:

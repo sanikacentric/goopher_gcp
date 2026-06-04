@@ -296,6 +296,17 @@ def handle_vision(question: str, image_b64: str, mime_type: str, customer_id: st
             used_tools.append("checkout_agent")
             ft.step("vision", "preview: place_order",
                     f"previewed {product_name} — awaiting confirm")
+            # Surface the checkout SKILL the deterministic gate exercises (parity
+            # with the chat pipeline's agent → skill → tools view).
+            try:
+                from .skills import agent_skill_registry as _skills
+                _ck = _skills.get_skill("checkout")
+                ft.step("skill", "   ↳ skill: checkout",
+                        f"{_ck.title} — transactional · tools: "
+                        f"{', '.join(_ck.tool_names())}",
+                        skill="checkout", read_only=False)
+            except Exception:  # noqa: BLE001 - portal detail only
+                pass
             # Lead with what we saw so the customer trusts the recognition.
             reply = f"📷 I recognized **{product_name}**.\n\n{reply}"
             ft.record.reply = reply

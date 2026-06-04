@@ -39,6 +39,16 @@ def test_split_react_without_tags_returns_text_as_reply():
     assert plan == ""
 
 
+def test_split_react_plan_without_final_does_not_leak_tags():
+    # The "plan but no final answer" stall: raw tags must NOT become the reply;
+    # the plan goes to the panel and the reply is left empty for the safety net.
+    raw = "/*PLANNING*/\n1. list orders\n/*ACTION*/ search_inventory(snacks)"
+    final, plan = _split_react(raw)
+    assert final == ""
+    assert "PLAN" in plan and "ACTION" in plan
+    assert "/*PLANNING*/" not in plan and "/*ACTION*/" not in plan
+
+
 # --- Read-only isolation guarantee ---------------------------------------- #
 def test_advisor_tools_are_read_only_no_checkout():
     """The advisor must NEVER be able to place an order: its tool set must be

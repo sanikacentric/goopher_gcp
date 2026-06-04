@@ -86,6 +86,83 @@ def _configure_genai_env() -> None:
             os.environ["GOOGLE_API_KEY"] = _settings.google_api_key
 
 
+def _react_generate_config():
+    """Generate-config for the ReAct agent.
+
+    CRITICAL: gemini-2.5-flash's *thinking* collides with PlanReActPlanner. The
+    model emits the PLANNING block + the first ACTION (a tool call), but on the
+    turn AFTER the tool returns, thinking spends the output budget and the visible
+    /*FINAL_ANSWER*/ never lands — so you get "plan but no answer". DISABLE
+    thinking (thinking_budget=0) and give a generous max_output_tokens so the
+    planner reliably reasons over the observation and produces the final answer.
+    (Same fix proven on the Vision subagent — see vision_agent.py / LEARNINGS §3.16.)
+    """
+    from google.genai import types
+
+    kwargs = {"max_output_tokens": 4096, "temperature": 0.2}
+    try:
+        kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+    except Exception:  # older SDK without ThinkingConfig — the budget still helps
+        pass
+    return types.GenerateContentConfig(**kwargs)
+
+
+def _gemini_client(settings):
+    """A google.genai client on Vertex (prod) or AI Studio (local) — same pattern
+    as the Vision subagent. Returns None if no credentials are available."""
+    from google import genai
+
+    if settings.use_vertexai:
+        return genai.Client(vertexai=True, project=settings.google_cloud_project,
+                            location=settings.vertex_location)
+    if settings.google_api_key:
+        return genai.Client(api_key=settings.google_api_key)
+    return None
+
+
+def _synthesize_recommendation(question: str, observations: list, settings) -> str:
+    """SAFETY NET: if the ReAct planner emits a plan but stops before a final
+    answer, turn the tool observations (orders + inventory the agent already
+    fetched) into a concise, GROUNDED recommendation with one guaranteed
+    completion call (thinking disabled so it can't stall again). Returns "" if it
+    can't run — the caller then shows a graceful message."""
+    import json
+
+    client = _gemini_client(settings)
+    if client is None or not observations:
+        return ""
+    from google.genai import types
+
+    obs_text = json.dumps(observations, default=str)[:6000]
+    prompt = (
+        "You are GOOPHER's shopping advisor. The shopper asked:\n"
+        f"  {question}\n\n"
+        "Your tools already returned this data (order history and/or inventory):\n"
+        f"{obs_text}\n\n"
+        "Using ONLY products present in that data (never invent items), recommend "
+        "a few that fit. Reply with a SHORT bulleted list of product names and "
+        "their prices only, e.g. '- Cheez-It Original - $3.49'. One short intro "
+        "line is fine. No long explanation."
+    )
+    cfg_kwargs = {"max_output_tokens": 1024, "temperature": 0.2}
+    try:
+        cfg_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+    except Exception:
+        pass
+    try:
+        resp = client.models.generate_content(
+            model=settings.gemini_model, contents=[prompt],
+            config=types.GenerateContentConfig(**cfg_kwargs),
+        )
+        cands = getattr(resp, "candidates", None) or []
+        if cands and getattr(cands[0], "content", None):
+            parts = getattr(cands[0].content, "parts", None) or []
+            return "".join(getattr(p, "text", "") or "" for p in parts).strip()
+    except Exception as exc:  # noqa: BLE001
+        log_event("advisor_synthesis_failed", reason=str(exc))
+    return ""
+
+
 def _build_advisor():
     """Construct the single ReAct LlmAgent (PlanReActPlanner) with READ-ONLY tools."""
     _configure_genai_env()
@@ -96,6 +173,8 @@ def _build_advisor():
         name="shopping_advisor",
         model=_settings.gemini_model,            # same Gemini 2.5 Flash as production
         planner=PlanReActPlanner(),              # <-- EXPLICIT ReAct (visible plan)
+        # Disable thinking so the post-tool turn produces a real FINAL_ANSWER.
+        generate_content_config=_react_generate_config(),
         description="Read-only shopping advisor that plans, searches inventory and "
                     "order history, reasons, and recommends a product.",
         instruction=ADVISOR_INSTRUCTION,
@@ -144,18 +223,25 @@ def _split_react(raw: str) -> tuple[str, str]:
     text = (raw or "").strip()
     if not text:
         return "", ""
+    has_tags = any(tag in text for tag, _ in _TAG_LABELS)
     if _FINAL_TAG in text:
         idx = text.rindex(_FINAL_TAG)
         final = text[idx + len(_FINAL_TAG):].strip()
         plan_src = text[:idx].strip()
+    elif has_tags:
+        # The model emitted a plan but stopped before /*FINAL_ANSWER*/. Route the
+        # WHOLE thing to the plan panel and leave `final` empty so the caller can
+        # supply a graceful reply — NEVER dump raw /*TAGS*/ into the chat bubble.
+        final, plan_src = "", text
     else:
+        # No ReAct tags at all → it's just a plain recommendation.
         final, plan_src = text, ""
     # Prettify the plan portion: replace each raw tag with a labelled header.
     pretty = plan_src
     for tag, label in _TAG_LABELS:
         pretty = pretty.replace(tag, f"\n\n{label}\n")
     pretty = "\n".join(line.rstrip() for line in pretty.splitlines()).strip()
-    return final or text, pretty
+    return final, pretty
 
 
 # --------------------------------------------------------------------------- #
@@ -211,7 +297,8 @@ def handle_advise(
     content = types.Content(role="user", parts=[types.Part(text=prompt)])
 
     used_tools: list[str] = []
-    transcript: list[str] = []   # accumulate ALL model text (plan + final)
+    transcript: list[str] = []      # accumulate ALL model text (plan + final)
+    observations: list = []         # tool results, for the synthesis safety net
     try:
         with span("advisor.react_turn"):
             for event in _runner.run(
@@ -220,6 +307,10 @@ def handle_advise(
                 if getattr(event, "get_function_calls", None):
                     for fc in event.get_function_calls() or []:
                         used_tools.append(fc.name)
+                if getattr(event, "get_function_responses", None):
+                    for fr in event.get_function_responses() or []:
+                        observations.append({"tool": getattr(fr, "name", "?"),
+                                             "result": getattr(fr, "response", None)})
                 if event.content and event.content.parts:
                     txt = "".join(p.text or "" for p in event.content.parts)
                     if txt.strip():
@@ -237,9 +328,18 @@ def handle_advise(
 
     raw = "\n".join(transcript).strip()
     reply, plan = _split_react(raw)
+    # SAFETY NET: the planner produced a plan but no final answer (the classic
+    # "plan but no action" stall). Synthesize a grounded recommendation from the
+    # tool observations the agent already gathered, so the shopper still gets a
+    # real answer — and keep the plan visible in the panel.
     if not reply:
-        reply = "I couldn't form a recommendation for that — try giving me a " \
-                "budget or a category (e.g. \"a snack under $4\")."
+        synthesized = _synthesize_recommendation(question, observations, get_settings())
+        if synthesized:
+            reply = synthesized
+            log_event("advisor_synthesized", tools=",".join(used_tools))
+        else:
+            reply = "I couldn't finalize a pick this time — tap 🧠 again, or give " \
+                    "me a budget or category (e.g. \"a snack under $4\")."
     log_event("advisor_reply", tools=",".join(used_tools), has_plan=bool(plan))
     return {
         "ok": True,

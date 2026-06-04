@@ -320,6 +320,11 @@ class AgentService:
         # pre-processing now, not sub-agents.
         SUBAGENT_NAMES = {"inventory_agent", "order_agent", "checkout_agent",
                           "order_management_agent"}
+        # Which agent skill (registry) each worker sub-agent picks — surfaced in
+        # the dev portal so the pipeline reads agent → skill → tools.
+        SUBAGENT_SKILL = {"inventory_agent": "inventory", "order_agent": "order",
+                          "checkout_agent": "checkout",
+                          "order_management_agent": "fulfillment"}
 
         with span("chat_turn", session=req.session_id, channel=req.channel,
                   customer=customer_id) as trace_id:
@@ -398,6 +403,12 @@ class AgentService:
                     _t0 = _time.perf_counter()
                     reply, used_tools = self._generate_adk(
                         req.session_id, text, customer_id, directives)
+                    # The orchestrator runs through the COMMON AgentHarness — show
+                    # that scaffolding layer explicitly in the pipeline.
+                    ft.step("harness", "AgentHarness · orchestrator",
+                            "common scaffolding: build → session → run-loop → "
+                            "collect (text/tool-calls) → resilience → result",
+                            app="goopher", model=_settings.gemini_model)
                     ft.step("orchestrator",
                             "invoke_agent: goopher_orchestrator (ADK + gemini)",
                             "ROOT agent — selected a worker sub-agent and composed "
@@ -406,6 +417,15 @@ class AgentService:
                         if name in SUBAGENT_NAMES:
                             ft.step("subagent", f"↳ {name}",
                                     "worker sub-agent invoked by orchestrator", tool=name)
+                            # The skill (registry capability) that worker picked.
+                            sk_name = SUBAGENT_SKILL.get(name)
+                            if sk_name:
+                                sk = skills.get_skill(sk_name)
+                                ft.step("skill", f"   ↳ skill: {sk.name}",
+                                        f"{sk.title} — "
+                                        f"{'read-only' if sk.read_only else 'transactional'}"
+                                        f" · tools: {', '.join(sk.tool_names())}",
+                                        skill=sk.name, read_only=sk.read_only)
                         else:
                             ft.step("tool", f"↳ {name}",
                                     "tool called by the worker sub-agent", tool=name)

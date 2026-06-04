@@ -98,6 +98,27 @@ def test_handle_advise_parses_harness_result(monkeypatch):
     assert out["used_tools"] == ["search_inventory"]
 
 
+def test_advisor_records_harness_skill_tool_to_portal(monkeypatch):
+    # A successful advise turn should appear in the dev portal as an "advise" flow
+    # with the harness → skill → tool layers (the pipeline the CTO sees).
+    from backend.app.observability.flow_recorder import _recorder
+
+    result = AgentRunResult(
+        ok=True, final_text="Pick X.", transcript="/*FINAL_ANSWER*/ Pick X.",
+        used_tools=["search_inventory"], observations=[],
+    )
+    monkeypatch.setattr(adv._HARNESS, "run", lambda **k: result)
+    handle_advise("recommend a snack", "CUST-1001", "adv-portal")
+
+    rec = _recorder.recent(5)[-1]
+    assert rec["kind"] == "advise"
+    stages = [s["stage"] for s in rec["steps"]]
+    assert "harness" in stages and "skill" in stages and "tool" in stages
+    # the skills shown are the read-only ones the advisor picks
+    skill_steps = [s for s in rec["steps"] if s["stage"] == "skill"]
+    assert any("inventory" in s["name"] for s in skill_steps)
+
+
 # --- Endpoint wiring ------------------------------------------------------- #
 def test_advise_endpoint_requires_auth():
     r = client.post("/advise", json={"message": "recommend a snack", "session_id": "x"})

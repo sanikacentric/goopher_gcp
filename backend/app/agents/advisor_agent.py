@@ -311,6 +311,37 @@ def handle_advise(
             reply = "I couldn't finalize a pick this time — tap 🧠 again, or give " \
                     "me a budget or category (e.g. \"a snack under $4\")."
     log_event("advisor_reply", tools=",".join(result.used_tools), has_plan=bool(plan))
+
+    # Record the advisor pipeline to the dev portal so it shows the same layers as
+    # the main flow: harness → (ReAct agent) → skills picked → tools used.
+    try:
+        from ..observability.flow_recorder import TurnTrace
+
+        ft = TurnTrace(kind="advise")
+        ft.record.session_id = session_id
+        ft.record.customer_id = customer_id
+        ft.record.channel = channel
+        ft.record.language = language
+        ft.record.user_message = (question or "").strip() or "(advisor) recommend something"
+        ft.step("harness",
+                "AgentHarness · shopping_advisor (ReAct · PlanReActPlanner)",
+                "common scaffolding: build → session → run-loop → collect "
+                "(text/tool-calls/observations) → resilience → result",
+                app="goopher-advisor", model=_settings.gemini_model)
+        # The READ-ONLY skills the advisor picked from the registry.
+        for sk_name in skills.read_only_skill_names():
+            sk = skills.get_skill(sk_name)
+            ft.step("skill", f"   ↳ skill: {sk.name}",
+                    f"{sk.title} — read-only · tools: {', '.join(sk.tool_names())}",
+                    skill=sk.name, read_only=True)
+        for t in result.used_tools:
+            ft.step("tool", f"↳ {t}", "tool called by the advisor", tool=t)
+        ft.record.reply = reply
+        ft.record.used_tools = result.used_tools
+        ft.commit()
+    except Exception as exc:  # noqa: BLE001 - portal recording must never break the reply
+        log_event("advisor_trace_skipped", reason=str(exc))
+
     return {
         "ok": True,
         "reply": reply,

@@ -7,7 +7,7 @@ import { getCustomer, getToken, getMyOrders, login, logout, sendAdvise, sendChat
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.5.9 — 🧠 Shopping Advisor (explicit ReAct / PlanReActPlanner)");
+console.log("GOOPHER side panel v0.6.0 — 🧠 Advisor empty-tap auto-recommends from your last order");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -276,12 +276,17 @@ function renderConfirmButtons(srcText, viaVoice) {
 // AND a collapsible "reasoning" panel with the visible ReAct plan — the demo
 // showcase of explicit ReAct alongside the production function-calling agents.
 async function askAdvisor(text) {
-  const q = (text || "").trim();
-  if (!q) {
-    addMessage("Tell me what you're after first — e.g. \"a healthy snack under $4 that pairs with my last order\" — then tap 🧠.", "bot");
-    return;
+  let q = (text || "").trim();
+  const auto = !q;
+  if (auto) {
+    // Empty tap → make a CONTEXTUAL recommendation off the customer's most
+    // recent order. The ReAct advisor looks up the order history itself, so we
+    // just ask for a short list of complementary items.
+    q = "Look at my most recent order and recommend a few snack items priced " +
+        "under $4 that pair well with it. Reply with a short bulleted list of " +
+        "just the product names and their prices — no long explanation.";
   }
-  addMessage("🧠 " + q, "user");
+  addMessage(auto ? "🧠 Recommend snacks under $4 based on my last order" : "🧠 " + q, "user");
   els.messageInput.value = "";
   const typing = document.createElement("div");
   typing.className = "gp-typing"; typing.id = "typing";

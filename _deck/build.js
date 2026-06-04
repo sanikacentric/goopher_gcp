@@ -17,24 +17,28 @@ function _txt(t) {
   if (Array.isArray(t)) return t.map((r) => (r && r.text) || "").join("");
   return "";
 }
-if (QA) {
+// always-on: auto-number slides (footers track real position) + optional QA hooks
+{
   const origAdd = p.addSlide.bind(p);
   p.addSlide = function (...a) {
     const s = origAdd(...a);
-    _slideNo += 1; const num = _slideNo; s.__texts = []; s.__boxes = []; _slideRefs.push(s);
-    const wrap = (fn, kind) => {
-      const orig = s[fn].bind(s);
-      s[fn] = function (arg, opts) {
-        const o = (kind === "text") ? (opts || {}) : (arg || {});
-        const { x = 0, y = 0, w = 0, h = 0 } = o;
-        const eps = 0.02;
-        if (x < -eps || y < -eps || x + w > PW + eps || y + h > PH + eps)
-          _issues.push(`S${num} ${kind} OUT-OF-BOUNDS x=${x} y=${y} w=${w} h=${h}` + (kind === "text" ? ` :: "${_txt(arg).slice(0, 40)}"` : ""));
-        if (kind === "text") { s.__texts.push(_txt(arg)); s.__boxes.push({ x, y, w, h, t: _txt(arg).slice(0, 30) }); }
-        return orig(arg, opts);
+    _slideNo += 1; const num = _slideNo; s.__n = num;
+    if (QA) {
+      s.__texts = []; s.__boxes = []; _slideRefs.push(s);
+      const wrap = (fn, kind) => {
+        const orig = s[fn].bind(s);
+        s[fn] = function (arg, opts) {
+          const o = (kind === "text") ? (opts || {}) : (arg || {});
+          const { x = 0, y = 0, w = 0, h = 0 } = o;
+          const eps = 0.02;
+          if (x < -eps || y < -eps || x + w > PW + eps || y + h > PH + eps)
+            _issues.push(`S${num} ${kind} OUT-OF-BOUNDS x=${x} y=${y} w=${w} h=${h}` + (kind === "text" ? ` :: "${_txt(arg).slice(0, 40)}"` : ""));
+          if (kind === "text") { s.__texts.push(_txt(arg)); s.__boxes.push({ x, y, w, h, t: _txt(arg).slice(0, 30) }); }
+          return orig(arg, opts);
+        };
       };
-    };
-    wrap("addText", "text"); wrap("addShape", "shape"); wrap("addImage", "image");
+      wrap("addText", "text"); wrap("addShape", "shape"); wrap("addImage", "image");
+    }
     return s;
   };
 }
@@ -67,7 +71,7 @@ function title(s, text, y = 0.82, color = C.ink, w = CW) {
 function footer(s, n) {
   s.addText("GOOPHER · Unified Conversational Retail Agent on Google Cloud",
     { x: M, y: 7.06, w: 9, h: 0.3, margin: 0, fontFace: BF, fontSize: 9, color: C.soft });
-  s.addText(String(n), { x: PAGE_W - 1.0, y: 7.06, w: 0.45, h: 0.3, margin: 0, align: "right", fontFace: BF, fontSize: 9, color: C.soft });
+  s.addText(String(n != null ? n : s.__n), { x: PAGE_W - 1.0, y: 7.06, w: 0.45, h: 0.3, margin: 0, align: "right", fontFace: BF, fontSize: 9, color: C.soft });
 }
 function lightBG(s) { s.background = { color: C.white }; }
 
@@ -177,7 +181,7 @@ function stat(s, o) {
     s.addText(b, { x: 7.8, y: y + 0.48, w: 4.85, h: 0.42, margin: 0, fontFace: BF, fontSize: 11, color: C.muted, valign: "top" });
     y += 1.08;
   });
-  footer(s, 2);
+  footer(s);
   s.addNotes(
     "Define the unblocker (2 min). 'The retailer wants modern self-service for order management and support — over chat and voice — for a global base. " +
     "The blocker isn't 'add a chatbot.' It's four things at once: it must ACT on live inventory/orders, ROUTE to specialists while keeping context, " +
@@ -212,7 +216,7 @@ function stat(s, o) {
     { text: "Backend tools on a mock retail DB:  ", options: { bold: true, color: C.ink } },
     { text: "search_inventory · check_stock · get_product_details · get_order_status · place_order · place_bulk_order · run_fulfillment", options: { color: C.muted } },
   ], { x: M + 0.95, y: 5.7, w: CW - 1.2, h: 0.95, margin: 0, valign: "middle", fontFace: BF, fontSize: 12.5 });
-  footer(s, 3);
+  footer(s);
   s.addNotes(
     "The solution in one breath (90s). 'GOOPHER is a unified conversational agent built on Google's Agent Development Kit and Gemini 2.5 Flash on Vertex AI. " +
     "It hits all four extension requirements TODAY: real sub-agents with shared context, multilingual, multichannel, and multimodal — including a camera 'see-it-shop-it' flow. " +
@@ -268,13 +272,84 @@ function stat(s, o) {
 
   s.addText("LLM orchestrates & converses;  deterministic code transacts.",
     { x: M, y: 6.45, w: CW, h: 0.4, margin: 0, fontFace: BF, fontSize: 13, italic: true, bold: true, color: C.ink, align: "center" });
-  footer(s, 4);
+  footer(s);
   s.addNotes(
     "Architecture (3 min — the centerpiece for the technical stakeholder). 'Top lane: the Chrome extension talks over HTTPS+JWT to FastAPI on Cloud Run, which runs a real ADK orchestrator on Gemini 2.5 Flash via Vertex AI. " +
     "Before the LLM, deterministic Python handles modality/language/channel/memory — fast, free, reliable. " +
     "The orchestrator delegates to four worker sub-agents using the agent-as-tool pattern; each picks a skill from a registry and calls in-process tools that hit the mock retail DB in Firestore. " +
     "Crucially, checkout is a DETERMINISTIC transactional gate, and a self-healing Guardian plus Cloud Trace and a live /dev portal make the whole thing observable. " +
     "The one line to remember: the LLM orchestrates and converses; deterministic code transacts.' (Open /dev here if time permits.)"
+  );
+})();
+
+// ============================================ SLIDE 4b — ARCHITECTURE DEEP-DIVE
+(() => {
+  const s = p.addSlide(); lightBG(s);
+  kicker(s, "Architecture deep-dive · one request, end-to-end", C.blue);
+  title(s, "Trace a single turn through the stack");
+
+  // ---- left: numbered request flow ----
+  const lx = M, lw = 7.25;
+  s.addShape(p.shapes.LINE, { x: lx + 0.18, y: 2.1, w: 0, h: 4.05, line: { color: C.border, width: 2 } });
+  const steps = [
+    ["1", "Input — GOOPHER extension", "text · 🎤 voice · 📷 camera · 📎 file  →  HTTPS + JWT", C.violet],
+    ["2", "Edge — Cloud Run · FastAPI", "auth (JWT) · rate-limit · request-size limit · CORS", C.muted],
+    ["3", "Pre-process — deterministic, no LLM", "detect modality · language · channel; LOAD memory by session_id", C.teal],
+    ["4", "Route", "purchase? → deterministic transactional gate (skip LLM)  ·  else → agent path", C.amber],
+    ["5", "Agent Harness", "build agent · ensure ADK session · run (retry · degrade-once · structured result)", C.violet],
+    ["6", "ROOT orchestrator — Gemini 2.5 Flash (Vertex)", "selects ONE worker via agent-as-tool (stays in control)", C.amber],
+    ["7", "Worker sub-agent + skill", "picks a registry skill → calls its tools (native function-calling)", C.blue],
+    ["8", "Tools → mock retail DB", "read/write Firestore: catalog · orders · ORDER_PLACED", C.teal],
+    ["9", "Respond", "channel-format reply · PERSIST memory · stream back · trace to Cloud Trace + /dev", C.violet],
+  ];
+  let y = 1.92; const rh = 0.475;
+  steps.forEach(([n, head, detail, col]) => {
+    s.addShape(p.shapes.OVAL, { x: lx, y, w: 0.36, h: 0.36, fill: { color: col } });
+    s.addText(n, { x: lx, y, w: 0.36, h: 0.36, margin: 0, align: "center", valign: "middle", fontFace: BF, fontSize: 13, bold: true, color: "FFFFFF" });
+    s.addText(head, { x: lx + 0.52, y: y - 0.05, w: lw - 0.55, h: 0.26, margin: 0, fontFace: BF, fontSize: 12.5, bold: true, color: C.ink, valign: "middle" });
+    s.addText(detail, { x: lx + 0.52, y: y + 0.205, w: lw - 0.55, h: 0.25, margin: 0, fontFace: BF, fontSize: 10.5, color: C.muted, valign: "middle" });
+    y += rh;
+  });
+
+  // ---- right: cross-cutting concerns ----
+  const rx = 8.15, rw = PAGE_W - M - rx; // ~4.63
+  s.addText("Cross-cutting (every turn)", { x: rx, y: 1.78, w: rw, h: 0.3, margin: 0, fontFace: BF, fontSize: 13, bold: true, color: C.blue });
+  const cc = [
+    ["lock", C.violet, "Transactional gate — deterministic", ["cart → payment → ORDER_PLACED → receipt", "the LLM never executes the purchase"]],
+    ["layers", C.rose, "Isolated side-agents", ["/vision (Gemini Vision) · /advise (ReAct)", "Guardian self-heal — separate endpoints, don't touch /chat"]],
+    ["eye", C.teal, "Observability & resilience", ["Cloud Trace spans · live /dev · /metrics · /version", "graceful fallback + circuit breaker"]],
+  ];
+  let cy = 2.15; const ch = 1.2;
+  cc.forEach(([icon, chip, head, lines]) => {
+    s.addShape(p.shapes.ROUNDED_RECTANGLE, { x: rx, y: cy, w: rw, h: ch, rectRadius: 0.08, fill: { color: C.white }, line: { color: C.border, width: 1 }, shadow: shadow() });
+    s.addShape(p.shapes.ROUNDED_RECTANGLE, { x: rx + 0.2, y: cy + 0.2, w: 0.5, h: 0.5, rectRadius: 0.1, fill: { color: chip } });
+    s.addImage({ path: ic(icon), x: rx + 0.32, y: cy + 0.32, w: 0.26, h: 0.26 });
+    s.addText(head, { x: rx + 0.82, y: cy + 0.16, w: rw - 1.0, h: 0.5, margin: 0, fontFace: BF, fontSize: 12.5, bold: true, color: C.ink, valign: "middle" });
+    s.addText(lines.map((t) => ({ text: t, options: { bullet: { indent: 11 }, breakLine: true, paraSpaceAfter: 3 } })),
+      { x: rx + 0.24, y: cy + 0.7, w: rw - 0.46, h: 0.46, margin: 0, fontFace: BF, fontSize: 10.5, color: C.muted, valign: "top" });
+    cy += ch + 0.16;
+  });
+  // tech stack strip
+  s.addShape(p.shapes.ROUNDED_RECTANGLE, { x: rx, y: cy + 0.02, w: rw, h: 0.66, rectRadius: 0.08, fill: { color: C.dark } });
+  s.addText([
+    { text: "STACK   ", options: { bold: true, color: "FCA5C0", charSpacing: 2 } },
+    { text: "Vertex AI · Gemini 2.5 Flash · ADK · Cloud Run · Firestore · Cloud Trace", options: { color: "D7D3EC" } },
+  ], { x: rx + 0.22, y: cy + 0.02, w: rw - 0.4, h: 0.66, margin: 0, valign: "middle", fontFace: BF, fontSize: 10.5 });
+
+  footer(s);
+  s.addNotes(
+    "Architecture deep-dive (3–4 min — for the technical stakeholder; great for Q&A). Walk the numbers 1→9: " +
+    "1) The extension captures text, voice, camera or a file and calls the API over HTTPS with a JWT. " +
+    "2) Cloud Run + FastAPI authenticates and applies rate/size limits and CORS. " +
+    "3) Deterministic Python detects modality, language and channel and LOADS session memory by session_id — no LLM, so it's fast, free and reliable. " +
+    "4) We branch: a purchase goes to the deterministic transactional gate and SKIPS the LLM entirely; everything else goes to the agent path. " +
+    "5) The common Agent Harness builds the agent, ensures the ADK session, and runs it with retries and degrade-once. " +
+    "6) The ROOT orchestrator on Gemini 2.5 Flash via Vertex selects ONE worker using agent-as-tool — so it stays in control and there are no delegation loops. " +
+    "7) That worker picks a skill from the registry and calls its tools via native function-calling. " +
+    "8) Tools read and write the mock retail DB in Firestore — catalog, orders, and the ORDER_PLACED table. " +
+    "9) We channel-format the reply, PERSIST the turn to memory, stream it back, and trace the whole thing to Cloud Trace and the live /dev portal. " +
+    "On the right are the three things true on EVERY turn: the deterministic gate, the isolated side-agents (vision, advisor, guardian), and full observability + resilience. " +
+    "I can drill into any box."
   );
 })();
 
@@ -341,7 +416,7 @@ function stat(s, o) {
     const x = M + (i % 2) * (w + 0.6), y = 1.95 + Math.floor(i / 2) * (h + 0.3);
     card(s, { x, y, w, h, icon, chip, head, lines, headSize: 15.5, bodySize: 12 });
   });
-  footer(s, 6);
+  footer(s);
   s.addNotes(
     "Tie back to the exact requirements (2 min). 'The prompt named four things to be extensible to — we built all four in. " +
     "Sub-agents with shared context via one session store on Firestore. Multilingual, carried across turns. Multichannel — web plus a phone simulator, with a clean path to CCAI. " +
@@ -374,7 +449,7 @@ function stat(s, o) {
       { x: x + 0.82, y: y + 0.47, w: w - 1.0, h: 0.26, margin: 0, fontFace: BF, fontSize: 10.5 });
     s.addText(why, { x: x + 0.22, y: y + 0.78, w: w - 0.42, h: 0.56, margin: 0, fontFace: BF, fontSize: 11, color: C.muted, valign: "top" });
   });
-  footer(s, 7);
+  footer(s);
   s.addNotes(
     "Defend the design (3 min — the technical-acumen score). For each: name the choice, the alternative, and WHY. " +
     "The headline trade-off is the deterministic gate — we deliberately keep the LLM OUT of executing payments. " +
@@ -403,7 +478,7 @@ function stat(s, o) {
     const x = M + (i % 3) * (w + 0.3), y = 1.95 + Math.floor(i / 3) * (h + 0.25);
     card(s, { x, y, w, h, icon, chip, head, lines: [body], headSize: 14, bodySize: 12 });
   });
-  footer(s, 8);
+  footer(s);
   s.addNotes(
     "Reliability & trust (2 min — pre-empts the 'is it safe?' question). 'For a retailer, an agent that touches orders has to be trustworthy. " +
     "GOOPHER never substitutes, always confirms before charging, can't loop by construction, keeps durable shared state, self-heals, and is fully observable. " +
@@ -438,7 +513,7 @@ function stat(s, o) {
     s.addText(body, { x: x + 1.0, y: y + 0.6, w: w - 1.2, h: 0.66, margin: 0, fontFace: BF, fontSize: 12, color: C.muted, valign: "top" });
   });
   s.addText("Benchmarks are illustrative industry ranges, not client results.", { x: M, y: 6.86, w: CW, h: 0.25, margin: 0, fontFace: BF, fontSize: 9, italic: true, color: C.soft });
-  footer(s, 9);
+  footer(s);
   s.addNotes(
     "Business value (2–3 min — speak to the VP of Strategy). 'Translate the tech into outcomes: 24/7 self-service across every channel and language; " +
     "deflection of routine contacts (industry sees 60–80%); near-zero idle cost because it scales to zero; and one agent replacing three hand-offs. " +
@@ -465,7 +540,7 @@ function stat(s, o) {
     const x = M + (i % 3) * (w + 0.3), y = 1.95 + Math.floor(i / 3) * (h + 0.25);
     card(s, { x, y, w, h, icon, chip, head, lines: [body], headSize: 13.5, bodySize: 12 });
   });
-  footer(s, 10);
+  footer(s);
   s.addNotes(
     "Why Google Cloud (90s — the CE angle). 'Every block of this design is a Google Cloud strength: Gemini on Vertex gives us one multimodal model under managed security and quota; " +
     "ADK gives first-class multi-agent orchestration and tracing; Cloud Run is serverless and scales to zero; Firestore gives durable shared state; Cloud Trace makes it debuggable; " +
@@ -499,7 +574,7 @@ function stat(s, o) {
   });
   s.addText("Low-risk ramp: the prototype already encodes the hard parts (safety gate, context, multimodal); production is integration + hardening, not re-architecture.",
     { x: M, y: 6.05, w: CW, h: 0.6, margin: 0, fontFace: BF, fontSize: 12.5, italic: true, color: C.ink, align: "center" });
-  footer(s, 11);
+  footer(s);
   s.addNotes(
     "Roadmap (90s). 'The prototype already solves the hard parts — the safety gate, shared context, and multimodal. So production is a low-risk ramp: " +
     "Pilot adds real auth, Secret Manager, hardening, and instrumentation. Integrate connects live OMS/payments and CCAI telephony plus Vertex Translation. " +

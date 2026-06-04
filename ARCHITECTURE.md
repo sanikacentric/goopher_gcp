@@ -607,6 +607,101 @@ ReAct strictly off the transactional path."*
 
 ---
 
+## 5i. The fulfillment / order-management pipeline (Req 5)
+
+The 9-stage **FULFILLMENT** pipeline in `/dev` — Order Validation → Inventory
+Check → Insert `ORDER_PLACED` → Order Confirmation → Warehouse → Shipping →
+Tracking → Delivery → Invoice — is the **order-management agent's** capability:
+
+| Layer | Identity |
+|---|---|
+| Agent | `order_management_agent` (one of the 4 ADK workers) |
+| Skill (registry) | `fulfillment` — *Order Fulfillment Pipeline*, **transactional** |
+| Tool | `run_fulfillment` (`order_mgmt_tool.py`) — runs the 9 stages, streams each as a `kind="fulfillment"` record |
+
+**But it executes DETERMINISTICALLY, not as an LLM step.** For a real purchase it
+is triggered the moment payment succeeds, from inside the checkout gate:
+
+```
+checkout gate → place_order()            (checkout_tool.py)
+   → payment succeeds
+   → _run_fulfillment_safe(order_id) → run_fulfillment()   ← the 9 stages
+```
+
+So the agent *owns* the capability (and the orchestrator could delegate to it on
+request, e.g. "re-run fulfillment for ORD-50066"), but money-and-inventory work
+**runs as deterministic code** — reliable, auditable, never skipped or
+hallucinated. Each stage commits to the SAME `fulfillment` record (deduped by id),
+so the portal shows ONE card with 9 stages, not nine cards. This is the
+"LLM orchestrates, code transacts" guardrail (§5b) applied end-to-end.
+
+---
+
+## 5j. State & memory model — how all agents maintain state
+
+State is **centralized, durable, and shared by `session_id`** — not scattered
+per-agent. There are distinct layers:
+
+| Layer | Where | Holds | Scope |
+|---|---|---|---|
+| **Session memory** (primary) | `memory/memory_agent.py` — `InMemoryStore` (local) / **`FirestoreStore`** (cloud) | `turns` (history w/ channel·language·modality) + `facts` (working memory) | per `session_id`, **durable & shared across Cloud Run instances** |
+| **ADK session** | the `AgentHarness` (`session_service.create_session`) | ADK's internal conversation context | per `session_id`, created once |
+| **Working-memory facts** | `_LAST_VIEWED` (`inventory_tool.py`); `memory.remember(...)` | last product viewed; sticky language/channel | enables "order it / the above item" |
+| **Per-turn ephemeral** | `AgentService._last_checkout` | current turn's cart/receipt for the UI | one turn only |
+| **Guardian state** | `guardian.py` | component health + circuit-breaker state | isolated, no conversation state |
+| **Client state** | extension (`chrome.storage.local`) | stable `session_id`, auth token, cart/UI | per browser profile |
+| **Business data** | Firestore / SQLite repository | catalog, orders (`ORDER_PLACED`), customers | system of record |
+
+**Lifecycle per turn** (`run_turn`): load `history_text(session_id)` at the start
+→ run the path → `add_turn(...)` at the end → the **`MEMORY · session updated`**
+step in `/dev`. This is why *"is it in navy?" → "order it"* resolves across a
+channel/language switch.
+
+**Stateless by design:** the **Vision** and **Advisor** agents keep **no memory of
+their own** — they receive `customer_id` + the question and pull any "memory" from
+**tools** (e.g. the advisor calls `list_customer_orders` to read order history).
+Fewer stateful components = fewer ways to drift or leak context between agents.
+
+---
+
+## 5k. Loop & runaway prevention — what stops agents looping
+
+Agent loops (A→B→A delegation cycles, tool-call runaway, re-planning loops, retry
+storms) are prevented **structurally**, not by prompt-pleading:
+
+1. **Agent-as-tool, NOT transfer.** The orchestrator composes workers with
+   `AgentTool`, so it *calls* a worker and **stays in control**; a worker
+   **cannot transfer control back** to the orchestrator or sideways to a peer. The
+   A→B→A cycle is **not expressible**.
+2. **Workers own only function tools — no nested agents.** `tools=skill.get_tools()`
+   are plain in-process functions, so a worker can't invoke another agent. Depth is
+   hard-bounded: `orchestrator → ONE worker → its tools → return`.
+3. **Single-pass turn.** `run_turn` runs ONE pass with **mutually-exclusive**
+   branches (`checkout` **or** `adk` **or** `fallback`) — no outer loop re-feeds the
+   reply into the agent.
+4. **The transactional path skips the loop.** Checkout is deterministic and runs
+   *before* the ADK branch, so the critical path can't loop at all.
+5. **No re-planning planner on production agents.** Workers use native
+   function-calling (terminates on the first non-tool response). The only
+   `PlanReActPlanner` agent (the advisor) is bounded: `thinking_budget=0` +
+   token cap + a **one-shot grounded synthesis fallback** that guarantees
+   termination if the planner ever stalls.
+6. **Bounded retries.** `AgentHarness.run(retries=1)` by default (no retry); only
+   the read-only advisor uses `retries=2` (a hard, idempotent bound).
+7. **Failure degrades once.** ADK error / empty → fall back to the deterministic
+   engine **once**, never "retry the agent in a loop."
+8. **Guardian is loop-safe.** A **circuit breaker** opens after N failures (kills
+   retry storms); heal is a fixed staged sequence (DETECT→…→VERIFY), and the
+   heal-forward probe runs on a **timed interval**, not a tight loop.
+
+**CTO one-liner:** *"Loops are prevented structurally — agent-as-tool (no transfer
+cycles), workers with no nested agents (bounded depth), a single-pass turn, a
+deterministic transactional path outside the loop, bounded retries, degrade-once
+fallback, and a circuit breaker. The only planner-based agent is capped with a
+guaranteed-termination fallback."*
+
+---
+
 ## 6. High-volume order management (Req 3)
 
 Two entry points handle scale:

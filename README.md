@@ -146,6 +146,35 @@ while preserving conversation context.
 
 ---
 
+## 🧠 Fulfillment · agent state · loop prevention
+
+**Fulfillment (order-management) pipeline.** The 9-stage pipeline (Validate →
+Inventory Check → `ORDER_PLACED` → Confirm → Warehouse → Ship → Track → Deliver →
+Invoice) is the **`order_management_agent`'s** capability (its `fulfillment` skill
++ `run_fulfillment` tool). For a real purchase it runs **deterministically the
+moment payment succeeds** (from the checkout gate), not as an LLM step — the agent
+*owns* it, deterministic code *runs* it. See [`ARCHITECTURE.md` §5i](ARCHITECTURE.md).
+
+**Agent state.** State is **centralized & shared by `session_id`**, not per-agent:
+a single **session memory** store (turns + working-memory `facts`), durable in
+**Firestore** in the cloud, that every conversational agent reads/writes; a
+parallel **ADK session** under the same key (via the harness); plus isolated
+Guardian health state and the durable business repository. **Vision and the
+Advisor are stateless** — they pull "memory" from tools (e.g. order history). See
+[`ARCHITECTURE.md` §5j](ARCHITECTURE.md).
+
+**Loop prevention (structural, not prompted).** Agent loops can't form because:
+the orchestrator uses **agent-as-tool** (workers return results, can't transfer
+control back → no A→B→A cycle); workers hold **only function tools** (no nested
+agents → bounded depth); each turn is a **single pass**; the **transactional path
+is deterministic** (outside the loop); **retries are bounded** (1, or 2 for the
+read-only advisor); failures **degrade once** to the deterministic engine; and the
+Guardian's **circuit breaker** stops retry storms. The only planner-based agent
+(the advisor) is capped with a guaranteed-termination fallback. See
+[`ARCHITECTURE.md` §5k](ARCHITECTURE.md).
+
+---
+
 ## 🤖 LLM models
 
 | Model | Provider | Where | Used for |

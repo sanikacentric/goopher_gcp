@@ -179,6 +179,33 @@ history, searching inventory, filtering by price, and explaining its pick.
 
 ---
 
+### 5f. ❓ Likely CTO questions — crisp answers
+
+**"That fulfillment pipeline — which agent runs it?"**
+> *"It's the **order-management agent's** capability — its `fulfillment` skill and
+> `run_fulfillment` tool, the 9 stages from validation to invoice. But for a real
+> purchase it fires **deterministically the instant payment succeeds**, from the
+> checkout gate — not as an LLM step. The agent owns it; deterministic code runs
+> it. That's why it's reliable and auditable."* (`ARCHITECTURE.md` §5i)
+
+**"How do the agents maintain state?"**
+> *"One **session memory** keyed by `session_id`, durable in **Firestore** in the
+> cloud, shared by every conversational agent — turn history plus working-memory
+> facts like the last item viewed. The ADK harness keeps a parallel session under
+> the same key. Vision and the advisor are **stateless** — they pull memory from
+> tools. So state is centralized and durable, not scattered per agent."* (point at
+> the **`MEMORY · session updated`** step in `/dev`; `ARCHITECTURE.md` §5j)
+
+**"How do you stop the agents looping?"**
+> *"Structurally. The orchestrator uses **agent-as-tool**, so a worker returns a
+> result and **can't transfer control back** — an A→B→A cycle isn't even
+> expressible. Workers hold only function tools (no nested agents), each turn is a
+> **single pass**, checkout is **deterministic** (outside the loop), retries are
+> **bounded**, failures **degrade once** to a deterministic engine, and the
+> Guardian's **circuit breaker** stops retry storms."* (`ARCHITECTURE.md` §5k)
+
+---
+
 ## 6. 🛡️ THE FINALE — the self-healing Guardian (the jaw-dropper)
 > This is the closer. Slow down and let it land. It's **isolated** — it drives
 > synthetic transactions and touches no live flow, so it's 100% safe to run live.

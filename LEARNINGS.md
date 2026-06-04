@@ -572,6 +572,55 @@ A CTO question — *"is there a skill registry, and do all agents share a harnes
      the user pushed back on an advisor-only harness. Shared infrastructure should
      be *designed* shared, in its own folder, from the start.
 
+### 3.26 "Which agent runs the fulfillment pipeline?" — ownership vs execution
+A CTO looking at the `/dev` portal asked which agent the 9-stage FULFILLMENT
+pipeline belongs to. The honest answer has two parts, and conflating them is a
+common mistake:
+- **Ownership:** it's the **`order_management_agent`'s** capability — its
+  `fulfillment` skill + the `run_fulfillment` tool (the orchestrator *could*
+  delegate to it, e.g. "re-run fulfillment for ORD-50066").
+- **Execution:** for a real purchase it runs **DETERMINISTICALLY** the moment
+  payment succeeds (`place_order → _run_fulfillment_safe → run_fulfillment`), NOT
+  as an LLM step — the "LLM orchestrates, code transacts" guardrail end-to-end.
+- **Lesson:** in a multi-agent system, **"which agent owns a capability" ≠ "what
+  executes it at runtime."** Make the portal/docs say both, or reviewers assume an
+  LLM is running money-and-inventory work that is (correctly) deterministic.
+
+### 3.27 State is centralized and shared by session_id — and some agents are stateless
+"How do all agents maintain state?" forced a clear articulation of the model:
+- **One session-memory store keyed by `session_id`** (durable in **Firestore** in
+  the cloud, a dict locally) holds turn history + working-memory `facts`; EVERY
+  conversational agent reads/writes it. A parallel **ADK session** lives under the
+  same key via the harness. Load-at-start / persist-at-end is the
+  `MEMORY · session updated` step.
+- **Deliberately stateless agents:** Vision and the Advisor keep **no memory of
+  their own** — they receive `customer_id` + the ask and pull any "memory" from
+  **tools** (e.g. `list_customer_orders`).
+- **Lessons:**
+  1. **Centralize conversational state behind one join key** (`session_id`) so
+     context survives channel/language/modality switches and instance autoscaling
+     — don't let each agent keep its own.
+  2. **Prefer stateless agents where you can** — fewer stateful components means
+     fewer ways to drift, leak context between agents, or desync from the store.
+
+### 3.28 Prevent agent loops STRUCTURALLY, not with prompts
+"What stops the agents looping?" — the answer that satisfies an engineer is
+architectural, not "we told it not to":
+- **Agent-as-tool, not transfer.** `AgentTool` means the orchestrator *calls* a
+  worker and keeps control; a worker **cannot transfer back** → an A→B→A cycle is
+  **not expressible**. (We chose `AgentTool` over `sub_agents`/transfer partly for
+  this.)
+- **Workers own only function tools** (no nested agents) → depth is hard-bounded.
+- **Single-pass turn** with mutually-exclusive branches; **deterministic checkout
+  outside the loop**; **bounded retries** (1; advisor 2, idempotent); **degrade
+  once** to the deterministic engine; **circuit breaker** kills retry storms; the
+  only planner agent (advisor) is capped + has a guaranteed-termination fallback.
+- **Lessons:**
+  1. **Loop safety is a property of the graph shape, not the prompt.** Choose a
+     composition (agent-as-tool, no worker→worker edges) where cycles can't exist.
+  2. **Bound every repeat** — retries, re-plans, heal attempts — and make failure
+     **degrade once**, never "retry the agent forever."
+
 ---
 
 ## 4. Key trade-offs and decisions
@@ -806,6 +855,18 @@ component map in `ARCHITECTURE.md §3`.
 29. **Refactor behind a green suite — including a CI-sim of the prod path** —
     because the ADK path isn't exercised in CI, blocking `google.*` and running
     everything through the fallback is what proved the refactor was safe (§3.25).
+30. **"Owns a capability" ≠ "executes it"** — the fulfillment pipeline belongs to
+    the order-management agent but runs deterministically post-payment; say both,
+    or reviewers assume an LLM runs money-and-inventory work (§3.26).
+31. **Centralize state behind one `session_id`; keep agents stateless where you
+    can** — one durable (Firestore) session store shared by all conversational
+    agents; vision/advisor pull memory from tools, not their own state (§3.27).
+32. **Loop safety is graph shape, not prompt wording** — agent-as-tool (no
+    transfer-back), workers with no nested agents, single-pass turns, bounded
+    retries, degrade-once, circuit breaker — cycles can't exist by construction (§3.28).
+33. **Collapse accidental duplicate work at the sink** — a cold-start resend logged
+    the same turn twice; the recorder now merges an identical turn (same session +
+    message) within a window onto one card, narrowly so real re-asks still show.
 
 ---
 

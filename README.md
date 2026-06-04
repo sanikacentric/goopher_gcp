@@ -142,7 +142,8 @@ while preserving conversation context.
   and the **[demo script](DEMO.md)**.
 
 > 🎬 **Presenting this?** See **[DEMO.md](DEMO.md)** for a full CTO walkthrough
-> with the exact lines to say.
+> with the exact lines to say, and **[QUESTION-ANSWER.md](QUESTION-ANSWER.md)** for
+> a Q&A bank of the most likely technical-team and stakeholder questions.
 
 ---
 

@@ -31,7 +31,10 @@ while preserving conversation context.
 | Multi-channel subagent (phone/web) | [`channel_agent.py`](backend/app/agents/channel_agent.py) | 2A-4 |
 | Multi-lingual subagent | [`language_agent.py`](backend/app/agents/language_agent.py) | 2A-5 |
 | Multi-modal subagent | [`modality_agent.py`](backend/app/agents/modality_agent.py) | 2A-6 |
-| **Vision subagent** — camera "see it, shop it" (Gemini Vision) | [`vision_agent.py`](backend/app/agents/vision_agent.py) + `/vision` | 2A-6 |
+| **Vision subagent** — camera "see it, shop it" (Gemini Vision), **confirm-before-charge** | [`vision_agent.py`](backend/app/agents/vision_agent.py) + `/vision` | 2A-6 |
+| **Shopping Advisor** — explicit **ReAct** (`PlanReActPlanner`), read-only | [`advisor_agent.py`](backend/app/agents/advisor_agent.py) + `/advise` | T2 |
+| **Agent Skill Registry** — named skills agents pick from | [`agent_skill_registry.py`](backend/app/agents/skills/agent_skill_registry.py) + `/skills` | T4 |
+| **Agent Harness** (scaffolding) — common runtime for ALL agents | [`harness/`](backend/app/agents/harness/) | T2 |
 | **Checkout** — single + bulk, structured transactional gate | [`checkout_tool.py`](backend/app/tools/checkout_tool.py) | 4 |
 | **Order management** — 9-stage fulfillment → `ORDER_PLACED` | [`order_mgmt_tool.py`](backend/app/tools/order_mgmt_tool.py) | 5 |
 | **Bulk order from an uploaded file** | [`orchestrator.py`](backend/app/agents/orchestrator.py) `_try_file_bulk_order` | 3 |
@@ -45,7 +48,7 @@ while preserving conversation context.
 | **Abuse protection** (rate limiting + request-size limits, DoS) | [`middleware.py`](backend/app/middleware.py) | Sec |
 | Individual **& high-volume** orders | [`order_tool.py`](backend/app/tools/order_tool.py) + `/orders/bulk` | 3 |
 | Evals | [`evals/`](evals/) | T8 |
-| Unit tests (88 passing) | [`tests/`](tests/) | T9 |
+| Unit tests (113 passing) | [`tests/`](tests/) | T9 |
 | Observability (traces/logs/metrics + `/version`) | [`telemetry.py`](backend/app/observability/telemetry.py) | T10 |
 | README | this file | T11 |
 | Architecture writeup | [`ARCHITECTURE.md`](ARCHITECTURE.md) | T12 |
@@ -56,13 +59,51 @@ while preserving conversation context.
 
 ---
 
+## 🆕 This session — what changed
+
+**New agents & infrastructure**
+- **🧠 Shopping Advisor — explicit ReAct.** A new, isolated agent
+  ([`advisor_agent.py`](backend/app/agents/advisor_agent.py), `POST /advise`) on
+  ADK's **`PlanReActPlanner`** — it visibly **plans → acts over tools → reasons →
+  recommends** and is **read-only** (never places an order). Tap **🧠** in the
+  extension for a recommendation plus a collapsible ReAct reasoning panel. This
+  gives GOOPHER **two agent styles on the same Gemini 2.5 Flash**: native
+  function-calling agents for transactions, explicit ReAct for advice. See
+  [`ARCHITECTURE.md` §5f](ARCHITECTURE.md).
+- **🗂 Agent Skill Registry.** Skills are registered once in
+  [`agent_skill_registry.py`](backend/app/agents/skills/agent_skill_registry.py)
+  (single source of truth); agents **pick skills by name**, each skill carries a
+  `read_only` flag, and **`GET /skills`** exposes the live capability map. The
+  read-only advisor composes **only read-only skills** (asserted in code) so it can
+  never get a checkout tool. See [`ARCHITECTURE.md` §5g](ARCHITECTURE.md).
+- **🧰 Agent Harness (scaffolding).** One **common runtime** —
+  [`harness/`](backend/app/agents/harness/) — wraps **every** agent (orchestrator +
+  4 workers **and** the advisor): build → session → run-loop → collect → resilience
+  → structured result. Replaces the boilerplate that was copy-pasted in two places.
+  See [`ARCHITECTURE.md` §5h](ARCHITECTURE.md).
+
+**Fixes & parity**
+- **📷 Vision now asks "please confirm" before charging** — camera orders preview a
+  cart and wait for confirmation, exactly like text and voice (no more
+  charge-on-capture). Confirm re-places the **resolved SKU** — never a substitute.
+- **🗣️ Voice captures the WHOLE sentence** — the mic is kept warm so the first
+  words aren't dropped, and a spoken/typed **"confirm order"** now resolves the
+  pending checkout (instead of being treated as a brand-new order).
+- **🧠 Advisor reliability + context** — fixed the "plan but no answer" stall
+  (`thinking_budget=0` + a grounded synthesis fallback), and it now recommends from
+  your **most recent order's department and price** (e.g. a $17.99 toy → other toys
+  ~≤ $18), not a hardcoded "snacks under $4".
+
+---
+
 ## 🎥 Multimodal & multi-channel highlights
 
 - **Camera "see it, shop it" (Gemini Vision).** Point the camera at a real toy or
   food item and **say** or type your request. The [vision subagent](backend/app/agents/vision_agent.py)
   recognizes it with **Gemini Vision on Vertex AI**, resolves it to a real catalog
-  product (never substitutes), and either answers the price or **places the
-  order** — through the same structured checkout gate as a typed order.
+  product (never substitutes), and either answers the price or **previews the order
+  and asks "please confirm"** before charging — through the same structured
+  checkout gate as a typed order (parity with text & voice).
 - **Voice in + speaker out.** Speak the command; GOOPHER reads the answer aloud.
 - **Durable session memory (T3).** Every turn **loads prior context** at the start
   and **persists the new turn** at the end (`MEMORY · session updated` in `/dev`)

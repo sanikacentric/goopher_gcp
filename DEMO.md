@@ -31,14 +31,17 @@ also works standalone.
 
 ## 1. 🎥 Camera Vision — "see it, shop it"
 **Do:** In GOOPHER, leave the box empty → click 📷 → show a **soccer ball** → say
-*"what's the price?"* → Capture. Then *"place an order"* → Capture.
+*"what's the price?"* → Capture. Then *"place an order"* → Capture → **it shows a
+cart and asks "please confirm"** → tap **✅ Confirm** (or say *"confirm order"*).
 
 **They see:** Gemini Vision recognizes the *Adidas Match Soccer Ball*, speaks the
-price, then runs the staged cart → ORDER PLACED.
+price, then — like text and voice — **previews the cart and asks to confirm**
+before charging, then runs the staged cart → ORDER PLACED.
 
 > 🗣️ *"I'm showing a real-world object to the camera. **Gemini Vision on Vertex
 > AI** recognizes it, maps it to our catalog, and acts on what I said — by voice.
-> No barcodes, no SKUs. The customer just shows it and says it."*
+> No barcodes, no SKUs. And note it **asks me to confirm before charging** — the
+> same safe confirm-before-pay step we have for typed and spoken orders."*
 
 > 💡 WOW line: *"This is the same Gemini multimodal model doing recognition,
 > reasoning, and natural-language response — in one round trip."*
@@ -132,13 +135,15 @@ Oreo), not a random item — because it remembers the last item you viewed.
 ---
 
 ### 5d. 🧠 Two agent styles — native tool-calling **and** explicit ReAct
-**Do:** Type *"a healthy snack under $4 that pairs with the cookies I ordered
-last time"* and tap the **🧠** button (the Shopping Advisor) — **not** Send.
+**Do:** Easiest — **leave the box empty and tap 🧠**; it recommends from your last
+order. (Or type a specific ask like *"a healthy snack under $4 that pairs with the
+cookies I ordered last time"* and tap **🧠** — **not** Send.)
 
-**They see:** a recommendation, plus a collapsible **"🧠 How GOOPHER reasoned
-(ReAct plan)"** panel showing **PLAN → ACTION → REASONING → FINAL ANSWER** — the
-agent looking up the order history, searching inventory, filtering by price, and
-explaining its pick.
+**They see:** a short bulleted recommendation **matched to the last order's
+department and price** (a $17.99 toy → other toys ~≤ $18, not random snacks), plus
+a collapsible **"🧠 How GOOPHER reasoned (ReAct plan)"** panel showing
+**PLAN → ACTION → REASONING → FINAL ANSWER** — the agent looking up the order
+history, searching inventory, filtering by price, and explaining its pick.
 
 > 🗣️ *"Everything so far used **native function-calling agents** — fast,
 > reliable, and what we use for anything that moves money. But for open-ended
@@ -151,6 +156,26 @@ explaining its pick.
 > ReAct because it's trendy; you chose **native tool-calling for transactions**
 > and **visible ReAct for reasoning**, deliberately. (Backed by
 > `ARCHITECTURE.md §5f`; isolation proven in `tests/test_advisor_agent.py`.)
+
+---
+
+### 5e. 🗂 The agent foundations — skill registry + common harness (optional, for technical CTOs)
+**Do:** In a browser tab, open **`/skills`** (e.g. `…/skills`).
+
+**They see:** every agent skill as JSON — `name`, `title`, `description`,
+`read_only`, and its tools — the live capability map.
+
+> 🗣️ *"Under the agents are two foundations. One, an **agent skill registry** —
+> every capability registered once, and agents **pick skills by name**. Each skill
+> is flagged read-only or transactional, so our read-only advisor is **provably**
+> unable to pick a place-order tool. Two, a **common agent harness** — one runtime
+> that every agent runs through: build → session → run → collect → resilience →
+> structured result. So all our agents share one tested, observable scaffold —
+> adding a new agent is just `AgentHarness(build_agent=…).run(...)`."*
+
+> 💡 Why this lands: it signals an **engineered platform**, not a pile of prompts —
+> a registry of capabilities + a shared, resilient runtime. (`ARCHITECTURE.md`
+> §5g, §5h; tests in `test_agent_skill_registry.py`, `test_agent_harness.py`.)
 
 ---
 

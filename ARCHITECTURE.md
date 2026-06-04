@@ -346,9 +346,17 @@ vision_agent.handle_vision()
                    (resolve_variant_by_name); if we don't carry it → say so,
                    never substitute.
    3) ACT        — order intent → delegate to the SAME transactional gate
-                   (_try_checkout) → structured cart + ORDER_PLACED; else →
-                   answer the price + availability.
+                   (_try_checkout) in PREVIEW mode → cart + "please confirm";
+                   else → answer the price + availability.
 ```
+
+**Confirm-before-charge (parity with text & voice).** Camera orders now PREVIEW
+(`_try_checkout(..., confirm=False)` → cart + "🟡 please confirm") rather than
+charging on capture. The pending payload carries `confirm_text` (the resolved
+SKU order); the extension's Confirm button (or a spoken/typed "confirm order")
+re-sends THAT to `/chat` with `confirm=True`, so exactly the recognized item is
+placed — never a substitute. Verified end-to-end in `tests/test_vision_agent.py`
+(vision preview → confirm → placed).
 
 Design notes that proved important (see `LEARNINGS.md §3.16`):
 - **Vertex, not AI Studio.** The cloud runs `USE_VERTEXAI=true` with *no* API
@@ -493,6 +501,23 @@ advisor = LlmAgent(
     tools=skills.get_tools(*skills.read_only_skill_names()),  # READ-ONLY skills only
 )
 ```
+
+**Reliability fixes that proved important (this session):**
+- **"Plan but no answer" stall.** `gemini-2.5-flash` *thinking* collides with
+  `PlanReActPlanner`: the model emits the plan + first tool call, then thinking
+  eats the output on the next turn and the visible `/*FINAL_ANSWER*/` never lands
+  (the same bug we fixed on Vision). Fix: `thinking_budget=0` +
+  `max_output_tokens=4096` on the advisor's generate-config. Safety net: the
+  harness captures tool **observations**, and if a final answer is ever still
+  missing, a one-shot **grounded synthesis** turns those observations into the
+  recommendation — the shopper always gets a real answer, with the plan still
+  shown.
+- **Context-aware recommendations.** An empty 🧠 tap reads the shopper's MOST
+  RECENT order and recommends from the **same department at a similar-or-lower
+  price** (e.g. a $17.99 toy → other toys ~≤ $18) — not a hardcoded "snacks under
+  $4". Explicit constraints the shopper types still win.
+
+The advisor runs through the **common AgentHarness** (§5h) like every other agent.
 
 ---
 

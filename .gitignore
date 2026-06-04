@@ -26,3 +26,13 @@ gcloud-key.json
 
 # Editor/harness local
 .claude/
+
+# Presentation deck build artifacts (keep source scripts; ignore heavy/generated)
+_deck/node_modules/
+_deck/render/
+_deck/package-lock.json
+_deck/package.json
+_deck/*.png
+_deck/icons/
+PRESENTATION.pdf
+_prompt_extract.txt

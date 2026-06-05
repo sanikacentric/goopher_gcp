@@ -500,31 +500,41 @@ function stat(s, o) {
   title(s, "Why this custom design — defending the engineering choices");
 
   const rows = [
-    ["lock", "Deterministic transactional gate", "LLM places orders end-to-end", "“LLM orchestrates, code transacts.” Money/inventory actions are structured, auditable, reproducible — never a hallucinated purchase."],
-    ["sitemap", "Agent-as-tool (not transfer)", "sub_agents / transfer handoff", "Orchestrator stays in control & composes the reply; workers can't transfer back → delegation loops are impossible by construction."],
-    ["cog", "Deterministic pre-processing", "modality/lang/channel as LLM agents", "We tried LLM agents — they failed for zero benefit. Detecting language needs no intelligence; plain code is reliable & free."],
-    ["brain", "Native function-calling + targeted ReAct", "PlanReActPlanner everywhere", "Native tool-calling for production (reliable, fast); explicit ReAct only for the read-only advisor, where the visible plan adds value."],
-    ["cloud", "Gemini 2.5 Flash on Vertex (one model)", "many models / self-hosted", "One natively-multimodal model does reasoning, language AND vision — less ops, lower latency, Vertex security & quota."],
-    ["sync", "Graceful fallback + self-heal", "fail the request", "If the LLM/ADK path errors, a deterministic engine answers; the Guardian heals forward — the service degrades, it doesn't go down."],
+    ["lock", "Deterministic transactional gate", "the LLM places orders", "Money/inventory = auditable code, never a hallucinated purchase."],
+    ["sitemap", "Agent-as-tool (not transfer)", "sub_agents / transfer", "Workers can't hand control back → delegation loops can't form."],
+    ["cog", "Deterministic pre-processing", "modality/lang as LLM agents", "No intelligence needed → plain code is reliable & free."],
+    ["brain", "Native function-calling", "ReAct everywhere", "No brittle text parsing; explicit ReAct only for the read-only advisor."],
+    ["check", "LLM-as-judge (RSI critic)", "an ADK / ReAct critic", "Judging a failure is ONE structured call — no tool loop needed."],
+    ["cloud", "One Gemini model on Vertex", "many models / self-host", "Reasoning + language + vision in one managed model — less ops."],
+    ["sync", "Graceful fallback + self-heal", "fail the request", "Degrade, don't go down — fallback engine + Guardian heal-forward."],
   ];
-  const w = (CW - 0.5) / 2, h = 1.4;
+  const w = (CW - 0.5) / 2, h = 1.18, gap = 0.14;
   rows.forEach(([icon, head, vs, why], i) => {
-    const x = M + (i % 2) * (w + 0.5), y = 1.9 + Math.floor(i / 2) * (h + 0.18);
+    const x = M + (i % 2) * (w + 0.5), y = 1.82 + Math.floor(i / 2) * (h + gap);
     s.addShape(p.shapes.ROUNDED_RECTANGLE, { x, y, w, h, rectRadius: 0.08, fill: { color: C.white }, line: { color: C.border, width: 1 }, shadow: shadow() });
-    s.addShape(p.shapes.ROUNDED_RECTANGLE, { x: x + 0.2, y: y + 0.22, w: 0.5, h: 0.5, rectRadius: 0.1, fill: { color: C.violet } });
-    s.addImage({ path: ic(icon), x: x + 0.32, y: y + 0.34, w: 0.26, h: 0.26 });
-    s.addText(head, { x: x + 0.82, y: y + 0.16, w: w - 1.0, h: 0.34, margin: 0, fontFace: BF, fontSize: 13.5, bold: true, color: C.ink });
-    s.addText([{ text: "Chosen over: ", options: { italic: true, color: C.rose } }, { text: vs, options: { italic: true, color: C.soft } }],
-      { x: x + 0.82, y: y + 0.47, w: w - 1.0, h: 0.26, margin: 0, fontFace: BF, fontSize: 10.5 });
-    s.addText(why, { x: x + 0.22, y: y + 0.78, w: w - 0.42, h: 0.56, margin: 0, fontFace: BF, fontSize: 11, color: C.muted, valign: "top" });
+    s.addShape(p.shapes.ROUNDED_RECTANGLE, { x: x + 0.2, y: y + 0.2, w: 0.46, h: 0.46, rectRadius: 0.1, fill: { color: C.violet } });
+    s.addImage({ path: ic(icon), x: x + 0.31, y: y + 0.31, w: 0.24, h: 0.24 });
+    s.addText(head, { x: x + 0.78, y: y + 0.14, w: w - 0.96, h: 0.3, margin: 0, fontFace: BF, fontSize: 13, bold: true, color: C.ink });
+    s.addText([{ text: "vs ", options: { italic: true, color: C.rose } }, { text: vs, options: { italic: true, color: C.soft } }],
+      { x: x + 0.78, y: y + 0.44, w: w - 0.96, h: 0.24, margin: 0, fontFace: BF, fontSize: 10, valign: "middle" });
+    s.addText(why, { x: x + 0.22, y: y + 0.72, w: w - 0.42, h: 0.42, margin: 0, fontFace: BF, fontSize: 10.5, color: C.muted, valign: "top" });
   });
+  // 8th cell: pointer to the full trade-off log
+  const rx = M + (w + 0.5), ry = 1.82 + 3 * (h + gap);
+  s.addShape(p.shapes.ROUNDED_RECTANGLE, { x: rx, y: ry, w, h, rectRadius: 0.08, fill: { color: C.violet }, shadow: shadow() });
+  s.addShape(p.shapes.ROUNDED_RECTANGLE, { x: rx + 0.2, y: ry + 0.2, w: 0.46, h: 0.46, rectRadius: 0.1, fill: { color: "FFFFFF", transparency: 80 } });
+  s.addImage({ path: ic("bulb"), x: rx + 0.31, y: ry + 0.31, w: 0.24, h: 0.24 });
+  s.addText("Full trade-off log", { x: rx + 0.78, y: ry + 0.18, w: w - 0.96, h: 0.3, margin: 0, fontFace: BF, fontSize: 13, bold: true, color: "FFFFFF" });
+  s.addText("TRADEOFFS.md — every decision: options considered → chosen → why / cost accepted.",
+    { x: rx + 0.22, y: ry + 0.62, w: w - 0.42, h: 0.5, margin: 0, fontFace: BF, fontSize: 10.5, color: "EDE7FB", valign: "top" });
   footer(s);
   s.addNotes(
     "Defend the design (3 min — the technical-acumen score). For each: name the choice, the alternative, and WHY. " +
-    "The headline trade-off is the deterministic gate — we deliberately keep the LLM OUT of executing payments. " +
-    "Agent-as-tool prevents loops structurally. We didn't force deterministic work into agents. We use native function-calling for reliability and reserve explicit ReAct for the one read-only advisor. " +
-    "One Gemini model on Vertex keeps ops and latency down. And graceful fallback + self-healing means we degrade, not fail. " +
-    "Invite the expert to push on any row — this is where the conversation gets good."
+    "Headline: the deterministic gate keeps the LLM OUT of executing payments. Agent-as-tool prevents loops structurally. " +
+    "We didn't force deterministic work into agents. Native function-calling for reliability; explicit ReAct only for the read-only advisor. " +
+    "The RSI critic is an LLM-as-judge — a single structured call, NOT an ADK/ReAct agent — because judging a failure has no multi-step tool loop. " +
+    "One Gemini model on Vertex; graceful fallback + self-heal so we degrade, not fail. " +
+    "The full log of every trade-off (options → chosen → why) is in TRADEOFFS.md — invite the expert to push on any row."
   );
 })();
 

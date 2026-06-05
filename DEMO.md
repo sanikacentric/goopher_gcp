@@ -206,6 +206,35 @@ history, searching inventory, filtering by price, and explaining its pick.
 
 ---
 
+### 5g. 🧠 Recursive self-improvement (RSI) — the agent learns from its own failure
+**Setup:** in `/dev`, click **🧹 Reset lessons** (so the "before" is a clean baseline).
+
+**Do (the before → teach → after arc):**
+1. Ask **"do you have laptops?"** → a **flat** refusal: *"We don't carry laptops."*
+2. Click **👎 Teach GOOPHER** under that reply.
+3. Ask **"do you have laptops?"** again → now it's **proper**: acknowledges, **names
+   specific in-stock items** (e.g. Play-Doh $8.49, a puzzle $10.49, soccer ball
+   $17.99) and asks a clarifying question.
+
+**They see (in `/dev`):** an **RSI** card — **🔎 DETECT → 🧠 JUDGE (Gemini-as-judge) →
+💡 LESSON STORED** — plus the **RSI panel** showing the lesson it wrote; on the
+re-ask, the turn shows **💡 lesson_retrieve — applied 1 learned lesson**.
+
+> 🗣️ *"GOOPHER has **two layers of self-healing**: the Guardian heals the
+> infrastructure; this **CriticAgent** heals the behaviour. It just **critiqued its
+> own failure** with Gemini-as-judge, wrote a corrective lesson, stored it, and on
+> the next question **retrieved it via RAG** to answer better. The agent improved
+> itself — **no retraining, no redeploy**. In production this runs as a **Cloud Run
+> Job every 15 minutes** sourced from **CCAI Insights**, backed by **Vertex AI
+> Vector Search**."*
+
+> 💡 Why this lands: most "AI agents" are static. This one **gets better on its
+> own** — a recursive-self-improvement loop you can watch close, live. Isolated &
+> safe: the lesson only *adds* guidance, never changes checkout/routing.
+> (`ARCHITECTURE.md` §5l; `critic_agent.py`; tests in `test_critic_agent.py`.)
+
+---
+
 ## 6. 🛡️ THE FINALE — the self-healing Guardian (the jaw-dropper)
 > This is the closer. Slow down and let it land. It's **isolated** — it drives
 > synthetic transactions and touches no live flow, so it's 100% safe to run live.

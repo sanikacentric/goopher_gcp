@@ -702,6 +702,59 @@ guaranteed-termination fallback."*
 
 ---
 
+## 5l. RSI — recursive self-improvement (the CriticAgent, isolated)
+
+GOOPHER self-heals on **two** levels: the **Guardian** heals the *infrastructure*
+(circuit breaker / failover, §5e); the **CriticAgent** heals the *behaviour* — it
+learns from its own failures, with **no retraining and no redeploy**. It's a
+separate, isolated agent (`critic_agent.py`) that does **not** modify any existing
+flow.
+
+**The loop:**
+```
+👎 unsatisfactory answer (the shopper flags it in the extension)
+  → record_failure (LessonStore)
+  → Gemini-as-judge (gemini-2.5-flash on Vertex · google.genai · thinking_budget=0
+       · JSON): failure_summary + root_cause + a CONCRETE corrective LESSON + confidence
+  → store the lesson IF confidence ≥ 0.70 (confidence-gated)
+  → lesson_retrieve (keyword-RAG) surfaces the top-k relevant lessons for the next
+       similar query and injects them (+ a few real in-stock items) into the LLM
+       directives → the next answer improves
+```
+
+| Piece | Where |
+|---|---|
+| Agent | `CriticAgent` — `record_failure` · `run_healing_cycle` (judge → store) · `retrieve_lessons` · `answer_with_lessons` |
+| Store | `LessonStore` — Firestore (`rsi_failures` / `rsi_lessons`) in cloud, in-memory locally; keyword-RAG `retrieve(top-k)` |
+| Endpoints | `POST /critic/flag` · `POST /critic/heal` · `GET /critic/lessons` · `POST /critic/answer`; dev: `GET /dev/rsi` · `POST /dev/rsi/reset` |
+| Extension | **👎 Teach GOOPHER** under a reply → flag + heal → shows the lesson it wrote |
+| `/dev` | an **RSI** flow card (🔎 DETECT → 🧠 JUDGE → 💡 LESSON) + an **RSI panel** (lessons learned + 🧹 Reset) |
+
+**Isolation & safety.** The lesson injection into `/chat` is **additive and
+guarded**: it only appends guidance for the LLM paths, never changes routing, the
+deterministic checkout gate, or tools; it is a **strict no-op when no lesson
+matches** (existing behaviour unchanged); and any RSI error is swallowed so a turn
+can't break. When a lesson shapes a reply, the meta shows `lesson_retrieve` and
+`/dev` shows a "💡 lesson_retrieve — applied N learned lesson(s)" step.
+
+**Demo (before → teach → after).** Reset lessons in `/dev` → ask *"do you have
+laptops?"* (flat refusal) → **👎 Teach GOOPHER** (it learns an actionable lesson) →
+ask again → now it acknowledges, **names specific in-stock items** (e.g. Play-Doh,
+a puzzle, the soccer ball) and asks a clarifying question.
+
+**Production upgrade path (the slide vision).** Swap the lightweight store/retrieval
+for **Vertex AI Embeddings + Vertex AI Vector Search (+ AlloyDB metadata)**, source
+failures from **CCAI Insights** (low-CSAT conversations), and run the cycle as a
+**Cloud Run Job every 15 min via Cloud Scheduler**. A Cloud Run Job entrypoint
+(`python -m backend.app.agents.critic_agent`) is already included.
+
+> **CTO line:** *"Two layers of self-healing — Guardian heals the infrastructure,
+> the CriticAgent heals the behaviour. It critiques its own failures with
+> Gemini-as-judge, writes a corrective lesson, and retrieves it via RAG for the
+> next similar query. The agent improves itself — no retraining, no redeploy."*
+
+---
+
 ## 6. High-volume order management (Req 3)
 
 Two entry points handle scale:

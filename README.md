@@ -43,6 +43,7 @@ while preserving conversation context.
 | **Contextual ordering** ("order it" / "the above item") | [`orchestrator.py`](backend/app/agents/orchestrator.py) + `get_last_viewed` | 4 |
 | **Self-service GenAI front end** (chat) | [`extension/`](extension/) + `/chat` | 4 |
 | **Self-healing Guardian** (circuit breaker, failover, chaos demo) | [`guardian.py`](backend/app/agents/guardian.py) + `/dev` | T10 |
+| **RSI — recursive self-improvement** (CriticAgent: learns from 👎 feedback) | [`critic_agent.py`](backend/app/agents/critic_agent.py) + `/critic/*`, `/dev` | T10 |
 | **Developer portal** — live end-to-end flow visualizer | [`static/dev_portal.html`](backend/app/static/dev_portal.html) + `/dev` | T10 |
 | **Single-user lockdown** (email allowlist + master pw, fail-closed) | [`auth.py`](backend/app/auth/auth.py), `config.allowed_emails` | T1 / Sec |
 | **Abuse protection** (rate limiting + request-size limits, DoS) | [`middleware.py`](backend/app/middleware.py) | Sec |
@@ -176,6 +177,18 @@ read-only advisor); failures **degrade once** to the deterministic engine; and t
 Guardian's **circuit breaker** stops retry storms. The only planner-based agent
 (the advisor) is capped with a guaranteed-termination fallback. See
 [`ARCHITECTURE.md` §5k](ARCHITECTURE.md).
+
+**RSI — recursive self-improvement (CriticAgent).** Two layers of self-healing:
+the Guardian heals the **infrastructure**; the **CriticAgent heals the
+behaviour**. Click **👎 Teach GOOPHER** on a weak answer → it critiques its own
+failure with **Gemini-as-judge** (gemini-2.5-flash on Vertex), writes a
+**confidence-gated corrective lesson**, stores it, and **retrieves it via RAG** to
+improve the next similar answer — **no retraining, no redeploy**. Isolated: the
+lesson injection into `/chat` is additive and a strict no-op when nothing matches.
+Watch it in `/dev` (🔎 DETECT → 🧠 JUDGE → 💡 LESSON) and reset between demos with
+the `/dev` **🧹 Reset lessons** button. Production vision: CCAI Insights + Vertex
+Embeddings + Vector Search, run as a Cloud Run Job every 15 min via Cloud
+Scheduler. See [`ARCHITECTURE.md` §5l](ARCHITECTURE.md).
 
 ---
 

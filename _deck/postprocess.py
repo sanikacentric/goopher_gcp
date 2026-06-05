@@ -22,7 +22,8 @@ ANIM = {
     10: dict(skip=2, chunk=6, groups=6),   # Challenges (6 cards, 6 shapes each)
     11: dict(skip=2, chunk=5, groups=6),   # Wow factor (6 cards)
     12: dict(skip=2, chunk=5, groups=6),   # Reliability (6 cards)
-    15: dict(skip=2, chunk=5, groups=6),   # Learnings (6 cards)
+    15: dict(skip=2, chunk=5, groups=6),   # Why Google Cloud (6 cards)
+    16: dict(skip=2, chunk=5, groups=6),   # Learnings (6 cards)
 }
 
 

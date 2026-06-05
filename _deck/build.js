@@ -623,6 +623,59 @@ function stat(s, o) {
   );
 })();
 
+// ============================================================ SLIDE 8b — RSI
+(() => {
+  const s = p.addSlide(); lightBG(s);
+  kicker(s, "Self-improvement · the next layer of self-healing", C.rose);
+  title(s, "Recursive self-improvement — the agent learns from failure");
+  s.addText([
+    { text: "Guardian heals the infrastructure. ", options: { color: C.muted } },
+    { text: "The CriticAgent heals the behaviour", options: { bold: true, color: C.ink } },
+    { text: " — a closed learning loop, no retraining, no redeploy.", options: { color: C.muted } },
+  ], { x: M, y: 1.74, w: CW, h: 0.45, margin: 0, fontFace: BF, fontSize: 13.5 });
+
+  // 5-step loop
+  const steps = [
+    ["ban", C.rose, "DETECT", "👎 low-CSAT conversation", "CCAI Insights"],
+    ["brain", C.violet, "JUDGE", "Gemini-as-judge: root cause + corrective lesson", "Gemini 2.5 · Vertex"],
+    ["db", C.teal, "STORE", "confidence-gated lesson (≥ 0.70)", "Vertex Vector Search + AlloyDB"],
+    ["eye", C.amber, "RETRIEVE", "lesson_retrieve before the next answer", "RAG (top-k)"],
+    ["check", C.green, "IMPROVE", "the next reply applies the lesson", "no retrain · no redeploy"],
+  ];
+  const n = steps.length, gap = 0.3, w = (CW - gap * (n - 1)) / n, y = 2.45, h = 2.55;
+  steps.forEach(([icon, col, head, body, tech], i) => {
+    const x = M + i * (w + gap);
+    s.addShape(p.shapes.ROUNDED_RECTANGLE, { x, y, w, h, rectRadius: 0.09, fill: { color: C.white }, line: { color: C.border, width: 1 }, shadow: shadow() });
+    s.addShape(p.shapes.RECTANGLE, { x, y, w, h: 0.12, fill: { color: col } });
+    s.addShape(p.shapes.OVAL, { x: x + (w - 0.5) / 2, y: y + 0.34, w: 0.5, h: 0.5, fill: { color: col } });
+    s.addImage({ path: ic(icon), x: x + (w - 0.26) / 2, y: y + 0.46, w: 0.26, h: 0.26 });
+    s.addText(`${i + 1}. ${head}`, { x: x + 0.12, y: y + 0.96, w: w - 0.24, h: 0.34, margin: 0, align: "center", fontFace: BF, fontSize: 14, bold: true, color: C.ink });
+    s.addText(body, { x: x + 0.16, y: y + 1.32, w: w - 0.32, h: 0.8, margin: 0, align: "center", valign: "top", fontFace: BF, fontSize: 11, color: C.muted });
+    s.addText(tech, { x: x + 0.12, y: y + h - 0.5, w: w - 0.24, h: 0.4, margin: 0, align: "center", valign: "top", fontFace: BF, fontSize: 9.5, italic: true, color: col });
+    if (i < n - 1) s.addImage({ path: ic("arrow"), x: x + w + (gap - 0.26) / 2, y: y + 0.5, w: 0.26, h: 0.26 });
+  });
+
+  // loop-back bar
+  s.addShape(p.shapes.ROUNDED_RECTANGLE, { x: M, y: 5.3, w: CW, h: 0.72, rectRadius: 0.09, fill: { color: C.dark } });
+  s.addImage({ path: ic("sync"), x: M + 0.28, y: 5.5, w: 0.34, h: 0.34 });
+  s.addText([
+    { text: "↺ RECURSION   ", options: { bold: true, color: "FCA5C0", charSpacing: 1 } },
+    { text: "lessons feed every future answer · the cycle runs as a Cloud Run Job every 15 min (Cloud Scheduler) · isolated & additive — a no-op when no lesson matches", options: { color: "D7D3EC" } },
+  ], { x: M + 0.8, y: 5.3, w: CW - 1.0, h: 0.72, margin: 0, valign: "middle", fontFace: BF, fontSize: 11.5 });
+
+  s.addText([
+    { text: "Demo:  ", options: { bold: true, color: C.ink } },
+    { text: "ask “do you have laptops?” → flat refusal → 👎 Teach GOOPHER → ask again → it names real in-stock items & asks a clarifying question (watch 🔎 DETECT → 🧠 JUDGE → 💡 LESSON in /dev).", options: { color: C.muted } },
+  ], { x: M, y: 6.15, w: CW, h: 0.5, margin: 0, fontFace: BF, fontSize: 11, italic: true });
+  footer(s);
+  s.addNotes(
+    "RSI (~2 min — the 'it gets better on its own' wow). 'Most agents are static. GOOPHER self-heals on two levels: the Guardian heals the infrastructure, and the CriticAgent heals the BEHAVIOUR. " +
+    "When an answer is poor, the shopper thumbs-down; the CriticAgent uses Gemini-as-judge to find the root cause and write a corrective lesson, stores it confidence-gated, and retrieves it via RAG to improve the next similar answer — no retraining, no redeploy. " +
+    "Live: reset lessons in /dev, ask 'do you have laptops?' (flat), thumbs-down, ask again — now it names real in-stock alternatives and asks a clarifying question, and /dev shows DETECT → JUDGE → LESSON. " +
+    "In production this is a Cloud Run Job every 15 minutes sourced from CCAI Insights, backed by Vertex AI Embeddings + Vector Search. It's isolated and additive — it never changes routing or checkout.'"
+  );
+})();
+
 // ====================================================== SLIDE 9 — BUSINESS VALUE
 (() => {
   const s = p.addSlide(); lightBG(s);

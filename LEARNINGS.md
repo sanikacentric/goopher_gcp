@@ -621,6 +621,41 @@ architectural, not "we told it not to":
   2. **Bound every repeat** — retries, re-plans, heal attempts — and make failure
      **degrade once**, never "retry the agent forever."
 
+### 3.29 Recursive self-improvement (RSI) — and "learn vs apply" are two steps
+A request to show agents *self-improving* became the **CriticAgent**: a separate,
+isolated agent that critiques GOOPHER's own failures (Gemini-as-judge) and feeds
+the lessons back via RAG — closing a behavioural self-heal loop on top of the
+Guardian's infrastructure self-heal.
+
+- **Adapt the reference to YOUR stack.** The pasted concept used `google.generativeai`
+  + `gemini-2.0-flash` + CCAI Insights + Vector Search + AlloyDB + an MCP — none of
+  which fit (2.0-flash has `limit:0` on this account; the legacy SDK can't reach
+  Vertex). We kept the *shape* but used **`google.genai` on Vertex + 2.5-flash**,
+  **Firestore + keyword-RAG**, and documented the Embeddings/Vector-Search/Cloud-Run-Job
+  upgrade as the production path. Don't copy infra you can't run; copy the idea.
+- **"Learned" ≠ "applied".** First cut stored a lesson but the next answer didn't
+  change — because, to honour "don't touch existing logic," nothing injected the
+  lesson into `/chat`. The fix: **retrieve + inject** the lesson into the LLM
+  directives — *additively and guarded* (LLM paths only, strict no-op when nothing
+  matches), so it improves answers without altering routing/checkout. A
+  self-improvement loop isn't real until retrieval actually shapes generation.
+- **Make the improvement CONCRETE.** Even with the lesson applied, the answer was
+  vague ("I can help with clothing/food/toys") because the model had no specific
+  items. Injecting a few **real in-stock products** turned it into a proper answer
+  (names Play-Doh, a puzzle, the soccer ball + a clarifying question).
+- **A persistent learning store needs a RESET for demos.** Lessons persist
+  (Firestore) by design, so the "first" ask was already improved — no baseline to
+  contrast. A `/dev` **Reset** (and a fresh-question strategy) restores the clean
+  before→teach→after arc. (Also: Cloud Run 411s an **empty POST** with no
+  Content-Length — send a body, or allow GET, for no-body dev triggers.)
+- **Lessons:**
+  1. **Separate "detect/learn" from "apply".** Judging a failure and *using* the
+     lesson are different steps; ship both or the loop looks broken.
+  2. **Isolated by default, additive when it must touch a flow.** Keep the agent
+     separate; when its output finally influences the main path, make it a guarded,
+     no-op-by-default enhancement — never a behavioural change to working logic.
+  3. **Demoing a stateful learner needs a reset** (and reproducible inputs).
+
 ---
 
 ## 4. Key trade-offs and decisions
@@ -867,6 +902,10 @@ component map in `ARCHITECTURE.md §3`.
 33. **Collapse accidental duplicate work at the sink** — a cold-start resend logged
     the same turn twice; the recorder now merges an identical turn (same session +
     message) within a window onto one card, narrowly so real re-asks still show.
+34. **Self-improvement = learn AND apply** — the CriticAgent judges its own failures
+    (Gemini-as-judge) AND injects the lesson via RAG into the next answer; a stored
+    lesson that never shapes generation only *looks* like a loop. Keep it isolated,
+    inject additively (no-op when nothing matches), and give demos a reset (§3.29).
 
 ---
 

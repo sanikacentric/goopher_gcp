@@ -104,6 +104,33 @@ def test_retrieve_ranks_relevant_lessons(monkeypatch):
     assert hits and "Toys" in hits[0]["lesson"]
 
 
+# --- the loop closes: learned lessons shape the next chat answer ------------ #
+def test_learned_lessons_are_injected_into_the_next_chat(monkeypatch):
+    store = _fresh(monkeypatch)
+    store.add_lesson({
+        "lesson": "When asked for laptops or electronics we don't stock, suggest "
+                  "relevant in-stock toy or gift alternatives and ask what they want.",
+        "confidence": 0.9, "failure_summary": "", "root_cause": "",
+        "languages": ["en"], "stored_at": "2026-01-01T00:00:00Z"})
+    from backend.app.agents.orchestrator import AgentService
+    from backend.app.models.schemas import ChatRequest
+    resp = AgentService().run_turn(
+        ChatRequest(message="do you have laptops?", session_id="rsi-chat"),
+        customer_id="CUST-1001")
+    # the orchestrator retrieved + applied the lesson on the LLM/fallback path
+    assert "lesson_retrieve" in resp.used_tools
+
+
+def test_no_lessons_leaves_chat_untouched(monkeypatch):
+    _fresh(monkeypatch)  # empty store
+    from backend.app.agents.orchestrator import AgentService
+    from backend.app.models.schemas import ChatRequest
+    resp = AgentService().run_turn(
+        ChatRequest(message="do you have barbecue chips?", session_id="rsi-none"),
+        customer_id="CUST-1001")
+    assert "lesson_retrieve" not in resp.used_tools   # no-op when nothing matches
+
+
 # --- endpoints -------------------------------------------------------------- #
 def test_critic_endpoints_require_auth():
     assert client.post("/critic/flag", json={"conversation_text": "x"}).status_code == 401

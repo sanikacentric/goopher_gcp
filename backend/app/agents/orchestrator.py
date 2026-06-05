@@ -380,6 +380,23 @@ class AgentService:
                 + language_agent.language_directive(language)
                 + f"\nThe signed-in customer_id is {customer_id}."
             )
+            # RSI: retrieve lessons the CriticAgent learned from past feedback and
+            # inject them as guidance for the LLM paths only. Purely ADDITIVE and
+            # guarded — never changes routing/checkout, and a no-op when nothing
+            # matches, so existing behaviour is unchanged unless a lesson applies.
+            _rsi_lessons = []
+            try:
+                from .critic_agent import get_critic
+                _rsi_lessons = get_critic().retrieve_lessons(text, k=3, language=language)
+            except Exception as exc:  # noqa: BLE001 - RSI must never break a turn
+                log_event("rsi_retrieve_skipped", reason=str(exc))
+            _rsi_guidance = ""
+            if _rsi_lessons:
+                _rsi_guidance = "\n".join(f"- {L.get('lesson', '')}" for L in _rsi_lessons)
+                directives += ("\n\nLEARNED LESSONS — apply these corrective "
+                               "instructions from past customer feedback. Be helpful "
+                               "and specific; if we don't stock something, proactively "
+                               "offer the closest in-stock alternatives:\n" + _rsi_guidance)
             # CHECKOUT is transactional → always handle it deterministically with
             # structured output (cart + staged receipt + the checkout payload the
             # extension needs), regardless of whether the ADK path is on. Leaving
@@ -463,6 +480,13 @@ class AgentService:
                 for name in used_tools:
                     ft.step("tool", name, "tool executed (backup)", tool=name)
                 path = "fallback"
+
+            # Surface RSI in the reply meta + /dev when a learned lesson shaped an
+            # LLM answer (not the deterministic checkout path).
+            if _rsi_lessons and path in ("adk", "fallback"):
+                used_tools = list(used_tools) + ["lesson_retrieve"]
+                ft.step("rsi", f"💡 lesson_retrieve — applied {len(_rsi_lessons)} learned lesson(s)",
+                        _rsi_guidance[:180])
 
             if channel == "phone":
                 with span("preprocess.adapt_for_phone"):

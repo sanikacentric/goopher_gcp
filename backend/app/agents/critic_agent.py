@@ -33,17 +33,33 @@ from ..observability.telemetry import incr, log_event
 # Only lessons the judge is at least this confident about are stored.
 MIN_CONFIDENCE_TO_STORE = float(os.getenv("MIN_LESSON_CONFIDENCE", "0.70"))
 
-JUDGE_PROMPT = """You are a quality evaluator for a retail AI support system (GOOPHER).
+JUDGE_PROMPT = """You are a quality evaluator for a retail AI shopping assistant (GOOPHER),
+which sells women's casual Clothing, Food/Snacks, and Toys.
 
-Below is a customer conversation where the AI agent gave an unsatisfactory response.
-Evaluate it and return a JSON object with EXACTLY these fields:
+Below is a customer conversation where the agent gave an unsatisfactory (often
+vague or flatly-refusing) response. Return a JSON object with EXACTLY these fields:
 {
   "failure_summary": "<one sentence: what went wrong>",
-  "root_cause": "<technical root cause: wrong intent, missing context, ambiguous query, refused a valid request, etc.>",
-  "lesson": "<a specific, reusable corrective instruction for the agent, in plain English>",
-  "confidence": <float 0.0-1.0: how confident this lesson is correct and useful>,
+  "root_cause": "<e.g. flat refusal with no alternative, missed intent, ambiguous query, missing context>",
+  "lesson": "<a CONCRETE behavioural instruction the agent can FOLLOW on the next similar turn>",
+  "confidence": <float 0.0-1.0>,
   "applies_to_languages": ["en", ...]
 }
+
+Rules for the "lesson" (this is the most important field):
+- Start with a verb; describe what to SAY or DO differently IN THE CONVERSATION.
+- It must be reusable for similar future queries — not a one-off.
+- Do NOT propose infra/data/catalog fixes (e.g. "make the catalog comprehensive") —
+  those are not actionable mid-conversation.
+- If the customer asked for something we don't sell, the lesson should be to briefly
+  acknowledge we don't carry it, THEN proactively suggest the closest relevant
+  in-stock items from Clothing/Food/Toys and ask one clarifying question.
+
+GOOD lesson: "When a customer asks for an item we don't sell (e.g. electronics like
+laptops or phones), acknowledge we don't carry it, then proactively suggest relevant
+in-stock alternatives — e.g. tech-style toys or a gift idea — and ask what they're
+shopping for, so they always leave with a next step."
+BAD lesson: "Ensure the product catalog is comprehensive." (not actionable in-chat)
 
 Conversation:
 %(conversation)s

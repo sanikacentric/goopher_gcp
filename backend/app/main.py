@@ -41,6 +41,8 @@ from .models.schemas import (
     BulkOrderQuery,
     ChatRequest,
     ChatResponse,
+    CriticAnswerRequest,
+    CriticFlagRequest,
     LoginRequest,
     TokenResponse,
     VisionRequest,
@@ -122,7 +124,7 @@ def healthz() -> dict:
 
 # Build marker — bump when verifying a deploy actually rolled out. Hit
 # GET /version on the live service to confirm which code Cloud Run is running.
-BUILD_VERSION = "2026-06-04-portal-dedup-turns"
+BUILD_VERSION = "2026-06-04-rsi-critic"
 
 
 @app.get("/version")
@@ -198,6 +200,45 @@ def chat(req: ChatRequest, claims: dict = Depends(current_customer)) -> ChatResp
         )
     service = get_agent_service()
     return service.run_turn(req, customer_id=claims["sub"])
+
+
+@app.post("/critic/flag")
+def critic_flag(req: CriticFlagRequest, claims: dict = Depends(current_customer)) -> dict:
+    """RSI — flag a conversation as unsatisfactory (records a failure for the
+    CriticAgent). Isolated: does not touch /chat or any live flow."""
+    from .agents.critic_agent import get_critic
+    rec = get_critic().record_failure(
+        conversation_text=req.conversation_text, csat_score=req.csat_score,
+        agent_name=req.agent_name, session_id=req.session_id or "")
+    return {"ok": True, "flagged_id": rec["id"]}
+
+
+@app.post("/critic/heal")
+def critic_heal(claims: dict = Depends(current_customer)) -> dict:
+    """RSI — run one self-improvement cycle: Gemini-as-judge evaluates each
+    pending failure and stores a confidence-gated corrective lesson. Returns the
+    lessons learned this cycle (for the live demo)."""
+    from .agents.critic_agent import get_critic
+    stats = get_critic().run_healing_cycle()
+    log_event("critic_heal", evaluated=stats["evaluated"], stored=stats["stored"])
+    return {"ok": True, **stats}
+
+
+@app.get("/critic/lessons")
+def critic_lessons(claims: dict = Depends(current_customer)) -> dict:
+    """RSI — the learned-lessons knowledge base (what GOOPHER taught itself)."""
+    from .agents.critic_agent import get_store
+    lessons = get_store().all_lessons()
+    return {"count": len(lessons), "lessons": lessons}
+
+
+@app.post("/critic/answer")
+def critic_answer(req: CriticAnswerRequest, claims: dict = Depends(current_customer)) -> dict:
+    """RSI — answer a question with learned lessons injected (lesson_retrieve /
+    RAG). Self-contained demo of the loop's payoff; does not use /chat."""
+    from .agents.critic_agent import get_critic
+    out = get_critic().answer_with_lessons(req.message, language=req.language)
+    return {"ok": True, **out}
 
 
 @app.post("/orders/bulk")

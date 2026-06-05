@@ -160,6 +160,24 @@ class AdviseResponse(BaseModel):
     engine: str = "adk-react"
 
 
+class CriticFlagRequest(BaseModel):
+    """Flag a conversation as unsatisfactory for the RSI CriticAgent (POST
+    /critic/flag). Isolated from /chat — recording a failure does not affect any
+    live flow."""
+    conversation_text: str = Field(..., description="The user+assistant exchange that failed.")
+    session_id: str = ""
+    csat_score: int = Field(default=2, ge=1, le=5)
+    agent_name: str = "goopher"
+
+
+class CriticAnswerRequest(BaseModel):
+    """Ask the RSI-aware responder a question (POST /critic/answer) — retrieves
+    learned lessons and answers WITH them, demonstrating lesson_retrieve/RAG
+    without touching the production chat path."""
+    message: str
+    language: str = "en"
+
+
 class ChatResponse(BaseModel):
     reply: str
     session_id: str

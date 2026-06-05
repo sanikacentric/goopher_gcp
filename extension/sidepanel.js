@@ -1,13 +1,13 @@
 // GOOPHER side panel controller: login flow, chat rendering, multi-modal
 // attachments, channel/language switching, and VOICE input. Maintains a stable
 // session_id so the backend memory agent preserves context across switches.
-import { getCustomer, getToken, getMyOrders, login, logout, sendAdvise, sendChat, sendVision } from "./api.js";
+import { criticFlag, criticHeal, getCustomer, getToken, getMyOrders, login, logout, sendAdvise, sendChat, sendVision } from "./api.js";
 
 // Version marker — confirms which build of the side panel Chrome has loaded.
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.6.2 — camera orders now ask 'please confirm' before charging");
+console.log("GOOPHER side panel v0.7.0 — RSI: 👎 Teach GOOPHER (recursive self-improvement)");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -76,6 +76,7 @@ function setMuted(muted) {
 // One stable session id per browser profile keeps memory/context continuous.
 let sessionId = null;
 let pendingAttachments = [];
+let lastUserText = "";   // last thing the customer asked — for the RSI "teach" loop
 // When a checkout preview is on screen we hold its confirm/cancel actions here,
 // so that a SPOKEN or typed "yes / confirm order / cancel" resolves THAT order
 // instead of being sent to the backend as a brand-new request.
@@ -225,7 +226,46 @@ async function deliverResponse(resp, viaVoice = false, srcText = "") {
     if (viaVoice && els.speakToggle?.checked) {
       speak(resp.reply, resp.language);
     }
+    addTeachRow(srcText || lastUserText, resp.reply);
   }
+}
+
+// RSI demo — a 👎 affordance under a reply. Flags the exchange, runs one
+// self-improvement cycle (Gemini-as-judge writes a corrective lesson), and shows
+// the lesson GOOPHER taught itself. Isolated: hits /critic/*, never /chat.
+function addTeachRow(userText, replyText) {
+  if (!userText || !replyText) return;
+  const row = document.createElement("div");
+  row.className = "gp-teach";
+  const btn = document.createElement("button");
+  btn.className = "gp-teach-btn";
+  btn.textContent = "👎 Teach GOOPHER";
+  btn.title = "Mark this answer unhelpful — the CriticAgent (RSI) will learn from it";
+  const status = document.createElement("span");
+  status.className = "gp-teach-status";
+  row.appendChild(btn);
+  row.appendChild(status);
+  els.messages.appendChild(row);
+  els.messages.scrollTop = els.messages.scrollHeight;
+
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    status.textContent = " GOOPHER is reflecting…";
+    try {
+      const conv = `Customer: ${userText}\nGOOPHER: ${replyText}`;
+      await criticFlag({ conversation_text: conv, sessionId, csat_score: 2 });
+      const heal = await criticHeal();
+      const lesson = heal.lessons && heal.lessons[0] && heal.lessons[0].lesson;
+      btn.remove();
+      status.className = "gp-teach-learned";
+      status.textContent = lesson
+        ? `💡 GOOPHER learned: ${lesson}`
+        : "✅ Logged — GOOPHER will improve from this.";
+    } catch (err) {
+      status.textContent = "⚠ " + (err.message || err);
+      btn.disabled = false;
+    }
+  });
 }
 
 // Confirm / Cancel buttons under a pending-order preview.
@@ -506,6 +546,7 @@ async function send(text, attachments, viaVoice = false) {
   }
 
   addMessage(text || "(attachment)", "user");
+  lastUserText = text || "(attachment)";
   els.messageInput.value = "";
   pendingAttachments = [];
   renderAttachments();

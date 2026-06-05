@@ -100,6 +100,42 @@ export async function sendAdvise({ message, sessionId, channel, language }) {
   return res.json();
 }
 
+// RSI (recursive self-improvement) — CriticAgent. Flag an unhelpful answer, then
+// run a self-improvement cycle (Gemini-as-judge writes a corrective lesson).
+// Isolated endpoints — these never touch the /chat flow.
+export async function criticFlag({ conversation_text, sessionId, csat_score = 2, agent_name = "goopher" }) {
+  const token = await getToken();
+  const res = await fetch(`${CONFIG.API_BASE}/critic/flag`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ conversation_text, session_id: sessionId, csat_score, agent_name }),
+  });
+  if (res.status === 401) throw new Error("UNAUTHORIZED");
+  if (!res.ok) throw new Error(`Server error ${res.status}`);
+  return res.json();
+}
+
+export async function criticHeal() {
+  const token = await getToken();
+  const res = await fetch(`${CONFIG.API_BASE}/critic/heal`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 401) throw new Error("UNAUTHORIZED");
+  if (!res.ok) throw new Error(`Server error ${res.status}`);
+  return res.json();
+}
+
+export async function getCriticLessons() {
+  const token = await getToken();
+  const res = await fetch(`${CONFIG.API_BASE}/critic/lessons`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 401) throw new Error("UNAUTHORIZED");
+  if (!res.ok) throw new Error(`Server error ${res.status}`);
+  return res.json();
+}
+
 // The signed-in customer's orders — backs the header cart/orders panel.
 export async function getMyOrders() {
   const token = await getToken();

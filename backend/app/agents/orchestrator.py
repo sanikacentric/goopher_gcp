@@ -393,10 +393,13 @@ class AgentService:
             _rsi_guidance = ""
             if _rsi_lessons:
                 _rsi_guidance = "\n".join(f"- {L.get('lesson', '')}" for L in _rsi_lessons)
-                directives += ("\n\nLEARNED LESSONS — apply these corrective "
-                               "instructions from past customer feedback. Be helpful "
-                               "and specific; if we don't stock something, proactively "
-                               "offer the closest in-stock alternatives:\n" + _rsi_guidance)
+                directives += ("\n\nLEARNED LESSONS (you MUST apply these corrective "
+                               "instructions from past customer feedback):\n" + _rsi_guidance
+                               + "\nIf the customer asks for something we don't sell, "
+                               "do NOT just decline — briefly say we don't carry it, then "
+                               "name 2-3 SPECIFIC in-stock products from the list below as "
+                               "alternatives and ask one clarifying question."
+                               + self._instock_highlights())
             # CHECKOUT is transactional → always handle it deterministically with
             # structured output (cart + staged receipt + the checkout payload the
             # extension needs), regardless of whether the ADK path is on. Leaving
@@ -529,6 +532,23 @@ class AgentService:
                 channel=channel, used_tools=used_tools, trace_id=trace_id,
                 checkout=self._last_checkout,
             )
+
+    @staticmethod
+    def _instock_highlights(n: int = 6) -> str:
+        """A few real in-stock products (Toys first) the agent can suggest as
+        concrete alternatives when a learned lesson applies. Cheap & cached-ish;
+        never raises."""
+        try:
+            from ..db.database import get_repository
+            prods = [p for p in get_repository().list_products()
+                     if any(v.stock > 0 for v in p.variants)]
+            # surface Toys first (most useful as a gift/tech alternative), then the rest
+            prods.sort(key=lambda p: 0 if (p.department or "").lower().startswith("toy") else 1)
+            items = [f"{p.name} (${p.sale_price:.2f}, {p.department})" for p in prods[:n]]
+            return ("\nIN-STOCK ITEMS you may suggest as alternatives: "
+                    + "; ".join(items) + ".") if items else ""
+        except Exception:  # noqa: BLE001
+            return ""
 
     # ----- generation paths (called by run_turn after pre-processing) ----- #
     def _generate_adk(self, session_id: str, text: str, customer_id: str,

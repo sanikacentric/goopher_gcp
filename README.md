@@ -142,6 +142,10 @@ while preserving conversation context.
   **▶ Vertex** → **✅ Restore all**. See [`ARCHITECTURE.md` §5e](ARCHITECTURE.md)
   and the **[demo script](DEMO.md)**.
 
+> 💼 **Business case:** **[BUSINESS-CASE.pptx](BUSINESS-CASE.pptx)** — a 9-slide
+> consulting deck (current state → problem → loss → requirement → GOOPHER solution
+> → ROI → pilot) for the stakeholder conversation.
+>
 > 🎬 **Presenting this?** Use the ready-to-deliver deck **[PRESENTATION.pptx](PRESENTATION.pptx)**
 > (12 slides, speaker notes embedded) with the **[SPEAKER-NOTES.md](SPEAKER-NOTES.md)**
 > one-pager. **[PRESENTATION.md](PRESENTATION.md)** is the interactive slide outline,

@@ -94,10 +94,30 @@ async function iconPng(IconComponent, color, file, size = 256) {
     boltW:   [Fa.FaBolt, "#FFFFFF"],
     playW:   [Fa.FaPlayCircle, "#FFFFFF"],
     checkW:  [Fa.FaCheckCircle, "#FFFFFF"],
+    // business-case deck extras
+    warn:    [Fa.FaExclamationTriangle, "#E11D48"],
+    warnA:   [Fa.FaExclamationTriangle, "#F59E0B"],
+    phone:   [Fa.FaPhoneAlt, "#64748B"],
+    dollar:  [Fa.FaMoneyBillWave, "#E11D48"],
+    dollarG: [Fa.FaMoneyBillWave, "#16A34A"],
+    clock:   [Fa.FaHourglassHalf, "#E11D48"],
+    down:    [Fa.FaArrowDown, "#E11D48"],
+    up:      [Fa.FaArrowUp, "#16A34A"],
+    flag:    [Fa.FaFlagCheckered, "#2563EB"],
+    times:   [Fa.FaTimesCircle, "#E11D48"],
+    wrench:  [Fa.FaWrench, "#7C3AED"],
+    server:  [Fa.FaServer, "#64748B"],
+    list:    [Fa.FaListUl, "#2563EB"],
+    smile:   [Fa.FaSmile, "#16A34A"],
+    frown:   [Fa.FaFrown, "#E11D48"],
+    target:  [Fa.FaBullseye, "#7C3AED"],
+    chartB:  [Fa.FaChartBar, "#0D9488"],
   };
   fs.mkdirSync("icons", { recursive: true });
   for (const [name, [comp, color]] of Object.entries(icons)) {
     await iconPng(comp, color, `icons/${name}.png`);
+    // also a WHITE variant (`<name>W`) for placing on saturated colored chips
+    if (!name.endsWith("W")) await iconPng(comp, "#FFFFFF", `icons/${name}W.png`);
   }
   console.log("ASSETS OK");
 })();

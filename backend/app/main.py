@@ -124,7 +124,7 @@ def healthz() -> dict:
 
 # Build marker — bump when verifying a deploy actually rolled out. Hit
 # GET /version on the live service to confirm which code Cloud Run is running.
-BUILD_VERSION = "2026-06-04-rsi-reset"
+BUILD_VERSION = "2026-06-04-rsi-reset2"
 
 
 @app.get("/version")
@@ -357,10 +357,11 @@ def dev_rsi() -> dict:
     return {"count": len(lessons), "lessons": lessons}
 
 
-@app.post("/dev/rsi/reset")
+@app.api_route("/dev/rsi/reset", methods=["POST", "GET"])
 def dev_rsi_reset() -> dict:
     """Wipe the learned-lessons knowledge base — lets the demo show the clean
-    before → teach → after arc repeatably."""
+    before → teach → after arc repeatably. GET is allowed too, so it can be
+    triggered by simply visiting the URL during a demo."""
     if not settings.dev_portal_enabled:
         raise HTTPException(status_code=404, detail="Not found.")
     from .agents.critic_agent import get_store

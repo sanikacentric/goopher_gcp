@@ -371,7 +371,9 @@
         } catch (_) {}
       }
       document.getElementById("rsiReset").addEventListener("click", async () => {
-        await fetch("/dev/rsi/reset", { method: "POST" }).catch(() => {});
+        // include a body so Cloud Run's frontend never 411s an empty POST
+        await fetch("/dev/rsi/reset", { method: "POST",
+          headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => {});
         refreshRSI();
       });
       document.getElementById("rsiRefresh").addEventListener("click", refreshRSI);

@@ -528,6 +528,74 @@ function stat(s, o) {
   );
 })();
 
+// ====================================================== SLIDE 7b — CHALLENGES
+(() => {
+  const s = p.addSlide(); lightBG(s);
+  kicker(s, "Hands-on · the hard parts", C.rose);
+  title(s, "Engineering challenges — and how we unblocked them");
+
+  const rows = [
+    ["sitemap", "Sub-agents skipped / ran out of order", "ADK let the LLM skip sub-agents; a SequentialAgent can't be an AgentTool.", "Agent-as-tool composition + deterministic pre-processing (modality/lang/channel as plain code)."],
+    ["brain", "Gemini 2.5 “thinking” ate the answer", "Vision + the ReAct advisor returned a plan but no final text (thinking spent the budget).", "thinking_budget=0 + token cap; a grounded synthesis fallback guarantees an answer."],
+    ["check", "A cloud-only bug hid behind green local tests", "The ADK path isn't exercised in CI (no creds), so a prod regression could slip through.", "CI-sim: block google.* and run the whole suite via the deterministic fallback path."],
+    ["lock", "LLM could substitute or auto-charge", "A free-form LLM placing orders risks wrong items and unconfirmed charges.", "No-substitution + a deterministic confirm-before-charge gate on EVERY modality."],
+    ["db", "Context lost on channel / language switch", "Per-instance memory drops context across Web↔Phone, EN↔ES, and scale-to-zero.", "One session store keyed by session_id, durable in Firestore, shared by all agents."],
+    ["cloud", "Vertex vs AI Studio SDK; quota “limit:0” lies", "google.generativeai can't reach Vertex; a wrong model reads as a zero quota.", "Unified google.genai (vertexai=True) + pin gemini-2.5-flash (verified quota)."],
+  ];
+  const w = (CW - 0.5) / 2, h = 1.42;
+  rows.forEach(([icon, ch, detail, sol], i) => {
+    const x = M + (i % 2) * (w + 0.5), y = 1.9 + Math.floor(i / 2) * (h + 0.18);
+    s.addShape(p.shapes.ROUNDED_RECTANGLE, { x, y, w, h, rectRadius: 0.08, fill: { color: C.white }, line: { color: C.border, width: 1 }, shadow: shadow() });
+    s.addShape(p.shapes.ROUNDED_RECTANGLE, { x: x + 0.2, y: y + 0.22, w: 0.5, h: 0.5, rectRadius: 0.1, fill: { color: C.rose } });
+    s.addImage({ path: ic(icon), x: x + 0.32, y: y + 0.34, w: 0.26, h: 0.26 });
+    s.addText([{ text: "⚠  ", options: { color: C.rose, bold: true } }, { text: ch, options: { bold: true, color: C.ink } }],
+      { x: x + 0.82, y: y + 0.16, w: w - 1.0, h: 0.32, margin: 0, fontFace: BF, fontSize: 12.5, valign: "middle" });
+    s.addText(detail, { x: x + 0.82, y: y + 0.5, w: w - 1.02, h: 0.32, margin: 0, fontFace: BF, fontSize: 10.5, italic: true, color: C.soft, valign: "top" });
+    s.addText([{ text: "✓  ", options: { color: C.teal, bold: true } }, { text: sol, options: { color: C.muted } }],
+      { x: x + 0.22, y: y + 0.86, w: w - 0.42, h: 0.5, margin: 0, fontFace: BF, fontSize: 11, valign: "top" });
+  });
+  footer(s);
+  s.addNotes(
+    "Challenges (2–3 min — shows hands-on depth, which the panel scores). 'Building this surfaced real problems. " +
+    "ADK let the model skip sub-agents and a SequentialAgent can't be an AgentTool — so I moved pre-processing to deterministic code and used agent-as-tool. " +
+    "Gemini 2.5's thinking starved the answer on vision and the ReAct advisor — fixed with thinking_budget=0 plus a grounded synthesis fallback. " +
+    "The ADK path isn't testable in CI, so a cloud-only bug could hide — I added a CI-simulation that blocks the google packages and runs everything through the fallback. " +
+    "I kept the LLM from substituting or auto-charging with a deterministic confirm-before-charge gate. Context across channels/languages lives in one Firestore session store. " +
+    "And I learned the SDK/quota gotchas: google.genai for Vertex, and pin the right model. Each of these is documented in LEARNINGS.md.'"
+  );
+})();
+
+// ============================================================ SLIDE 7c — WOW
+(() => {
+  const s = p.addSlide();
+  s.background = { path: "bg_dark.png" };
+  kicker(s, "The differentiators", "FCA5C0");
+  s.addText("What makes them lean in", { x: M, y: 0.78, w: CW, h: 0.9, margin: 0, fontFace: HF, fontSize: 30, bold: true, color: C.white });
+
+  const wow = [
+    ["camera", "See-it, shop-it", "Show a real object to the camera — Gemini Vision prices it and orders it."],
+    ["sync", "Self-healing, live on stage", "Kill a dependency with a button; watch DETECT→DIAGNOSE→REMEDIATE→VERIFY recover it."],
+    ["eye", "Radical transparency", "The live agent pipeline — agent → skill → tool → memory — for every single turn."],
+    ["brain", "Two agent styles, one model", "Native function-calling for transactions; visible ReAct (you watch it plan) for advice."],
+    ["lock", "Safe by design", "The AI never executes payment — a deterministic, auditable gate does; confirm-before-charge."],
+    ["bolt", "Production-shaped", "117 tests · CI/CD · self-healing · observable — on Google Cloud, free-tier-first."],
+  ];
+  const w = (CW - 0.6) / 3, h = 2.05;
+  wow.forEach(([icon, head, body], i) => {
+    const x = M + (i % 3) * (w + 0.3), y = 2.05 + Math.floor(i / 3) * (h + 0.3);
+    s.addShape(p.shapes.ROUNDED_RECTANGLE, { x, y, w, h, rectRadius: 0.1, fill: { color: "FFFFFF", transparency: 90 }, line: { color: "FFFFFF", width: 1 } });
+    s.addShape(p.shapes.ROUNDED_RECTANGLE, { x: x + 0.26, y: y + 0.26, w: 0.64, h: 0.64, rectRadius: 0.13, fill: { color: C.rose } });
+    s.addImage({ path: ic(icon), x: x + 0.43, y: y + 0.43, w: 0.3, h: 0.3 });
+    s.addText(head, { x: x + 1.04, y: y + 0.28, w: w - 1.2, h: 0.6, margin: 0, fontFace: BF, fontSize: 15.5, bold: true, color: "FFFFFF", valign: "middle" });
+    s.addText(body, { x: x + 0.28, y: y + 1.04, w: w - 0.54, h: h - 1.2, margin: 0, fontFace: BF, fontSize: 12, color: "D7D3EC", valign: "top" });
+  });
+  s.addNotes(
+    "Wow factor (90s — the memorable beat). 'If you remember six things: you can SHOW a product to a camera and it orders it; you can BREAK a dependency on stage and watch it self-heal; " +
+    "you can SEE the agent pipeline for every turn; it runs TWO agent styles on one model; the AI never touches payment; and it's production-shaped — tested, CI/CD, self-healing — on Google Cloud. " +
+    "Most demos show one of these; GOOPHER shows all six, live.'"
+  );
+})();
+
 // ====================================================== SLIDE 8 — RELIABILITY / TRUST
 (() => {
   const s = p.addSlide(); lightBG(s);
@@ -614,6 +682,34 @@ function stat(s, o) {
     "Why Google Cloud (90s — the CE angle). 'Every block of this design is a Google Cloud strength: Gemini on Vertex gives us one multimodal model under managed security and quota; " +
     "ADK gives first-class multi-agent orchestration and tracing; Cloud Run is serverless and scales to zero; Firestore gives durable shared state; Cloud Trace makes it debuggable; " +
     "and there's a clean path to CCAI and Vertex Translation. The prototype isn't bolted onto the cloud — it's native to it.'"
+  );
+})();
+
+// ========================================================== SLIDE 10b — LEARNINGS
+(() => {
+  const s = p.addSlide(); lightBG(s);
+  kicker(s, "What I'd carry into the next build", C.violet);
+  title(s, "Key learnings");
+
+  const items = [
+    ["brain", C.violet, "“ReAct” is a paradigm, not a class", "Native function-calling IS ReAct — done better; reach for a text-scratchpad planner only when you want a visible plan."],
+    ["lock", C.teal, "LLM orchestrates; code transacts", "Route money-affecting / irreversible actions through deterministic, auditable handlers — never the model."],
+    ["sitemap", C.blue, "Loop safety is graph shape, not prompts", "Agent-as-tool (no transfer-back), workers with no nested agents, single-pass turns — cycles can't exist by construction."],
+    ["sync", C.rose, "A model quirk that bit once bites again", "Encode the remedy as a reusable pattern (thinking_budget=0 fixed both vision and the ReAct advisor)."],
+    ["check", C.green, "Test the path production runs", "A cloud-only ADK bug hid behind a green local suite — a CI-sim of the prod fallback is what gave confidence."],
+    ["db", C.teal, "Centralize state; keep agents stateless", "One durable session store by session_id; let read-only agents pull memory from tools, not their own state."],
+  ];
+  const w = (CW - 0.6) / 3, h = 1.98;
+  items.forEach(([icon, chip, head, body], i) => {
+    const x = M + (i % 3) * (w + 0.3), y = 1.95 + Math.floor(i / 3) * (h + 0.25);
+    card(s, { x, y, w, h, icon, chip, head, lines: [body], headSize: 13, bodySize: 11.5 });
+  });
+  footer(s);
+  s.addNotes(
+    "Learnings (90s — shows reflection / seniority). 'Six takeaways I'd carry forward: ReAct is a paradigm, not a class — native function-calling is ReAct done better. " +
+    "Keep money off the model — LLM orchestrates, code transacts. Loop safety comes from the graph shape, not prompt wording. A model quirk that bites once will bite again, so encode the fix. " +
+    "Test the path production actually runs — a CI-sim of the ADK fallback caught what local tests couldn't. And centralize state by session_id while keeping agents stateless where you can. " +
+    "All of these are written up in LEARNINGS.md with the war stories behind them.'"
   );
 })();
 

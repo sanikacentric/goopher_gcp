@@ -147,7 +147,8 @@ while preserving conversation context.
 > one-pager. **[PRESENTATION.md](PRESENTATION.md)** is the interactive slide outline,
 > **[DEMO.md](DEMO.md)** is the word-for-word walkthrough, and
 > **[QUESTION-ANSWER.md](QUESTION-ANSWER.md)** is the Q&A bank for technical and
-> stakeholder questions.
+> stakeholder questions, and **[TRADEOFFS.md](TRADEOFFS.md)** documents every design
+> trade-off (options considered → chosen → why).
 
 ---
 

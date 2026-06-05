@@ -199,6 +199,29 @@
       </div>
     </section>
 
+    <style>
+      #rsi .rsi-list { padding: 4px 22px 14px; display: flex; flex-direction: column; gap: 8px; }
+      #rsi .rsi-item { background:#1b1420; border:1px solid var(--border); border-left:3px solid #db61a2; border-radius:8px; padding:8px 12px; font-size:12px; color:var(--muted); line-height:1.45; }
+      #rsi .rsi-item b { color:#f0a8d0; }
+      #rsi .rsi-empty { padding: 2px 22px 14px; color: var(--muted); font-size: 12px; }
+    </style>
+    <section id="rsi" class="guardian">
+      <div class="g-row">
+        <span class="g-title">🧠 RSI — RECURSIVE SELF-IMPROVEMENT (CriticAgent)</span>
+        <span id="rsiCount" class="g-overall">0 lessons</span>
+        <span class="g-hint">learns from 👎 feedback · Gemini-as-judge → lesson → RAG · no retrain/redeploy</span>
+      </div>
+      <div class="g-instruct">
+        In the extension: get a weak answer → click <b>👎 Teach GOOPHER</b> → ask the same thing again
+        to see it improve. <b>Reset</b> here to demo the clean <b>before → teach → after</b> arc.
+      </div>
+      <div class="g-controls">
+        <button class="g-btn restore" id="rsiReset">🧹 Reset lessons</button>
+        <button class="g-btn sim" id="rsiRefresh">↻ Refresh</button>
+      </div>
+      <div id="rsiList" class="rsi-list"></div>
+    </section>
+
     <main id="feed">
       <div class="empty" id="empty">
         Waiting for activity… open the GOOPHER extension or storefront, sign in, and ask a question.
@@ -325,6 +348,35 @@
       });
       refreshHealth();
       setInterval(refreshHealth, 2500);
+
+      // ---- RSI panel: show learned lessons + reset (for the before/after demo) ----
+      async function refreshRSI() {
+        try {
+          const d = await (await fetch("/dev/rsi")).json();
+          const n = d.count || 0;
+          document.getElementById("rsiCount").textContent = n + " lesson" + (n === 1 ? "" : "s");
+          const host = document.getElementById("rsiList");
+          host.innerHTML = "";
+          if (!d.lessons || !d.lessons.length) {
+            host.innerHTML = '<div class="rsi-empty">No lessons yet — get a weak answer in the extension and click 👎 Teach GOOPHER.</div>';
+            return;
+          }
+          d.lessons.forEach(L => {
+            const el = document.createElement("div");
+            el.className = "rsi-item";
+            const conf = Math.round((L.confidence || 0) * 100);
+            el.innerHTML = `<b>💡 lesson</b> · conf ${conf}% · <i>${esc(L.engine || "")}</i><br>${esc(L.lesson || "")}`;
+            host.appendChild(el);
+          });
+        } catch (_) {}
+      }
+      document.getElementById("rsiReset").addEventListener("click", async () => {
+        await fetch("/dev/rsi/reset", { method: "POST" }).catch(() => {});
+        refreshRSI();
+      });
+      document.getElementById("rsiRefresh").addEventListener("click", refreshRSI);
+      refreshRSI();
+      setInterval(refreshRSI, 4000);
 
       function esc(s) {
         return (s ?? "").toString().replace(/[&<>]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;" }[c]));

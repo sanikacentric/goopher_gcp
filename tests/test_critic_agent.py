@@ -131,6 +131,26 @@ def test_no_lessons_leaves_chat_untouched(monkeypatch):
     assert "lesson_retrieve" not in resp.used_tools   # no-op when nothing matches
 
 
+# --- reset / dev controls --------------------------------------------------- #
+def test_clear_empties_the_store(monkeypatch):
+    store = _fresh(monkeypatch)
+    store.add_lesson({"lesson": "x", "confidence": 0.9, "stored_at": "z"})
+    assert len(store.all_lessons()) == 1
+    removed = store.clear()
+    assert removed >= 1 and store.all_lessons() == []
+
+
+def test_dev_rsi_and_reset_endpoints(monkeypatch):
+    store = _fresh(monkeypatch)
+    store.add_lesson({"lesson": "When asked for laptops, suggest toys.",
+                      "confidence": 0.9, "stored_at": "z", "languages": ["en"]})
+    # /dev/rsi is unauthenticated (gated by dev_portal_enabled, like chaos buttons)
+    r = client.get("/dev/rsi")
+    assert r.status_code == 200 and r.json()["count"] == 1
+    assert client.post("/dev/rsi/reset").json()["ok"] is True
+    assert client.get("/dev/rsi").json()["count"] == 0
+
+
 # --- endpoints -------------------------------------------------------------- #
 def test_critic_endpoints_require_auth():
     assert client.post("/critic/flag", json={"conversation_text": "x"}).status_code == 401

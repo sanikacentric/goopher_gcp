@@ -124,7 +124,7 @@ def healthz() -> dict:
 
 # Build marker — bump when verifying a deploy actually rolled out. Hit
 # GET /version on the live service to confirm which code Cloud Run is running.
-BUILD_VERSION = "2026-06-04-rsi-concrete"
+BUILD_VERSION = "2026-06-04-rsi-reset"
 
 
 @app.get("/version")
@@ -344,6 +344,29 @@ def dev_recent(limit: int = 50) -> dict:
     if not settings.dev_portal_enabled:
         raise HTTPException(status_code=404, detail="Not found.")
     return {"records": get_recorder().recent(limit=limit)}
+
+
+# RSI (recursive self-improvement) — dev-portal controls (gated by dev_portal_enabled,
+# like the Guardian chaos buttons) so the live demo can show + reset learned lessons.
+@app.get("/dev/rsi")
+def dev_rsi() -> dict:
+    if not settings.dev_portal_enabled:
+        raise HTTPException(status_code=404, detail="Not found.")
+    from .agents.critic_agent import get_store
+    lessons = get_store().all_lessons()
+    return {"count": len(lessons), "lessons": lessons}
+
+
+@app.post("/dev/rsi/reset")
+def dev_rsi_reset() -> dict:
+    """Wipe the learned-lessons knowledge base — lets the demo show the clean
+    before → teach → after arc repeatably."""
+    if not settings.dev_portal_enabled:
+        raise HTTPException(status_code=404, detail="Not found.")
+    from .agents.critic_agent import get_store
+    removed = get_store().clear()
+    log_event("rsi_reset", removed=removed)
+    return {"ok": True, "removed": removed}
 
 
 # --------------------------------------------------------------------------- #

@@ -137,6 +137,20 @@ class LessonStore:
         rows.sort(key=lambda r: r.get("stored_at", ""), reverse=True)
         return rows
 
+    def clear(self) -> int:
+        """Wipe all lessons + failures (demo reset). Returns how many were removed."""
+        n = 0
+        if self._fs is not None:
+            for coll in ("rsi_lessons", "rsi_failures"):
+                for d in self._fs.collection(coll).stream():
+                    d.reference.delete()
+                    n += 1
+        else:
+            n = len(self._lessons) + len(self._failures)
+            self._lessons.clear()
+            self._failures.clear()
+        return n
+
     def retrieve(self, query: str, k: int = 3, language: Optional[str] = None) -> list[dict]:
         """Top-k lessons relevant to `query` (keyword overlap + confidence/recency)."""
         q = set(_tokens(query))

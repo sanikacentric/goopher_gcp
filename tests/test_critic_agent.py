@@ -58,6 +58,20 @@ def test_flag_then_heal_stores_lesson(monkeypatch):
     assert c.run_healing_cycle()["evaluated"] == 0
 
 
+def test_heal_records_rsi_flow_to_dev_portal(monkeypatch):
+    _fresh(monkeypatch)
+    monkeypatch.setattr(ca, "_judge", _good_lesson)
+    from backend.app.observability.flow_recorder import _recorder
+    c = ca.get_critic()
+    c.record_failure("Customer: do you have dolls?\nGOOPHER: no toys.", csat_score=2)
+    c.run_healing_cycle()
+    rec = _recorder.recent(8)[-1]
+    assert rec["kind"] == "rsi"
+    stages = [s["stage"] for s in rec["steps"]]
+    assert stages.count("rsi") >= 3                     # DETECT, JUDGE, LESSON
+    assert any("LESSON STORED" in s["name"] for s in rec["steps"])
+
+
 def test_low_confidence_lesson_is_skipped(monkeypatch):
     _fresh(monkeypatch)
     monkeypatch.setattr(ca, "_judge", lambda *a, **k: {"lesson": "weak", "confidence": 0.3})

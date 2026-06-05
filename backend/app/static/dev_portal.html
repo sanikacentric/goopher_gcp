@@ -91,6 +91,7 @@
       .turn-head .kind.fulfillment { background: #0d8a6a; }
       .turn-head .kind.vision { background: #b8338a; }
       .turn-head .kind.advise { background: #7c3aed; }
+      .turn-head .kind.rsi { background: #b5179e; }
       .turn-head .kind.heal { background: #8957e5; }
       .meta { font-size: 12px; color: var(--muted); }
       .meta b { color: var(--text); font-weight: 600; }
@@ -127,6 +128,7 @@
       .stage.harness { color: #d2a8ff; } .step.harness { border-left: 3px solid #d2a8ff; background:#1b1626; }
       .stage.subagent { color: var(--blue); } .step.subagent { border-left: 3px solid var(--blue); }
       .stage.skill { color: #ffa657; } .step.skill { border-left: 3px solid #ffa657; }
+      .stage.rsi { color: #db61a2; } .step.rsi { border-left: 3px solid #db61a2; background:#241420; }
       .stage.tool { color: var(--green); } .step.tool { border-left: 3px solid var(--green); }
       .stage.llm { color: var(--accent); } .step.llm { border-left: 3px solid var(--accent); }
       .stage.memory { color: var(--amber); } .step.memory { border-left: 3px solid var(--amber); }
@@ -168,6 +170,7 @@
       <span class="chip"><i style="background:#2ea043"></i> Tool (called by the worker)</span>
       <span class="chip"><i style="background:#1abc9c"></i> Order-management / fulfillment stage</span>
       <span class="chip"><i style="background:#b8338a"></i> Self-healing (Guardian)</span>
+      <span class="chip"><i style="background:#db61a2"></i> Recursive self-improvement (RSI · CriticAgent)</span>
     </div>
 
     <!-- Self-healing Guardian: live health strip + chaos controls (isolated). -->
@@ -214,7 +217,7 @@
         orchestrator: "ORCHESTRATOR", harness: "AGENT HARNESS",
         subagent: "WORKER SUB-AGENT", skill: "AGENT SKILL",
         tool: "TOOL", llm: "LLM", memory: "MEMORY", fulfillment: "FULFILLMENT",
-        heal: "SELF-HEAL",
+        heal: "SELF-HEAL", rsi: "RSI · SELF-IMPROVE",
       };
 
       // ---- Guardian self-healing: health strip + CLIENT-ORCHESTRATED animation ----

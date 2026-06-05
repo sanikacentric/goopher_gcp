@@ -259,19 +259,39 @@ class CriticAgent:
 
     def run_healing_cycle(self) -> dict:
         """Judge every pending failure; store high-confidence lessons. Returns
-        stats + the lessons learned this cycle (for the live demo)."""
+        stats + the lessons learned this cycle (for the live demo). Also records
+        the cycle to the /dev portal (kind="rsi": DETECT → JUDGE → LESSON)."""
         store = get_store()
         pending = store.pending_failures()
         stats = {"evaluated": 0, "stored": 0, "skipped": 0, "lessons": []}
+
+        ft = None
+        try:
+            from ..observability.flow_recorder import TurnTrace
+            ft = TurnTrace(kind="rsi")
+            ft.record.user_message = "Recursive self-improvement cycle (CriticAgent)"
+        except Exception:  # noqa: BLE001 - portal recording must never break the cycle
+            ft = None
+
         for f in pending:
             stats["evaluated"] += 1
-            ev = _judge(f.get("conversation_text", ""), f.get("csat_score", 2),
-                        f.get("agent_name", "goopher"))
+            convo = f.get("conversation_text", "")
+            topic = _topic(convo)
+            if ft:
+                ft.step("rsi", "🔎 DETECT — flagged conversation",
+                        f"csat {f.get('csat_score', 2)}/5 · “{topic}”")
+            ev = _judge(convo, f.get("csat_score", 2), f.get("agent_name", "goopher"))
             store.mark_processed(f["id"])
             conf = float(ev.get("confidence", 0) or 0)
             lesson = ev.get("lesson", "")
+            if ft:
+                ft.step("rsi", f"🧠 JUDGE — Gemini-as-judge ({ev.get('engine', '?')})",
+                        f"root cause: {ev.get('root_cause', '')[:140]}")
             if conf < MIN_CONFIDENCE_TO_STORE or not lesson:
                 stats["skipped"] += 1
+                if ft:
+                    ft.step("rsi", f"⏭ SKIPPED — confidence {conf:.0%} < {MIN_CONFIDENCE_TO_STORE:.0%}",
+                            "lesson not stored")
                 log_event("rsi_lesson_below_threshold", confidence=conf)
                 continue
             rec = store.add_lesson({
@@ -287,7 +307,17 @@ class CriticAgent:
             })
             stats["stored"] += 1
             stats["lessons"].append(rec)
+            if ft:
+                ft.step("rsi", f"💡 LESSON STORED — confidence {conf:.0%}", lesson[:200])
             log_event("rsi_lesson_stored", confidence=round(conf, 3), lesson=lesson[:80])
+
+        if ft:
+            try:
+                ft.record.reply = (f"Evaluated {stats['evaluated']} · stored "
+                                   f"{stats['stored']} lesson(s) · skipped {stats['skipped']}")
+                ft.commit()
+            except Exception:  # noqa: BLE001
+                pass
         log_event("rsi_healing_cycle", **{k: v for k, v in stats.items() if k != "lessons"})
         return stats
 
@@ -329,6 +359,12 @@ class CriticAgent:
                          "I'll find the closest in-stock option for you."))
             engine = "fallback"
         return {"answer": answer, "lessons_used": lessons, "engine": engine}
+
+
+def _topic(conversation: str) -> str:
+    """The customer's last question, for a compact /dev label."""
+    asks = re.findall(r"(?:customer|user)\s*:\s*(.+)", conversation, re.IGNORECASE)
+    return (asks[-1] if asks else conversation[:80]).strip()[:90]
 
 
 def _now() -> str:

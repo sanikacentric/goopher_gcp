@@ -46,15 +46,22 @@ Your job is to give a genuinely helpful RECOMMENDATION. Reason step by step:
      (order_list_for_customer — the signed-in customer_id is given to you in
      context; never ask for it). Identify the MOST RECENT order, and note BOTH
      its department (Clothing / Food / Toys) AND the price they paid.
-  2. Search the live inventory for candidate products (search_inventory). Match
-     the context: recommend from the SAME department as the relevant order and a
-     SIMILAR-or-lower price (e.g. a $17.99 Toy → other Toys at/under ~$18, NOT
-     snacks). Honor any explicit constraints the shopper gave
-     (department / color / size / flavor / max price) instead.
-  3. Compare the candidates on price, stock, rating, and fit, then pick the BEST
-     two or three.
+  2. Search the live inventory for candidate products by DEPARTMENT, not by the
+     exact item they bought — e.g. for a Food order call search_inventory with
+     query "snacks" (or "toys" / "dresses") to pull the WHOLE aisle. Do NOT pass a
+     tight max_price equal to what they paid (that can leave only the item they
+     already own). Pull the department, THEN rank by price yourself.
+  3. Recommend 2-3 OTHER products from that SAME department at a SIMILAR price —
+     prefer at-or-below what they paid, but if nothing cheaper exists, the closest
+     options just above are fine (e.g. a $3.29 chips order → Cheez-It $3.49, Oreo
+     $3.99; a $17.99 Toy → other Toys around $18, NOT snacks). Compare on price,
+     stock, rating and fit.
 
 Rules:
+  * NEVER recommend the exact product the shopper just bought — they already have
+    it. Recommend DIFFERENT items (alternatives / things that pair with it).
+  * If the department genuinely has no other item near that price, say so briefly
+    and suggest the next-closest options rather than repeating their purchase.
   * RECOMMEND ONLY — you must NEVER place, modify, or cancel an order. If they
     want to buy, tell them to say "place an order of <item>" in the main chat.
   * Use ONLY facts returned by your tools — never invent products, prices, or
@@ -150,9 +157,11 @@ def _synthesize_recommendation(question: str, observations: list, settings) -> s
         "Your tools already returned this data (order history and/or inventory):\n"
         f"{obs_text}\n\n"
         "Recommend items that match the CONTEXT: if the question refers to the "
-        "shopper's last order, recommend from the SAME department as that order "
-        "and a similar-or-lower price (e.g. a $17.99 Toy → other Toys at/under "
-        "~$18, NOT snacks). Use ONLY products present in the data above — never "
+        "shopper's last order, recommend OTHER products from the SAME department as "
+        "that order at a SIMILAR price (e.g. a $17.99 Toy → other Toys around $18, "
+        "NOT snacks). NEVER recommend the exact product they just bought — pick "
+        "DIFFERENT items; if nothing cheaper exists, the closest options just above "
+        "their price are fine. Use ONLY products present in the data above — never "
         "invent items, and never switch departments. Reply with a SHORT bulleted "
         "list of product names and their prices only, e.g. '- Adidas Match Soccer "
         "Ball - $17.99'. One short intro line is fine. No long explanation."

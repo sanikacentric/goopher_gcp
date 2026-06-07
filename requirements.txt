@@ -30,3 +30,4 @@ opentelemetry-exporter-gcp-trace>=1.9
 pytest>=8.3
 pytest-asyncio>=0.25
 httpx>=0.28
+openpyxl>=3.1  # parse .xlsx bulk-order uploads

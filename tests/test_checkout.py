@@ -232,6 +232,38 @@ def test_order_from_uploaded_file_places_structured_bulk_order():
     assert "unicorn" in out[0].lower()                     # reported as not found
 
 
+def test_bulk_order_from_xlsx_uses_file_items_not_default_basket():
+    """An uploaded .xlsx (binary) must be parsed by product_name/sku + quantity —
+    NOT decoded as text (which silently fell back to the default basket)."""
+    import base64
+    import io
+    import openpyxl
+    from backend.app.models.schemas import Attachment
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["product_name", "order_quantity", "sku", "category"])
+    ws.append(["Cheez-It Original Baked Snack Crackers", 50, "FOOD-CHZ-2005", "Food"])
+    ws.append(["Coca-Cola Classic Soda", 120, "FOOD-COC-2004", "Food"])
+    ws.append(["LEGO Classic Creative Bricks Box", 5, "TOY-LEG-3002", "Toys"])
+    buf = io.BytesIO(); wb.save(buf)
+    att = Attachment(kind="file", filename="enterprise_bulk_order.xlsx",
+                     mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                     content_b64=base64.b64encode(buf.getvalue()).decode())
+
+    svc = AgentService()
+    out = svc._try_file_bulk_order("place a bulk order from the attached file", [att], "CUST-1001")
+    assert out is not None
+    cart = svc._last_checkout
+    assert cart and cart.get("ok") is True
+    names = " ".join(c["name"].lower() for c in cart["cart"])
+    assert "cheez" in names and "coca" in names and "lego" in names   # exactly the file's items
+    qty = {c["name"].split()[0].lower(): c["qty"] for c in cart["cart"]}
+    assert qty.get("cheez-it") == 50 and qty.get("coca-cola") == 120   # file quantities honored
+    # the default basket leaks a clothing dress (a.n.a) — must NOT be here
+    assert "a.n.a" not in names and "dress" not in names
+
+
 def test_place_bulk_order_persists_multi_item_order():
     res = place_bulk_order("CUST-1001")
     assert res["ok"] is True

@@ -656,6 +656,42 @@ class AgentService:
                 out.append((item, max(1, min(qty, 500))))
         return out
 
+    @staticmethod
+    def _parse_tabular(rows) -> list[tuple[str, str, int]]:
+        """Parse a SPREADSHEET/CSV order (xlsx or csv) into [(name, sku, qty), ...].
+
+        `rows` is a list of row tuples; the first row is the header. We locate the
+        product-name, SKU, and quantity columns by header name (tolerant of case,
+        spaces, underscores). Returns [] if it isn't a recognizable order table —
+        so a plain-text .txt file falls back to the line parser."""
+        import re
+        rows = [r for r in (rows or []) if r is not None]
+        if not rows:
+            return []
+        norm = lambda c: re.sub(r"[^a-z0-9]+", "_", str(c if c is not None else "").strip().lower()).strip("_")
+        header = [norm(c) for c in rows[0]]
+        find = lambda cands: next((i for i, h in enumerate(header) if h in cands), -1)
+        qty_i = find({"order_quantity", "quantity", "qty", "units", "order_qty", "count"})
+        sku_i = find({"sku", "product_sku", "item_sku", "variant_id", "product_code"})
+        name_i = find({"product_name", "product", "item", "item_name", "name",
+                       "description", "product_description"})
+        if name_i < 0 and sku_i < 0:
+            return []                              # not an order table → caller falls back
+        cell = lambda r, i: ("" if not (0 <= i < len(r)) or r[i] is None else str(r[i]).strip())
+        out: list[tuple[str, str, int]] = []
+        for r in rows[1:]:
+            name, sku = cell(r, name_i), cell(r, sku_i)
+            if not name and not sku:
+                continue
+            qty = 1
+            if qty_i >= 0:
+                try:
+                    qty = int(float(cell(r, qty_i) or 1))
+                except Exception:  # noqa: BLE001
+                    qty = 1
+            out.append((name, sku, max(1, min(qty, 999))))
+        return out
+
     def _resolve_order_line(self, query: str):
         """Resolve one order-file line to (variant_id, product_name) or None.
         Accepts a SKU/variant token or a free-text product name; never substitutes."""
@@ -690,20 +726,47 @@ class AgentService:
         if not (self._is_order_intent(low) or "order" in low or "checkout" in low):
             return None
         try:
-            raw = base64.b64decode(file_att.content_b64).decode("utf-8", errors="ignore")
+            raw_bytes = base64.b64decode(file_att.content_b64)
         except Exception:
             return None
-        lines = self._parse_order_file(raw)
-        if not lines:
+        fname = (getattr(file_att, "filename", "") or "").lower()
+        mime = (getattr(file_att, "mime_type", "") or "").lower()
+
+        # Parse the file into (name, sku, qty) triples — supporting Excel (.xlsx),
+        # CSV (with headers), and plain text. An .xlsx is a binary ZIP, so it must
+        # be parsed with openpyxl, NOT decoded as text (that returned garbage →
+        # empty → the default basket).
+        triples: list[tuple[str, str, int]] = []
+        is_xlsx = raw_bytes[:2] == b"PK" or fname.endswith(".xlsx") or "spreadsheet" in mime or "excel" in mime
+        if is_xlsx:
+            try:
+                import io
+                import openpyxl  # lazy
+                wb = openpyxl.load_workbook(io.BytesIO(raw_bytes), read_only=True, data_only=True)
+                rows = list(wb.active.iter_rows(values_only=True))
+                triples = self._parse_tabular(rows)
+            except Exception as exc:  # noqa: BLE001
+                log_event("xlsx_parse_failed", reason=str(exc))
+                return None
+        else:
+            text = raw_bytes.decode("utf-8", errors="ignore")
+            if fname.endswith(".csv") or "csv" in mime or ("," in text and "," in (text.splitlines() or [""])[0]):
+                import csv
+                import io
+                triples = self._parse_tabular(list(csv.reader(io.StringIO(text))))
+            if not triples:  # plain-text order list (one item/line)
+                triples = [(item, "", qty) for (item, qty) in self._parse_order_file(text)]
+        if not triples:
             return None
 
         variant_ids, quantities, names, not_found = [], [], [], []
-        for query, qty in lines:
-            hit = self._resolve_order_line(query)
+        for name, sku, qty in triples:
+            hit = (self._resolve_order_line(sku) if sku else None) or \
+                  (self._resolve_order_line(name) if name else None)
             if hit:
                 variant_ids.append(hit[0]); quantities.append(qty); names.append(hit[1])
             else:
-                not_found.append(query)
+                not_found.append(name or sku)
 
         if not variant_ids:
             msg = ("I read your file but couldn't match any of its items to the "

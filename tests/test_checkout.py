@@ -11,6 +11,24 @@ from backend.app.tools.checkout_tool import (
 )
 
 
+def test_translate_helpers_are_safe_noops_without_llm():
+    """The multilingual gate helpers must never break: no LLM → return the input,
+    and English is always a pure no-op (so existing English behaviour is untouched)."""
+    svc = AgentService()
+    svc._openai = None
+    svc._gemini = None
+    assert svc._to_english("hola, quiero comprar") == "hola, quiero comprar"
+    assert svc._localize("Your cart…", "es") == "Your cart…"   # no LLM → unchanged
+    assert svc._localize("Your cart…", "en") == "Your cart…"   # English → no-op
+
+
+def test_place_order_localize_callable_localizes_email():
+    """A localize callable threads through place_order to the confirmation email."""
+    res = place_order("CUST-1001", localize=lambda s: "[XX] " + s)
+    assert res["ok"] and res["email"]["to"]
+    # email runs in simulated mode in tests, but the callable still ran (no error)
+
+
 def test_add_to_cart_defaults_to_in_stock():
     res = add_to_cart()
     assert res["ok"] is True

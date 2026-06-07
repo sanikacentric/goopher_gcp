@@ -408,8 +408,18 @@ class AgentService:
             # An uploaded order FILE ("order these items") → structured bulk order
             # from the file's contents. Checked first since the file content (not
             # the chat text) holds the items. Falls back to normal checkout.
+            # The deterministic checkout gate detects intent with ENGLISH keywords,
+            # so a non-English order ("¿Puedes colocar un lote…?") would slip past
+            # it to the LLM and get placed WITHOUT the confirm-before-charge step.
+            # Translate to English JUST for the gate (intent + product resolution);
+            # the gate then localizes its reply + the email back to `language`.
+            gate_text = text
+            if (language != "en" and not text.lstrip().startswith("__bulk_confirm__")
+                    and self._looks_orderish(text)):
+                gate_text = self._to_english(text)
             checkout = (self._try_file_bulk_order(req.message, req.attachments, customer_id)
-                        or self._try_checkout(text, customer_id, confirm=req.confirm))
+                        or self._try_checkout(gate_text, customer_id,
+                                              confirm=req.confirm, language=language))
             # RSI hand-off: if the gate couldn't RESOLVE the item (a "we don't carry
             # X" refusal) AND a learned lesson applies, don't return the bare
             # deterministic refusal — fall through to the LLM/fallback path so the
@@ -513,6 +523,11 @@ class AgentService:
                 for name in used_tools:
                     ft.step("tool", name, "tool executed (backup)", tool=name)
                 path = "fallback"
+
+            # The deterministic checkout gate replies in English; localize it to the
+            # customer's language (the ADK/fallback paths already answer in-language).
+            if path == "checkout" and language and language != "en":
+                reply = self._localize(reply, language)
 
             # Surface RSI in the reply meta + /dev when a learned lesson shaped an
             # LLM answer (not the deterministic checkout path).
@@ -817,7 +832,8 @@ class AgentService:
                       + ", ".join(not_found[:10]))
         return reply, ["checkout_agent"]
 
-    def _try_checkout(self, text: str, customer_id: str, confirm: bool = False):
+    def _try_checkout(self, text: str, customer_id: str, confirm: bool = False,
+                      language: str = "en"):
         """
         Handle checkout intents ("place an order" / bulk) DETERMINISTICALLY.
 
@@ -827,6 +843,10 @@ class AgentService:
         the same request with confirm=True), it actually places the order and
         returns the staged receipt. Sets self._last_checkout (cart + payload the
         extension UI needs). Returns (reply, used_tools) or None if not a checkout.
+
+        `text` is expected in English (run_turn translates non-English messages for
+        the gate). `language` is the customer's language — used to localize the
+        order-confirmation EMAIL to their language.
         """
         import re
         from ..tools.checkout_tool import place_bulk_order, place_order
@@ -846,12 +866,14 @@ class AgentService:
             self._last_checkout = self._preview_payload(spec)
             return self._format_preview(self._last_checkout), ["checkout_agent"]
 
-        # STEP 2 — confirmed → actually place the order.
+        # STEP 2 — confirmed → actually place the order. Localize the confirmation
+        # email to the customer's language (no-op for English).
+        _loc = (lambda s: self._localize(s, language)) if language and language != "en" else None
         vids, qtys = spec["variant_ids"], spec["quantities"]
         if bulk or len(vids) > 1:
-            data = place_bulk_order(customer_id, variant_ids=vids, quantities=qtys)
+            data = place_bulk_order(customer_id, variant_ids=vids, quantities=qtys, localize=_loc)
         else:
-            data = place_order(customer_id, variant_id=vids[0], qty=qtys[0])
+            data = place_order(customer_id, variant_id=vids[0], qty=qtys[0], localize=_loc)
         self._last_checkout = self._checkout_payload(data, bulk=bulk)
         return (self._format_bulk_checkout(data) if bulk
                 else self._format_checkout(data)), ["checkout_agent"]
@@ -1105,6 +1127,85 @@ class AgentService:
         except (AttributeError, IndexError):
             return ""
         return "".join(getattr(p, "text", "") or "" for p in parts).strip()
+
+    # ----- multilingual helpers (so the deterministic gate works in any language) -- #
+    _LANG_NAMES = {
+        "en": "English", "es": "Spanish", "fr": "French", "de": "German",
+        "hi": "Hindi", "zh": "Chinese", "ja": "Japanese", "pt": "Portuguese",
+        "it": "Italian", "ar": "Arabic", "ko": "Korean", "ru": "Russian",
+        "nl": "Dutch", "tr": "Turkish", "pl": "Polish",
+    }
+
+    def _llm_text(self, prompt: str, max_tokens: int = 512) -> str:
+        """Single-shot completion via the active provider; '' on failure / no LLM."""
+        if self._openai is not None:
+            try:
+                r = self._openai.chat.completions.create(
+                    model=_settings.openai_model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.0, max_tokens=max_tokens)
+                return (r.choices[0].message.content or "").strip()
+            except Exception as exc:  # noqa: BLE001
+                log_event("llm_text_failed", provider="openai", reason=str(exc))
+        if self._gemini is not None:
+            try:
+                r = self._gemini.generate_content(
+                    prompt, generation_config={"max_output_tokens": max_tokens})
+                return self._extract_text(r)
+            except Exception as exc:  # noqa: BLE001
+                log_event("llm_text_failed", provider="gemini", reason=str(exc))
+        return ""
+
+    # Order-intent hints across common languages — used ONLY to decide whether a
+    # non-English message is worth translating for the gate (so plain questions
+    # stay fast). A quantity digit also triggers it. Not used for parsing.
+    _ORDER_HINTS = (
+        "order", "buy", "purchase", "checkout", "cart",                # en
+        "comprar", "compra", "pedir", "ordenar", "colocar", "pedido",
+        "lote", "carrito",                                             # es
+        "acheter", "commander", "commande", "panier",                  # fr
+        "kaufen", "bestellen", "bestellung", "warenkorb",              # de
+        "encomendar", "comprar",                                       # pt
+        "compra", "ordina", "ordinare", "carrello",                    # it
+        "खरीद", "ऑर्डर", "खरीदना",                                       # hi
+        "购买", "买", "订单", "下单",                                    # zh
+        "注文", "購入", "買う",                                          # ja
+        "주문", "구매",                                                  # ko
+        "заказ", "купить",                                             # ru
+    )
+
+    def _looks_orderish(self, text: str) -> bool:
+        """Cheap, language-agnostic check: is this message plausibly a purchase?
+        (a multilingual order word, or a quantity digit). Avoids translating every
+        non-English question."""
+        import re
+        low = (text or "").lower()
+        return bool(re.search(r"\d", low) or any(h in low for h in self._ORDER_HINTS))
+
+    def _to_english(self, text: str) -> str:
+        """Best-effort translate an inbound message to English so the DETERMINISTIC
+        checkout gate (English intent/keyword detection) catches orders in ANY
+        language. Returns the original text if no LLM is available or on error."""
+        if not text or not text.strip():
+            return text
+        out = self._llm_text(
+            "Translate the following customer message to English. Keep product "
+            "names, numbers and order IDs. Output ONLY the translation, no quotes.\n\n"
+            + text, max_tokens=200)
+        return out or text
+
+    def _localize(self, text: str, language: str) -> str:
+        """Best-effort translate an English reply/email into the customer's language.
+        No-op for English or when no LLM is available (so English is unchanged)."""
+        if not text or not language or language == "en":
+            return text
+        lang = self._LANG_NAMES.get(language, language)
+        out = self._llm_text(
+            f"Translate the text below into {lang}. Keep product names, order IDs "
+            f"(e.g. ORD-50080), tracking numbers, prices, numbers, emojis and line "
+            f"breaks EXACTLY as-is. Output ONLY the translation.\n\n" + text,
+            max_tokens=1200)
+        return out or text
 
     @staticmethod
     def _parse_filters(lowered: str):

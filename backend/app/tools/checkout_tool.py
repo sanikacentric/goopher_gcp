@@ -146,7 +146,8 @@ def process_payment(amount: float, method: str = "card") -> dict:
     }
 
 
-def place_order(customer_id: str, variant_id: str = "", qty: int = 1) -> dict:
+def place_order(customer_id: str, variant_id: str = "", qty: int = 1,
+                localize=None) -> dict:
     """
     Full checkout: add to cart -> simulate payment -> persist the order.
 
@@ -214,7 +215,7 @@ def place_order(customer_id: str, variant_id: str = "", qty: int = 1) -> dict:
         "message": (f"Payment successful — order {order_id} placed! "
                     f"${total:.2f} charged. Estimated delivery 2026-06-08."),
     }
-    data["email"] = _notify_order_email(data)   # best-effort confirmation email
+    data["email"] = _notify_order_email(data, localize)   # best-effort confirmation email
     return data
 
 
@@ -229,7 +230,8 @@ def _run_fulfillment_safe(order_id: str, customer_id: str) -> dict:
 
 
 def place_bulk_order(customer_id: str, variant_ids: list[str] | None = None,
-                     qty_each: int = 1, quantities: list[int] | None = None) -> dict:
+                     qty_each: int = 1, quantities: list[int] | None = None,
+                     localize=None) -> dict:
     """
     High-volume checkout: place ONE order containing MULTIPLE line items.
 
@@ -321,15 +323,16 @@ def place_bulk_order(customer_id: str, variant_ids: list[str] | None = None,
         "message": (f"Payment successful — bulk order {order_id} placed with "
                     f"{len(items)} item(s), ${total:.2f} charged."),
     }
-    data["email"] = _notify_order_email(data)   # best-effort confirmation email
+    data["email"] = _notify_order_email(data, localize)   # best-effort confirmation email
     return data
 
 
-def _notify_order_email(order: dict) -> dict:
-    """Send the order-confirmation email; best-effort, never raises."""
+def _notify_order_email(order: dict, localize=None) -> dict:
+    """Send the order-confirmation email; best-effort, never raises.
+    `localize` (optional) translates the subject/body to the customer's language."""
     try:
         from .email_tool import send_order_email
-        return send_order_email(order)
+        return send_order_email(order, localize=localize)
     except Exception as exc:  # noqa: BLE001
         log_event("order_email_failed", reason=str(exc))
         return {"sent": False, "mode": "error", "detail": str(exc)[:120]}

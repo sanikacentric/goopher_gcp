@@ -68,6 +68,28 @@ def test_disabled_short_circuits(monkeypatch):
     assert et.send_order_email(ORDER)["mode"] == "disabled"
 
 
+def test_localize_callable_translates_subject_and_body(monkeypatch):
+    """A non-English order passes a localize callable → the email is translated."""
+    monkeypatch.setattr(et, "get_settings",
+                        lambda: _settings(smtp_host="smtp.x", smtp_user="u", smtp_password="p"))
+    cap = {}
+    monkeypatch.setattr(et, "_send_smtp", lambda s, to, sub, body: cap.update(sub=sub, body=body))
+    r = et.send_order_email(ORDER, localize=lambda s: "[ES] " + s)
+    assert r["sent"] and cap["sub"].startswith("[ES] ") and cap["body"].startswith("[ES] ")
+
+
+def test_localize_failure_falls_back_and_still_sends(monkeypatch):
+    """If translation throws, the email still sends in English (never blocks)."""
+    monkeypatch.setattr(et, "get_settings",
+                        lambda: _settings(smtp_host="smtp.x", smtp_user="u", smtp_password="p"))
+    cap = {}
+    monkeypatch.setattr(et, "_send_smtp", lambda s, to, sub, body: cap.update(sub=sub))
+    def boom(_s):
+        raise RuntimeError("translate down")
+    r = et.send_order_email(ORDER, localize=boom)
+    assert r["sent"] and "ORD-1" in cap["sub"]   # fell back to the English subject
+
+
 # --- orders attach the email status (every path goes through these) --------- #
 def test_place_order_attaches_email():
     res = place_order("CUST-1001")

@@ -61,9 +61,10 @@ def _build_email(order: dict) -> tuple[str, str]:
     return subject, body
 
 
-def send_order_email(order: dict, to: Optional[str] = None) -> dict:
+def send_order_email(order: dict, to: Optional[str] = None, localize=None) -> dict:
     """Send an order-confirmation email. Best-effort: returns
-    {sent, mode, to, detail} and NEVER raises."""
+    {sent, mode, to, detail} and NEVER raises. `localize` (optional callable)
+    translates the subject/body into the customer's language."""
     settings = get_settings()
     to = to or settings.notify_email
     result = {"sent": False, "mode": "disabled", "to": to, "detail": ""}
@@ -71,6 +72,11 @@ def send_order_email(order: dict, to: Optional[str] = None) -> dict:
         return result
     try:
         subject, body = _build_email(order)
+        if localize is not None:
+            try:
+                subject, body = localize(subject), localize(body)
+            except Exception as exc:  # noqa: BLE001 - never let i18n break the email
+                log_event("order_email_localize_failed", reason=str(exc))
         if settings.smtp_host and settings.smtp_user and settings.smtp_password:
             _send_smtp(settings, to, subject, body)
             result.update(sent=True, mode="smtp")

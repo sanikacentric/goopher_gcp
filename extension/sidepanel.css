@@ -14,7 +14,8 @@
   --gp-primary: var(--g-blue);            /* primary action (Send, login) */
   --gp-primary-2: var(--g-blue-2);
   --gp-accent: var(--g-blue);
-  --gp-grad: linear-gradient(135deg, #4285f4, #1a73e8);   /* user bubble / Send */
+  /* The signature Google four-color sweep — used on the user bubble + Send */
+  --gp-grad: linear-gradient(115deg, #4285f4 0%, #34a853 42%, #fbbc04 66%, #ea4335 100%);
   --gp-ink: #e8eaed;                      /* light text on black */
   --gp-muted: #9aa0a6;                    /* Google grey */
   --gp-bg: #0b0c10;                       /* near-black background */
@@ -56,9 +57,9 @@ body {
   box-shadow: 0 8px 18px -6px rgba(66, 133, 244, .55);
 }
 .gp-title {
-  font-weight: 800; letter-spacing: -.2px; font-size: 16px; line-height: 1;
-  /* GOOPHER wordmark in the four Google colors */
-  background: linear-gradient(90deg, var(--g-blue) 0%, var(--g-red) 34%, var(--g-yellow) 64%, var(--g-green) 100%);
+  font-weight: 800; letter-spacing: .2px; font-size: 17px; line-height: 1;
+  /* GOOPHER wordmark in the four Google colors (same sweep as the buttons) */
+  background: linear-gradient(100deg, #4285f4 0%, #34a853 42%, #fbbc04 66%, #ea4335 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 .gp-subtitle { font-size: 11px; color: var(--gp-muted); margin-top: 2px; }
@@ -80,7 +81,8 @@ body {
 .gp-primary {
   background: var(--gp-grad); color: #fff; border: none; border-radius: 11px;
   padding: 11px 16px; font-weight: 700; cursor: pointer; font-family: inherit;
-  box-shadow: 0 10px 20px -8px rgba(66, 133, 244, .6); transition: transform .12s ease, filter .12s ease;
+  text-shadow: 0 1px 2px rgba(0,0,0,.30);   /* keeps "Send" crisp over the yellow band */
+  box-shadow: 0 10px 22px -8px rgba(0,0,0,.55); transition: transform .12s ease, filter .12s ease;
 }
 .gp-primary:hover { filter: brightness(1.06); transform: translateY(-1px); }
 .gp-primary:active { transform: translateY(0); }
@@ -109,7 +111,8 @@ body {
 @keyframes gp-pop { from { opacity: 0; transform: translateY(6px) scale(.98); } }
 .gp-msg.user {
   align-self: flex-end; background: var(--gp-grad); color: #fff;
-  border-bottom-right-radius: 6px; box-shadow: 0 8px 18px -8px rgba(66,133,244,.55);
+  text-shadow: 0 1px 2px rgba(0,0,0,.30);   /* legible white text across all four colors */
+  border-bottom-right-radius: 6px; box-shadow: 0 8px 20px -8px rgba(0,0,0,.55);
 }
 .gp-msg.bot {
   align-self: flex-start; background: var(--gp-bubble-bot); color: var(--gp-ink);

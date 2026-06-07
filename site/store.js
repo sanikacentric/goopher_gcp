@@ -23,30 +23,19 @@ function iconFor(p) {
   return DEPT_ICON[p.department] || "🛍️";
 }
 
-// Real product photos: map each product to a category-appropriate keyword and
-// pull a stable image from a free stock-photo CDN (no API key). The `lock` keeps
-// the SAME photo for a given SKU across reloads. On any load error we fall back
-// to the emoji, so the grid never breaks.
-const IMG_KW = [
-  [/chip/i, "potato,chips"], [/oreo|cookie/i, "cookies"], [/peanut|nuts/i, "peanuts"],
-  [/cola|soda/i, "soda,can"], [/cheez|cracker/i, "crackers"], [/\bbar\b|granola/i, "granola,bar"],
-  [/denim|jean/i, "jeans"], [/maxi|midi|dress|wrap|tiered|sleeve|skirt/i, "dress,fashion"],
-  [/soccer|football/i, "soccer,ball"], [/basketball/i, "basketball"], [/ball/i, "ball,sport"],
-  [/lego|brick/i, "lego,bricks"], [/nerf|blaster|dart/i, "toy,blaster"],
-  [/play-?doh|dough|clay/i, "modeling,clay"], [/hot ?wheels|car/i, "toy,car"],
-  [/puzzle/i, "jigsaw,puzzle"], [/doll/i, "doll"],
-];
-const DEPT_KW = { Clothing: "dress,fashion", Food: "snack,food", Toys: "toy" };
-
-function hashNum(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return Math.abs(h) % 100000;
+// Product graphics: render the product's emoji as a CRISP, CONSISTENT flat icon
+// via the Twemoji CDN (clean vector art — never a random photo, a face, or
+// off-topic content). Each product always shows the correct category icon.
+function twemojiCode(emoji) {
+  const cps = [];
+  for (const ch of emoji) {
+    const cp = ch.codePointAt(0);
+    if (cp !== 0xfe0f) cps.push(cp.toString(16)); // drop the VS16 selector
+  }
+  return cps.join("-");
 }
 function imgUrl(p) {
-  let kw = DEPT_KW[p.department] || "product";
-  for (const [re, k] of IMG_KW) if (re.test(p.name)) { kw = k; break; }
-  return `https://loremflickr.com/600/600/${kw}?lock=${hashNum(p.sku)}`;
+  return `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${twemojiCode(iconFor(p))}.svg`;
 }
 
 function stars(rating) {

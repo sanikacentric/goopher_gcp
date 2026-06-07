@@ -14,11 +14,12 @@
       body {
         margin: 0; background: var(--bg); color: var(--text);
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        height: 100vh; display: flex; flex-direction: column;
+        min-height: 100vh; display: flex; flex-direction: column;   /* whole page scrolls */
       }
       header {
         padding: 14px 22px; background: var(--panel); border-bottom: 1px solid var(--border);
         display: flex; align-items: center; justify-content: space-between;
+        position: sticky; top: 0; z-index: 50;   /* title/live stays visible while scrolling */
       }
       .brand { display: flex; align-items: center; gap: 12px; }
       .brand .logo { font-size: 26px; }
@@ -71,7 +72,7 @@
       .g-btn.sim { border-color: #1f6feb; color: #9cc4ff; padding: 5px 10px; font-weight: 400; font-size: 12px; }
       .g-btn.restore { border-color: #2ea043; background: #18351f; color: #9be8a8; font-weight: 700; }
 
-      main { flex: 1; overflow-y: auto; padding: 18px 22px; }
+      main { padding: 18px 22px; }   /* flows in the document so logs aren't trapped in a tiny scroll box */
       .empty { color: var(--muted); text-align: center; margin-top: 60px; font-size: 15px; }
 
       .turn {

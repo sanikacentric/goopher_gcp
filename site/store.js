@@ -28,7 +28,8 @@ function iconFor(p) {
 // museum garment shots so the clothing cards vary. The emoji is the fallback.
 const PHOTO = [
   [/cheez|cracker/i, "crackers.jpg"],
-  [/cola|soda/i, "soda.jpg"],
+  // word-bounded so "choCOLAte" (KIND bars, Oreo) does NOT match the soda image
+  [/coca|\bcola\b|\bsoda\b/i, "soda.jpg"],
   [/kind|granola/i, "granola.jpg"],
   [/chip/i, "chips.jpg"],
   [/oreo|cookie/i, "oreo.jpg"],

@@ -202,6 +202,15 @@ body {
 .gp-mic.listening { background: var(--g-red); border-color: var(--g-red); color: #fff; animation: gp-pulse 1s infinite; }
 @keyframes gp-pulse { 0% { box-shadow: 0 0 0 0 rgba(234,67,53,.5); } 70% { box-shadow: 0 0 0 9px rgba(234,67,53,0); } 100% { box-shadow: 0 0 0 0 rgba(234,67,53,0); } }
 
+/* Shopping-Advisor (🧠) button — Google four-color tile (matches the brand
+   logo) so it reads as a "Google AI" action, not a pink emoji. */
+#adviseBtn {
+  border: none; color: #fff;
+  background: conic-gradient(from 140deg, var(--g-blue), var(--g-green), var(--g-yellow), var(--g-red), var(--g-blue));
+  box-shadow: 0 6px 16px -6px rgba(66,133,244,.55);
+}
+#adviseBtn:hover { transform: translateY(-1px); filter: brightness(1.06); box-shadow: 0 8px 18px -6px rgba(52,168,83,.55); }
+
 /* ---------------- Header cart / orders ---------------- */
 .gp-header-actions { display: flex; align-items: center; gap: 12px; }
 .gp-cart-btn {

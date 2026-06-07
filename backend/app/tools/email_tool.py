@@ -117,7 +117,12 @@ def _send_resend(settings, to: str, subject: str, body: str) -> None:
     req = urllib.request.Request(
         "https://api.resend.com/emails", data=payload, method="POST",
         headers={"Authorization": f"Bearer {settings.resend_api_key}",
-                 "Content-Type": "application/json"})
+                 "Content-Type": "application/json",
+                 # Resend sits behind Cloudflare, whose bot-protection BLOCKS the
+                 # default "Python-urllib/x.y" agent (Cloudflare error 1010 → 403).
+                 # A normal UA + Accept clears it.
+                 "User-Agent": "GOOPHER-Order-Mailer/1.0 (+https://goopher.app)",
+                 "Accept": "application/json"})
     try:
         urllib.request.urlopen(req, timeout=10).read()
     except urllib.error.HTTPError as exc:

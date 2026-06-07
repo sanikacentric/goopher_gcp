@@ -24,7 +24,7 @@ Python transacts — AI experience with enterprise control, on Google Cloud."*
 
 ## PART A — THE LIVE JOURNEY (7 beats, ~12 min)
 
-### Beat 1 · TEXT — a simple question (the easy win)
+### Beat 1 · TEXT — a simple question (the easy win)  ·  ⏱ ~1.5m
 - **SAY:** "Let's start how a customer would — just ask a question."
 - **DO:** type **"do you have oreo cookies?"** → Send.
 - **BEHIND THE SCENES:**
@@ -42,8 +42,11 @@ Python transacts — AI experience with enterprise control, on Google Cloud."*
   search. *Fix:* tokenized scoring + department detection in `database.py`. *Trade-off:* we accept
   ~4–5 LLM calls/turn (cost/latency) **in exchange for visible, real agent orchestration** — the thing
   the brief asked us to prove. Deterministic pre-processing keeps the cheap work off the LLM.
+- **🧯 IF IT BREAKS:** slow first reply → *"that's a scale-to-zero cold start; in production we keep one
+  warm instance — watch it answer now."* Any error → refresh; the **deterministic fallback** still returns
+  a grounded answer.
 
-### Beat 2 · TEXT — place an order (safety + the email)
+### Beat 2 · TEXT — place an order (safety + the email)  ·  ⏱ ~2.5m
 - **SAY:** "Now the hard part everyone gets wrong — letting AI *act* on an order, safely."
 - **DO:** type **"can you please order oreo cookies"** → a **cart preview** appears with
   **🟡 'Please confirm — should I place this order?'** → click **✅ Confirm order**.
@@ -63,8 +66,10 @@ Python transacts — AI experience with enterprise control, on Google Cloud."*
   *Email trade-off:* it's a **best-effort side-effect after the order commits** (try/except), so a mail
   outage can never fail a paid order. *(War-story:* the email 403 was a **Cloudflare User-Agent block**,
   not auth — we read the error *body*, not the status.)
+- **🧯 IF IT BREAKS:** email not in inbox → check spam, and say *"email is a best-effort side-effect — the
+  order still committed; the `/dev` EMAIL step confirms it was sent."* No confirm button → re-send the order text.
 
-### Beat 3 · BULK ORDER — CSV/Excel upload (enterprise + human-in-the-loop)
+### Beat 3 · BULK ORDER — CSV/Excel upload (enterprise + human-in-the-loop)  ·  ⏱ ~2.5m
 - **SAY:** "B2B buyers don't chat item-by-item — they send a purchase order. Watch."
 - **DO:** 📎 attach **`enterprise_bulk_order_goopher.xlsx`** (or a `.csv`) → type **"place a bulk
   order from the attached file"** → a **multi-line cart preview** appears → **✅ Confirm** →
@@ -82,8 +87,10 @@ Python transacts — AI experience with enterprise control, on Google Cloud."*
   back to a default basket. *Decision:* **branch on the file's real format and parse it**; add a test
   asserting the parsed items. *Why:* "know your bytes" — a binary isn't text; and a silent fallback hides
   the real failure. *Trade-off:* added `openpyxl` as a dependency to gain reliable enterprise PO ingestion.
+- **🧯 IF IT BREAKS:** a line doesn't match → *"it refuses rather than substitutes — by design; it lists
+  exactly what it couldn't match."* Upload hiccup → use the `.csv` version of the file.
 
-### Beat 4 · ADVISOR — recommendations you can *watch think* (explicit ReAct)
+### Beat 4 · ADVISOR — recommendations you can *watch think* (explicit ReAct)  ·  ⏱ ~1.5m
 - **SAY:** "Beyond answering, GOOPHER advises — and you can see it reason."
 - **DO:** tap **🧠 (Advisor)** or type **"recommend items based on my last order"** → a
   recommendation + a collapsible **PLAN → ACT → REASON** panel.
@@ -99,8 +106,10 @@ Python transacts — AI experience with enterprise control, on Google Cloud."*
   `thinking_budget=0` + a grounded synthesis safety net, and recommend **other** items in the same
   department near the price. *Trade-off:* ReAct is more transparent but less predictable, so we keep it
   **off the transactional path** — read-only only.
+- **🧯 IF IT BREAKS:** plan stalls → tap **🧠 again**; the grounded synthesis safety net still returns a
+  recommendation. (Tip: reset RSI lessons beforehand so the advisor demo is clean.)
 
-### Beat 5 · MIC — voice input (multimodal #1)
+### Beat 5 · MIC — voice input (multimodal #1)  ·  ⏱ ~1m
 - **SAY:** "Same brain, hands-free."
 - **DO:** click **🎤**, say **"do you have potato chips?"** (or "place an order of oreos").
 - **BEHIND THE SCENES:**
@@ -111,8 +120,10 @@ Python transacts — AI experience with enterprise control, on Google Cloud."*
 - **CHALLENGE & TRADE-OFF:** *Challenge:* the first words were dropped and a spoken "confirm order" was
   treated as a brand-new request. *Decision:* keep the mic "warm" and intercept confirmations locally.
   *Trade-off:* browser STT (free, zero infra) now; **clear path to CCAI / Speech-to-Text** for contact-center scale.
+- **🧯 IF IT BREAKS:** mic doesn't capture → it's a browser permission; just **type the same question** —
+  identical pipeline. (Always have the typed fallback ready.)
 
-### Beat 6 · VISION — "see it, shop it" (multimodal #2, the wow)
+### Beat 6 · VISION — "see it, shop it" (multimodal #2, the wow)  ·  ⏱ ~2m
 - **SAY:** "Now the new conversion surface — show a product to the camera."
 - **DO:** click **📷**, hold up the **soccer ball**, ask **"what's the price?"** → then **"place an
   order"** → **Confirm**.
@@ -125,8 +136,10 @@ Python transacts — AI experience with enterprise control, on Google Cloud."*
   budget) and originally **charged on capture**. *Decision:* unified `google.genai` + `thinking_budget=0`
   + add confirm-before-charge to the camera path too. *Why:* a safety invariant is only real if it holds
   on **every** modality.
+- **🧯 IF IT BREAKS:** recognition is off → re-show with better lighting or say the item name; *"the point
+  is the safe checkout gate, not the label."* Camera blocked → fall back to the typed order.
 
-### Beat 7 · CHANNEL — switch to Phone (voice) (multichannel)
+### Beat 7 · CHANNEL — switch to Phone (voice) (multichannel)  ·  ⏱ ~1.5m
 - **SAY:** "Same agent, any channel — here's the mobile experience."
 - **DO:** **Channel → Phone (voice)** → the panel re-skins as a **phone simulator**; ask anything;
   optionally switch **Language → Spanish** and order in Spanish.
@@ -142,6 +155,12 @@ Python transacts — AI experience with enterprise control, on Google Cloud."*
   (top of the pipeline), translate-for-the-gate, localize back. *Why:* a guardrail enforced by **English
   keywords isn't a guardrail in other languages.** *Trade-off:* one extra translate call per non-English
   order — gated so plain questions stay fast.
+- **🧯 IF IT BREAKS:** language slips to English → set **Language → Spanish explicitly**; the confirm +
+  localized email still demonstrate the flow. Phone skin looks off → it's a CSS skin; the backend is identical.
+
+> **⏱ Part A total ≈ 11–12 min.** Budget: Open ~1m · Part A ~12m · Part B (pick 3–4 of §8–16) ~10m ·
+> Finale (Guardian) ~3m · Close ~1m  → **~30 min**, leaving 10–15 for Q&A. If short on time, drop Beat 5
+> (mic) and keep Beats 2, 3, 6, 7 + the Guardian finale.
 
 ---
 

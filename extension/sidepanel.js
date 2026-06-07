@@ -7,7 +7,7 @@ import { criticFlag, criticHeal, getCustomer, getToken, getMyOrders, login, logo
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.7.2 — order-confirmation email after every placed order");
+console.log("GOOPHER side panel v0.7.3 — dark theme + Google brand colors");
 
 const els = {
   loginView: document.getElementById("loginView"),

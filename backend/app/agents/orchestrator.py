@@ -1136,6 +1136,25 @@ class AgentService:
         "nl": "Dutch", "tr": "Turkish", "pl": "Polish",
     }
 
+    def _genai_client(self):
+        """Lazy `google.genai` client — Vertex in the cloud, AI Studio with a key.
+        This is the SDK that actually reaches Vertex; the legacy `self._gemini`
+        (`google.generativeai`) cannot, which is why cloud translation needs this."""
+        if hasattr(self, "_genai_client_cache"):
+            return self._genai_client_cache
+        client = None
+        try:
+            from google import genai
+            if _settings.use_vertexai:
+                client = genai.Client(vertexai=True, project=_settings.google_cloud_project,
+                                      location=_settings.vertex_location)
+            elif _settings.google_api_key:
+                client = genai.Client(api_key=_settings.google_api_key)
+        except Exception as exc:  # noqa: BLE001
+            log_event("genai_client_unavailable", reason=str(exc))
+        self._genai_client_cache = client
+        return client
+
     def _llm_text(self, prompt: str, max_tokens: int = 512) -> str:
         """Single-shot completion via the active provider; '' on failure / no LLM."""
         if self._openai is not None:
@@ -1147,13 +1166,32 @@ class AgentService:
                 return (r.choices[0].message.content or "").strip()
             except Exception as exc:  # noqa: BLE001
                 log_event("llm_text_failed", provider="openai", reason=str(exc))
+        # google.genai (Vertex / AI Studio) — the path that works in the CLOUD.
+        try:
+            client = self._genai_client()
+            if client is not None:
+                from google.genai import types
+                cfg = {"max_output_tokens": max_tokens, "temperature": 0.0}
+                try:
+                    cfg["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+                except Exception:  # noqa: BLE001
+                    pass
+                resp = client.models.generate_content(
+                    model=_settings.gemini_model, contents=[prompt],
+                    config=types.GenerateContentConfig(**cfg))
+                txt = self._extract_text(resp)
+                if txt:
+                    return txt
+        except Exception as exc:  # noqa: BLE001
+            log_event("llm_text_failed", provider="genai", reason=str(exc))
+        # Legacy google.generativeai (local dev with an API key).
         if self._gemini is not None:
             try:
                 r = self._gemini.generate_content(
                     prompt, generation_config={"max_output_tokens": max_tokens})
                 return self._extract_text(r)
             except Exception as exc:  # noqa: BLE001
-                log_event("llm_text_failed", provider="gemini", reason=str(exc))
+                log_event("llm_text_failed", provider="gemini-legacy", reason=str(exc))
         return ""
 
     # Order-intent hints across common languages — used ONLY to decide whether a

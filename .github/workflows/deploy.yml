@@ -122,6 +122,7 @@ jobs:
           JWT: ${{ secrets.JWT_SECRET }}
           MASTER_PW: ${{ secrets.MASTER_PASSWORD }}
           ALLOWED: ${{ secrets.ALLOWED_EMAILS }}
+          RESEND: ${{ secrets.RESEND_API_KEY }}
         run: |
           # Sanitize: single tokens / single lines (env-var string can't contain
           # commas or newlines). The master password must NOT contain a comma.
@@ -129,6 +130,7 @@ jobs:
           JWT_CLEAN="$(printf '%s' "$JWT" | tr -d '\r\n')"
           PW_CLEAN="$(printf '%s' "$MASTER_PW" | tr -d '\r\n')"
           EMAILS_CLEAN="$(printf '%s' "${ALLOWED:-demo@goopher.app}" | tr -d '[:space:]')"
+          RESEND_CLEAN="$(printf '%s' "$RESEND" | tr -d '[:space:]')"
           # Write env vars to a YAML file so the (possibly punctuation-heavy)
           # master password can't break gcloud's comma-separated --set-env-vars.
           F=/tmp/envvars.yaml
@@ -145,6 +147,13 @@ jobs:
           echo "JWT_SECRET: \"${JWT_CLEAN}\""              >> "$F"
           echo "ALLOWED_EMAILS: \"${EMAILS_CLEAN}\""       >> "$F"
           echo "MASTER_PASSWORD: \"${PW_CLEAN}\""          >> "$F"
+          # Order-confirmation email via Resend (free tier). The test sender
+          # onboarding@resend.dev needs no domain verification but only delivers
+          # to the Resend account's own email — keep NOTIFY_EMAIL = that address.
+          # If RESEND_API_KEY secret is unset, this is "" → email stays simulated.
+          echo "NOTIFY_EMAIL: \"tungaresanika2@gmail.com\"" >> "$F"
+          echo "EMAIL_FROM: \"onboarding@resend.dev\""      >> "$F"
+          echo "RESEND_API_KEY: \"${RESEND_CLEAN}\""        >> "$F"
           gcloud run deploy "$SERVICE" \
             --image "gcr.io/${PROJ_CLEAN}/$SERVICE:${{ github.sha }}" \
             --region "$REGION" \

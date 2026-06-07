@@ -14,8 +14,9 @@
   --gp-primary: var(--g-blue);            /* primary action (Send, login) */
   --gp-primary-2: var(--g-blue-2);
   --gp-accent: var(--g-blue);
-  /* The signature Google four-color sweep — used on the user bubble + Send */
-  --gp-grad: linear-gradient(115deg, #4285f4 0%, #34a853 42%, #fbbc04 66%, #ea4335 100%);
+  /* Calm, professional Google-blue for the user bubble + Send (single hue, not a
+     loud rainbow). The four-color sweep is reserved for the small brand mark. */
+  --gp-grad: linear-gradient(135deg, #4f8df8 0%, #3f7ce0 100%);
   --gp-ink: #e8eaed;                      /* light text on black */
   --gp-muted: #9aa0a6;                    /* Google grey */
   --gp-bg: #0b0c10;                       /* near-black background */
@@ -57,9 +58,9 @@ body {
   box-shadow: 0 8px 18px -6px rgba(66, 133, 244, .55);
 }
 .gp-title {
-  font-weight: 800; letter-spacing: .2px; font-size: 17px; line-height: 1;
-  /* GOOPHER wordmark in the four Google colors (same sweep as the buttons) */
-  background: linear-gradient(100deg, #4285f4 0%, #34a853 42%, #fbbc04 66%, #ea4335 100%);
+  font-weight: 800; letter-spacing: .3px; font-size: 18px; line-height: 1;
+  /* GOOPHER wordmark in SOFTER Google colors — calmer, premium, not loud */
+  background: linear-gradient(100deg, #6fa3f7 0%, #5ec08e 40%, #f3cb5c 66%, #ef8279 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 .gp-subtitle { font-size: 11px; color: var(--gp-muted); margin-top: 2px; }
@@ -80,9 +81,9 @@ body {
 
 .gp-primary {
   background: var(--gp-grad); color: #fff; border: none; border-radius: 11px;
-  padding: 11px 16px; font-weight: 700; cursor: pointer; font-family: inherit;
-  text-shadow: 0 1px 2px rgba(0,0,0,.30);   /* keeps "Send" crisp over the yellow band */
-  box-shadow: 0 10px 22px -8px rgba(0,0,0,.55); transition: transform .12s ease, filter .12s ease;
+  padding: 11px 18px; font-weight: 700; font-size: 14px; letter-spacing: .2px;
+  cursor: pointer; font-family: inherit;
+  box-shadow: 0 10px 22px -10px rgba(66,133,244,.6); transition: transform .12s ease, filter .12s ease;
 }
 .gp-primary:hover { filter: brightness(1.06); transform: translateY(-1px); }
 .gp-primary:active { transform: translateY(0); }
@@ -105,14 +106,13 @@ body {
 .gp-messages { flex: 1; overflow-y: auto; padding: 16px 14px; display: flex; flex-direction: column; gap: 11px; }
 .gp-msg {
   max-width: 86%; padding: 11px 14px; border-radius: 18px; font-size: 14px;
-  line-height: 1.45; white-space: pre-wrap; word-wrap: break-word;
+  font-weight: 500; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word;
   animation: gp-pop .2s cubic-bezier(.2,.7,.2,1);
 }
 @keyframes gp-pop { from { opacity: 0; transform: translateY(6px) scale(.98); } }
 .gp-msg.user {
-  align-self: flex-end; background: var(--gp-grad); color: #fff;
-  text-shadow: 0 1px 2px rgba(0,0,0,.30);   /* legible white text across all four colors */
-  border-bottom-right-radius: 6px; box-shadow: 0 8px 20px -8px rgba(0,0,0,.55);
+  align-self: flex-end; background: var(--gp-grad); color: #fff; font-weight: 600;
+  border-bottom-right-radius: 6px; box-shadow: 0 8px 20px -10px rgba(66,133,244,.55);
 }
 .gp-msg.bot {
   align-self: flex-start; background: var(--gp-bubble-bot); color: var(--gp-ink);

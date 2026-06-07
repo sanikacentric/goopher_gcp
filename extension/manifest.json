@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GOOPHER",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "description": "GOOPHER — a unified conversational shopping agent for clothing, food & toys. Inventory, orders (with cart + staged checkout), multi-channel, multi-lingual, multi-modal (incl. voice).",
   "permissions": ["storage", "sidePanel", "activeTab"],
   "host_permissions": [

@@ -178,11 +178,14 @@
 
     <!-- Self-healing Guardian: live health strip + chaos controls (isolated). -->
     <section id="guardian" class="guardian">
-      <div class="g-row">
-        <span class="g-title">🛡️ GUARDIAN — SELF-HEALING AGENT</span>
-        <span id="gOverall" class="g-overall">—</span>
-        <span class="g-hint">isolated synthetic monitor · does not touch live flows</span>
-      </div>
+      <details class="g-collapse" open>
+      <summary class="g-summary">
+        <div class="g-row">
+          <span class="g-title">🛡️ GUARDIAN — SELF-HEALING AGENT</span>
+          <span id="gOverall" class="g-overall">—</span>
+          <span class="g-hint">isolated synthetic monitor · does not touch live flows</span>
+        </div>
+      </summary>
       <div class="g-instruct">
         ⬇️ Click a red <b>Kill</b> button — Guardian will <b>DETECT → DIAGNOSE →
         REMEDIATE → VERIFY</b> and stream the recovery as a purple <b>HEAL</b> card
@@ -200,20 +203,31 @@
         <button class="g-btn sim" data-comp="catalog">Catalog</button>
         <button class="g-btn sim" data-comp="fulfillment">Fulfillment</button>
       </div>
+      </details>
     </section>
 
     <style>
+      /* Collapsible Guardian / RSI panels (native <details>, no logic change) */
+      .guardian .g-collapse > summary { cursor: pointer; list-style: none; outline: none; }
+      .guardian .g-collapse > summary::-webkit-details-marker { display: none; }
+      .guardian .g-collapse > summary .g-row::after {
+        content: "▸"; margin-left: auto; color: var(--muted); font-size: 15px;
+        transition: transform .15s ease; }
+      .guardian .g-collapse[open] > summary .g-row::after { transform: rotate(90deg); }
       #rsi .rsi-list { padding: 4px 22px 14px; display: flex; flex-direction: column; gap: 8px; }
       #rsi .rsi-item { background:#1b1420; border:1px solid var(--border); border-left:3px solid #db61a2; border-radius:8px; padding:8px 12px; font-size:12px; color:var(--muted); line-height:1.45; }
       #rsi .rsi-item b { color:#f0a8d0; }
       #rsi .rsi-empty { padding: 2px 22px 14px; color: var(--muted); font-size: 12px; }
     </style>
     <section id="rsi" class="guardian">
-      <div class="g-row">
-        <span class="g-title">🧠 RSI — RECURSIVE SELF-IMPROVEMENT (CriticAgent)</span>
-        <span id="rsiCount" class="g-overall">0 lessons</span>
-        <span class="g-hint">learns from 👎 feedback · Gemini-as-judge → lesson → RAG · no retrain/redeploy</span>
-      </div>
+      <details class="g-collapse" open>
+      <summary class="g-summary">
+        <div class="g-row">
+          <span class="g-title">🧠 RSI — RECURSIVE SELF-IMPROVEMENT (CriticAgent)</span>
+          <span id="rsiCount" class="g-overall">0 lessons</span>
+          <span class="g-hint">learns from 👎 feedback · Gemini-as-judge → lesson → RAG · no retrain/redeploy</span>
+        </div>
+      </summary>
       <div class="g-instruct">
         In the extension: get a weak answer → click <b>👎 Teach GOOPHER</b> → ask the same thing again
         to see it improve. <b>Reset</b> here to demo the clean <b>before → teach → after</b> arc.
@@ -223,6 +237,7 @@
         <button class="g-btn sim" id="rsiRefresh">↻ Refresh</button>
       </div>
       <div id="rsiList" class="rsi-list"></div>
+      </details>
     </section>
 
     <main id="feed">

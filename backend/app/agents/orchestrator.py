@@ -1227,9 +1227,11 @@ class AgentService:
         if not text or not text.strip():
             return text
         out = self._llm_text(
-            "Translate the following customer message to English. Keep product "
-            "names, numbers and order IDs. Output ONLY the translation, no quotes.\n\n"
-            + text, max_tokens=200)
+            "Translate the following customer message to English. Translate product "
+            "and category words too, so they match an English catalog "
+            "(e.g. 'papas fritas' → 'potato chips', 'galletas' → 'cookies', "
+            "'refresco' → 'soda'). Keep numbers and order IDs (like ORD-123). "
+            "Output ONLY the translation, no quotes.\n\n" + text, max_tokens=200)
         return out or text
 
     def _localize(self, text: str, language: str) -> str:

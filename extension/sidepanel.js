@@ -7,7 +7,7 @@ import { criticFlag, criticHeal, getCustomer, getToken, getMyOrders, login, logo
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.7.0 — RSI: 👎 Teach GOOPHER (recursive self-improvement)");
+console.log("GOOPHER side panel v0.7.1 — file/xlsx bulk orders now preview & ask to confirm");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -207,10 +207,11 @@ async function deliverResponse(resp, viaVoice = false, srcText = "") {
     // STEP 1: show the cart preview and ask to confirm (nothing charged yet).
     addMessage(resp.reply, "bot", meta);
     if (viaVoice && els.speakToggle?.checked) speak(resp.reply, resp.language);
-    // For typed/voice orders srcText is the original message. For a VISION
-    // preview srcText is empty, so fall back to the resolved order text the
-    // backend carried (confirm_text) — the Confirm button re-places THAT item.
-    const confirmSrc = srcText || resp.checkout.confirm_text || "";
+    // When the backend carries a resolved `confirm_text` (VISION recognition or a
+    // FILE/xlsx bulk order), the Confirm button must re-send THAT — not the
+    // original message (which would re-trigger file parsing / a default basket).
+    // Typed/voice orders have no confirm_text, so fall back to the original text.
+    const confirmSrc = resp.checkout.confirm_text || srcText || "";
     renderConfirmButtons(confirmSrc, viaVoice);
     return;
   }

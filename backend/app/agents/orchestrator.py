@@ -774,9 +774,14 @@ class AgentService:
             self._last_checkout = self._checkout_payload({"ok": False, "message": msg}, bulk=True)
             return msg, ["checkout_agent"]
 
-        data = place_bulk_order(customer_id, variant_ids=variant_ids, quantities=quantities)
-        self._last_checkout = self._checkout_payload(data, bulk=True)
-        reply = self._format_bulk_checkout(data)
+        # PREVIEW first (no charge) and ask the shopper to confirm — same as the
+        # text/voice/camera flow. The Confirm button re-sends `confirm_text` (the
+        # resolved SKUs + quantities) so the file never needs re-uploading.
+        spec = {"ok": True, "variant_ids": variant_ids, "quantities": quantities, "bulk": True}
+        self._last_checkout = self._preview_payload(spec)
+        self._last_checkout["confirm_text"] = "__bulk_confirm__ " + "; ".join(
+            f"{v}={q}" for v, q in zip(variant_ids, quantities))
+        reply = self._format_preview(self._last_checkout)
         if not_found:
             reply += ("\n\n⚠️ Not found in the catalog (skipped, not substituted): "
                       + ", ".join(not_found[:10]))
@@ -827,6 +832,20 @@ class AgentService:
         or {ok: False, message, bulk} if it can't be fulfilled (never substitutes)."""
         import re
         from ..tools.checkout_tool import resolve_variant_by_name
+
+        # CONFIRM re-send for a file/CSV/xlsx bulk order: the Confirm button sends
+        # "__bulk_confirm__ SKU=qty; SKU=qty; …" so the order is placed WITHOUT
+        # re-uploading the file. Parse those exact lines (never substitute).
+        if text.strip().startswith("__bulk_confirm__"):
+            vids, qtys = [], []
+            for sku, q in re.findall(r"([A-Z0-9][A-Z0-9\-]+)\s*=\s*(\d+)", text):
+                vid = self._resolve_id_to_variant(sku)
+                if vid:
+                    vids.append(vid); qtys.append(int(q))
+            if vids:
+                return {"ok": True, "variant_ids": vids, "quantities": qtys, "bulk": True}
+            return {"ok": False, "bulk": True,
+                    "message": "The previewed items are no longer in stock — nothing was placed."}
 
         variant_ids = re.findall(r"JCP-[A-Z0-9\-]+|FOOD-[A-Z0-9\-]+|TOY-[A-Z0-9\-]+",
                                  text.upper())

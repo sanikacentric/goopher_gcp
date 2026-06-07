@@ -262,6 +262,38 @@ def test_bulk_order_from_xlsx_uses_file_items_not_default_basket():
     assert qty.get("cheez-it") == 50 and qty.get("coca-cola") == 120   # file quantities honored
     # the default basket leaks a clothing dress (a.n.a) — must NOT be here
     assert "a.n.a" not in names and "dress" not in names
+    # NEW: file bulk previews and asks to confirm (does NOT charge yet)
+    assert cart.get("pending") is True
+    assert cart.get("confirm_text", "").startswith("__bulk_confirm__")
+    assert "confirm" in out[0].lower()
+
+
+def test_file_bulk_confirm_round_trip_places_exact_items():
+    """The Confirm button re-sends confirm_text (resolved SKUs) → the order is
+    placed without re-uploading the file, with the exact items/quantities."""
+    import base64
+    import io
+    import openpyxl
+    from backend.app.models.schemas import Attachment
+
+    wb = openpyxl.Workbook(); ws = wb.active
+    ws.append(["product_name", "order_quantity", "sku"])
+    ws.append(["Cheez-It Original Baked Snack Crackers", 50, "FOOD-CHZ-2005"])
+    ws.append(["Coca-Cola Classic Soda", 120, "FOOD-COC-2004"])
+    buf = io.BytesIO(); wb.save(buf)
+    att = Attachment(kind="file", filename="b.xlsx",
+                     mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                     content_b64=base64.b64encode(buf.getvalue()).decode())
+    svc = AgentService()
+    # preview
+    svc._try_file_bulk_order("place a bulk order from the attached file", [att], "CUST-1001")
+    confirm_text = svc._last_checkout["confirm_text"]
+    # confirm (what the Confirm button sends — no file)
+    out = svc._try_checkout(confirm_text, "CUST-1001", confirm=True)
+    placed = svc._last_checkout
+    assert out is not None and placed.get("ok") is True and placed.get("order_id")
+    q = {c["name"].split()[0].lower(): c["qty"] for c in placed["cart"]}
+    assert q.get("cheez-it") == 50 and q.get("coca-cola") == 120
 
 
 def test_place_bulk_order_persists_multi_item_order():

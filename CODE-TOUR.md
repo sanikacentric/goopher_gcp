@@ -5,6 +5,40 @@ Every agent runs through one common harness, picks named skills, and is fully ob
 
 ---
 
+### Architecture at a glance (point at this while you narrate)
+```
+                              CHROME MV3 SIDE PANEL  (vanilla JS · dark Google theme)
+                              text · voice · phone · 📷 camera · 📄 file        STOREFRONT (site/)
+                                            │  HTTPS + JWT                       HTML/CSS/JS · /catalog
+                                            ▼
+ ┌──────────────────────────────────  main.py · FastAPI (Cloud Run)  ──────────────────────────────────┐
+ │  auth (allowlist + master pw, fail-closed) · rate/size limits · CORS                                 │
+ │                                                                                                      │
+ │  DETERMINISTIC PRE-PROCESS (no LLM):  modality_agent · language_agent · channel_agent · load memory  │
+ │                                            │                                                         │
+ │            purchase? ── yes ──►  ▌DETERMINISTIC CHECKOUT GATE▐  (checkout_tool: cart→pay→ORDER_PLACED │
+ │                │                  "LLM is NOT the cashier"      → order_mgmt 9-stage → 📧 email)      │
+ │                no                                                                                     │
+ │                ▼                                                                                      │
+ │        AgentHarness  ──►  ROOT  goopher_orchestrator   (ADK LlmAgent · Gemini 2.5 Flash · Vertex)    │
+ │        (build→run→                     │ agent-as-tool (no transfer ⇒ no loops)                       │
+ │         collect→        ┌──────────────┼──────────────┬───────────────────┐                          │
+ │         resilience)     ▼              ▼              ▼                   ▼                            │
+ │                  inventory_agent  order_agent   checkout_agent   order_management_agent               │
+ │                         │ picks a SKILL (registry · read_only flag) → calls in-process TOOLS          │
+ │                         ▼                                                                             │
+ │                 mock retail DB ── Firestore (cloud) / SQLite (local)                                  │
+ │                                                                                                      │
+ │  + RSI lesson injected (keyword-RAG)        every step ─►  flow_recorder → /dev  +  Cloud Trace       │
+ └──────────────────────────────────────────────────────────────────────────────────────────────────┘
+        ▲ feeds lessons                    ▲ heals dependencies
+   CriticAgent (RSI)                  Guardian (self-healing)        Advisor (explicit ReAct, read-only)
+   Gemini-as-judge → LessonStore     synthetic probes · chaos        + Vision (multimodal Gemini)
+            ── the 4 ISOLATED agents (never touch the working flows) ──
+```
+
+---
+
 ### One request, end to end (trace this in `/dev` while you talk)
 `extension (JS)` → `main.py` (FastAPI: JWT + rate/size limits) → **deterministic pre-process**
 (modality / language / channel / **load memory**) → **purchase? → deterministic checkout gate**

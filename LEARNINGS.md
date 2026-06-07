@@ -717,6 +717,74 @@ Guardian's infrastructure self-heal.
   3. **Default to a no-secret simulation** so the feature is demoable and testable
      offline, and flip to real delivery purely by setting one env var.
 
+### 3.32 The order email "queued" forever — a 403 that was Cloudflare, not Resend
+
+- **Symptom:** Real emails wouldn't send. The UI showed *"queued for …"* (our code's
+  word for "not delivered"), and the logs said `order_email_failed: HTTP Error 403`.
+- **First wrong assumption:** a 403 from an email API *looks* like an auth/permission
+  problem — wrong API key, unverified domain, or Resend's test-mode "you can only
+  email your own address" rule. I checked all of those (the key was present and 36
+  chars; the account WAS the recipient's Gmail; the welcome email had arrived).
+- **What actually found it:** I'd been catching the `HTTPError` and logging only
+  `str(exc)` = `"HTTP Error 403: Forbidden"` — useless. I changed `_send_resend` to
+  **read the error response body**, redeployed, retried, and the log then said
+  `Resend HTTP 403: error code: 1010`. **1010 is a Cloudflare code**, not a Resend
+  one — *"the owner has banned your access based on your browser's signature."*
+- **Root cause:** Resend's API sits behind Cloudflare, whose bot-firewall **blocks
+  the default `Python-urllib/3.x` User-Agent**. The key/recipient were fine the
+  whole time — the request just looked like a bot.
+- **Fix:** send a normal `User-Agent` (and `Accept`) header. Delivered immediately.
+- **Lessons:**
+  1. **Read the error BODY, not just the status line.** A bare `str(exc)` on an
+     `HTTPError` throws away the one field that explains the failure. Logging the
+     `.read()` body turned a day of guessing into a 30-second diagnosis.
+  2. **A status code can come from infrastructure, not the app.** A 403/429/503 from
+     any API behind a CDN/WAF may be the CDN talking. Cloudflare error *1010* = a
+     User-Agent block — almost always a default SDK/stdlib UA.
+  3. **Always set a real User-Agent on outbound HTTP** from server code.
+
+### 3.33 Multilingual orders — a four-layer bug to make the gate language-aware
+
+A Spanish order (*"¿Se puede hacer un pedido al por mayor de 100 papas fritas?"*)
+was **placed immediately, with no "please confirm", and the reply came back in
+English** — bypassing the confirm-before-charge guardrail. Fixing it peeled back
+four independent layers, each hiding the next:
+
+1. **English-only gate.** The deterministic checkout gate detects intent with
+   English keywords, so a non-English order matched nothing → fell through to the
+   LLM, which placed it directly. *Fix:* translate the message to English JUST for
+   the gate (intent + product resolution), then localize the reply + email back.
+2. **Wrong SDK in the cloud.** The translation used `self._gemini`
+   (`google.generativeai`), which **cannot reach Vertex**; with no API key in prod
+   it returned empty → translation was a silent no-op → the gate still missed the
+   order. *Fix:* route `_llm_text` through a `google.genai` Vertex client (the SDK
+   vision/critic already use), legacy kept as a local fallback.
+3. **Over-faithful translation.** The prompt said *"keep product names"*, so Gemini
+   left **"papas fritas"** untranslated — and the English catalog has *"potato
+   chips"*, so resolution failed. *Fix:* translate product/category words too
+   (papas fritas → potato chips, galletas → cookies).
+4. **Language mis-detected as English.** The deepest one, found only by reading the
+   logs (`chat_reply language=en` on a Spanish turn): `detect_language` fell back to
+   the **remembered default ("en"** from prior English turns) because the sentence
+   had one fingerprint hit and no accents — so the *entire* multilingual chain above
+   never even ran. *Fix:* `¿`/`¡`/`ñ` are decisive Spanish signals (override the
+   default), and expanded the Spanish fingerprint so the voice form (punctuation
+   stripped) is caught too.
+
+- **Lessons:**
+  1. **Verify the assumption at the TOP of the pipeline first.** I fixed layers 1-3
+     while the real gate was layer 4 (detection). One `log_event` of the detected
+     language would have pointed there on turn one. *Read the logs before theorizing.*
+  2. **A guardrail enforced by English keywords isn't a guardrail for other
+     languages.** "Confirm before charge" must hold per-language; the deterministic
+     gate has to be fed a normalized (translated) input.
+  3. **Translate for the CONSUMER.** Intent detection and catalog matching are
+     English consumers → translate product words. A user-facing reply keeps brand
+     names. "Keep names" is right for output, wrong for catalog lookup.
+  4. **Cloud ≠ local for LLM calls.** The legacy SDK works locally (API key) and
+     silently no-ops on Vertex. Use the one SDK that works in both, and log when a
+     client is unavailable.
+
 ---
 
 ## 4. Key trade-offs and decisions
@@ -970,6 +1038,21 @@ component map in `ARCHITECTURE.md §3`.
     (Gemini-as-judge) AND injects the lesson via RAG into the next answer; a stored
     lesson that never shapes generation only *looks* like a loop. Keep it isolated,
     inject additively (no-op when nothing matches), and give demos a reset (§3.29).
+35. **Know your bytes — a binary isn't text** — an `.xlsx` is a zipped XML container;
+    decoding it as UTF-8 yielded garbage and a silent fallback to a default basket.
+    Branch on the magic bytes and parse with the right library (§3.30).
+36. **Read the error BODY, not the status line** — a bare `str(HTTPError)` =
+    "403 Forbidden" hid the real message; the response body said Cloudflare *1010*
+    (a User-Agent block, not a Resend auth issue). Always set a real User-Agent on
+    server-side HTTP, and a status code may be the CDN talking, not the app (§3.32).
+37. **A guardrail enforced by English keywords isn't a guardrail in other languages**
+    — a Spanish order skipped confirm-before-charge entirely; the deterministic gate
+    must be fed a normalized (translated) input, and "translate for the consumer"
+    (English catalog) differs from "localize for the user" (§3.33).
+38. **Verify the assumption at the TOP of the pipeline first** — I fixed three
+    multilingual layers while the real bug was language *detection* returning the
+    remembered "en"; one log of the detected language would have pointed there on
+    turn one. Read the logs before theorizing (§3.33).
 
 ---
 

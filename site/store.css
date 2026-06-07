@@ -1,5 +1,5 @@
 /* ===========================================================================
-   GOOPHER · Marketplace storefront — premium e-commerce theme
+   Marketplace storefront — premium e-commerce theme
    Vanilla CSS. All class names match store.js (DOM untouched).
    =========================================================================== */
 :root {
@@ -72,10 +72,10 @@ body {
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 .hero p { color: #475569; font-size: 16.5px; line-height: 1.6; margin: 0 auto 22px; max-width: 660px; }
-.hero-howto { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
-.hero-howto .step {
-  background: rgba(255, 255, 255, .8); border: 1px solid var(--border); border-radius: 999px;
-  padding: 9px 16px; font-size: 12.5px; color: #475569; font-weight: 500;
+.hero-badges { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.hero-badges .hbadge {
+  background: rgba(255, 255, 255, .85); border: 1px solid var(--border); border-radius: 999px;
+  padding: 9px 16px; font-size: 13px; color: #334155; font-weight: 600;
   box-shadow: 0 2px 8px -4px rgba(16, 24, 40, .14);
 }
 
@@ -133,13 +133,15 @@ body {
 .dept-section.toys .card:hover::before { background: linear-gradient(160deg, var(--toys), var(--toys-2)); }
 
 .card-thumb {
-  position: relative; height: 138px; display: grid; place-items: center;
-  background: radial-gradient(120px 80px at 50% 30%, rgba(225,29,72,.12), transparent 70%), linear-gradient(135deg, #fbfbfd, #eef0f6);
+  position: relative; height: 220px; display: grid; place-items: center;
+  background: #fff; overflow: hidden;
 }
-.dept-section.food .card-thumb { background: radial-gradient(120px 80px at 50% 30%, rgba(5,150,105,.14), transparent 70%), linear-gradient(135deg, #fbfbfd, #eef0f6); }
-.dept-section.toys .card-thumb { background: radial-gradient(120px 80px at 50% 30%, rgba(124,58,237,.14), transparent 70%), linear-gradient(135deg, #fbfbfd, #eef0f6); }
-.card-emoji { font-size: 56px; filter: drop-shadow(0 8px 14px rgba(16,24,40,.18)); transition: transform .22s ease; }
-.card:hover .card-emoji { transform: scale(1.08) rotate(-3deg); }
+.card-img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  transition: transform .35s cubic-bezier(.2,.7,.2,1);
+}
+.card:hover .card-img { transform: scale(1.06); }
+.card-emoji { font-size: 64px; filter: drop-shadow(0 8px 14px rgba(16,24,40,.18)); }
 .card-off {
   position: absolute; top: 10px; left: 10px; font-size: 11px; font-weight: 800; color: #fff;
   background: linear-gradient(135deg, var(--primary), var(--primary-2)); padding: 4px 9px; border-radius: 999px;
@@ -166,11 +168,21 @@ body {
 .out-stock { background: #fde8e8; color: #e11d48; }
 .card-sku { font-size: 10px; color: #aab2c5; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .3px; }
 
-.ask-hint {
-  margin-top: 4px; font-size: 11.5px; color: var(--primary); font-style: italic; opacity: .9;
+/* Star rating (Amazon-style) */
+.card-rating { display: flex; align-items: center; gap: 6px; margin: -1px 0 1px; }
+.card-rating .stars { color: #f5a623; font-size: 14px; letter-spacing: 1px; }
+.card-rating .rating-num { font-size: 12px; color: var(--muted); font-weight: 600; }
+
+/* Add to Cart button */
+.add-btn {
+  margin-top: 8px; width: 100%; border: none; cursor: pointer;
+  padding: 10px 14px; border-radius: 999px; font-weight: 700; font-size: 13px;
+  color: #1a1300; background: linear-gradient(180deg, #ffd25e, #f7b500);
+  box-shadow: 0 6px 14px -8px rgba(247,181,0,.9); transition: filter .15s ease, transform .12s ease;
 }
-.dept-section.food .ask-hint { color: var(--food); }
-.dept-section.toys .ask-hint { color: var(--toys); }
+.add-btn:hover { filter: brightness(1.04); }
+.add-btn:active { transform: translateY(1px); }
+.add-btn.added { background: linear-gradient(180deg, #6ee7a8, #16a34a); color: #04220f; }
 
 /* ---------------- Footer ---------------- */
 .store-footer {

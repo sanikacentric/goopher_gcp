@@ -90,7 +90,37 @@ Every agent runs through one common harness, picks named skills, and is fully ob
 **4 workers + 4 isolated agents** (vision, advisor, guardian, critic) · **9-stage** fulfillment ·
 confirm-before-charge on **5** input paths (text/voice/phone/camera/file) · scale-to-zero on Cloud Run.
 
-### "Tell me about a hard bug" (war-stories — `LEARNINGS.md` §3.30–3.33)
-1. Order email **403 = Cloudflare User-Agent block**, not auth — *read the error body, not the status.*
-2. Spanish order skipped confirm: **four stacked bugs** ending in **language mis-detection** — *verify the top of the pipeline first.*
-3. Store showed Coke for KIND/Oreo: `/cola/` matched **"cho​cola​te"** — *word-boundary your regexes.*
+### Decisions I made & why (what made it successful)
+**Architecture calls (lead with these):**
+1. **LLM orchestrates, code transacts** — purchases go through a *deterministic* gate, not the model.
+   *Why:* safety + auditability; an LLM must never be able to charge a card or substitute an item.
+2. **Agent-as-tool, not agent-transfer** — workers are `AgentTool`s the orchestrator calls.
+   *Why:* loops become impossible *by construction*, not by prompt-begging.
+3. **Don't make everything an "agent"** — modality/language/channel are plain Python; ReAct only for the
+   read-only Advisor; Critic is LLM-as-judge. *Why:* match the pattern to the job → speed, cost, reliability.
+4. **One common harness + a skill registry** — every agent shares the runtime; skills carry a `read_only`
+   flag enforced in code. *Why:* platform thinking — adding an agent is fast *and* safe.
+5. **Best-effort side-effects** — email is wrapped in try/except *after* the order commits.
+   *Why:* a mail outage must never fail a paid order.
+6. **Isolate new agents** (Vision/Advisor/Guardian/Critic) so they can't touch working flows.
+   *Why:* ship innovation without risking what already works.
+
+**"Tell me about a hard bug" — bug → decision → why (`LEARNINGS.md` §3.30–3.33):**
+1. **Order email 403.** Looked like auth; reading the **response body** showed Cloudflare error **1010**
+   (a User-Agent block). **Decision:** send a real `User-Agent` header + *always log the error body*, not
+   just the status. **Why:** a status code can be the **CDN/WAF talking, not your app** — the body has the truth.
+2. **Spanish order skipped confirm-before-charge.** Four stacked bugs; the real root was **language
+   mis-detected as English** (so the whole multilingual path never ran). **Decision:** add a decisive
+   `¿/¡` Spanish signal, **translate→English for the gate**, localize the reply/email back — and *check the
+   top of the pipeline first.* **Why:** a guardrail enforced by English keywords **isn't a guardrail in other
+   languages**; verify the earliest assumption (detection) before fixing downstream.
+3. **Store showed Coke for KIND & Oreo.** `/cola/` matched the substring in **"cho​cola​te"**.
+   **Decision:** word-boundary the regex (`/coca|\bcola\b|\bsoda\b/`) and add a mapping test for every product.
+   **Why:** substring matching is a classic trap — **assert the mapping**, don't eyeball it.
+4. **Multilingual translation silently no-op'd in the cloud.** It used the legacy `google.generativeai`
+   SDK, which **can't reach Vertex**. **Decision:** route all raw LLM text calls through the unified
+   **`google.genai` Vertex client** (the one Vision/Critic already used). **Why:** **cloud ≠ local** for SDKs —
+   use the one that works in production, and log when a client is unavailable.
+
+**The through-line to say out loud:** *"I optimized for safety, observability, and matching each pattern to
+the job — and when something broke, I read the actual evidence and fixed the earliest cause, not the symptom."*

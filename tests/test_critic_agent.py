@@ -131,6 +131,35 @@ def test_no_lessons_leaves_chat_untouched(monkeypatch):
     assert "lesson_retrieve" not in resp.used_tools   # no-op when nothing matches
 
 
+def test_order_intent_for_missing_item_hands_off_to_rsi(monkeypatch):
+    """'can u order laptops' is an ORDER intent → the deterministic gate refuses.
+    With a learned lesson, it must HAND OFF (apply the lesson) instead of returning
+    the bare 'couldn't find laptops' refusal — this is the bug from the demo."""
+    from backend.app.agents.orchestrator import AgentService
+    from backend.app.models.schemas import ChatRequest
+
+    # 1) No lesson yet → the bare deterministic refusal (the "before" state).
+    _fresh(monkeypatch)
+    before = AgentService().run_turn(
+        ChatRequest(message="can u order laptops", session_id="rsi-ord-1"),
+        customer_id="CUST-1001")
+    assert "lesson_retrieve" not in before.used_tools
+    assert "couldn't find" in before.reply.lower() or "could not find" in before.reply.lower()
+
+    # 2) Teach a lesson, then ask the SAME order-intent question → hand-off applies.
+    store = _fresh(monkeypatch)
+    store.add_lesson({
+        "lesson": "When asked for laptops/electronics we don't stock, say we don't "
+                  "carry it, suggest in-stock alternatives, and ask what they want.",
+        "confidence": 0.9, "failure_summary": "", "root_cause": "",
+        "languages": ["en"], "stored_at": "2026-01-01T00:00:00Z"})
+    after = AgentService().run_turn(
+        ChatRequest(message="can u order laptops", session_id="rsi-ord-2"),
+        customer_id="CUST-1001")
+    assert "lesson_retrieve" in after.used_tools          # the lesson was applied
+    assert "checkout_agent" not in after.used_tools        # NOT the bare gate refusal
+
+
 # --- reset / dev controls --------------------------------------------------- #
 def test_clear_empties_the_store(monkeypatch):
     store = _fresh(monkeypatch)

@@ -410,6 +410,21 @@ class AgentService:
             # the chat text) holds the items. Falls back to normal checkout.
             checkout = (self._try_file_bulk_order(req.message, req.attachments, customer_id)
                         or self._try_checkout(text, customer_id, confirm=req.confirm))
+            # RSI hand-off: if the gate couldn't RESOLVE the item (a "we don't carry
+            # X" refusal) AND a learned lesson applies, don't return the bare
+            # deterministic refusal — fall through to the LLM/fallback path so the
+            # lesson is applied (acknowledge → suggest in-stock alternatives → ask).
+            # Never for a resolved cart or a bulk/file order, and still never
+            # substitutes (the item simply isn't in the catalog).
+            _rsi_handoff = False
+            if (checkout is not None and _rsi_lessons
+                    and isinstance(self._last_checkout, dict)
+                    and self._last_checkout.get("ok") is False
+                    and not self._last_checkout.get("bulk")):
+                log_event("rsi_checkout_handoff", q=text[:80], lessons=len(_rsi_lessons))
+                self._last_checkout = None
+                checkout = None
+                _rsi_handoff = True
             if checkout is not None:
                 reply, used_tools = checkout
                 # Checkout is the DETERMINISTIC transactional gate — NOT an LLM/ADK
@@ -486,13 +501,15 @@ class AgentService:
                     ft.step("orchestrator", "ADK orchestrator FAILED → backup",
                             f"{type(exc).__name__}: {str(exc)[:200]}")
                     reply, used_tools = self._generate_fallback(
-                        req.session_id, text, customer_id, directives, channel, language)
+                        req.session_id, text, customer_id, directives, channel, language,
+                        skip_checkout=_rsi_handoff)
                     path = "fallback"
             else:
                 ft.step("orchestrator", f"deterministic router ({_settings.llm_provider})",
                         "BACKUP engine — intent routing + grounded reply")
                 reply, used_tools = self._generate_fallback(
-                    req.session_id, text, customer_id, directives, channel, language)
+                    req.session_id, text, customer_id, directives, channel, language,
+                    skip_checkout=_rsi_handoff)
                 for name in used_tools:
                     ft.step("tool", name, "tool executed (backup)", tool=name)
                 path = "fallback"
@@ -963,12 +980,18 @@ class AgentService:
                 + "\n\n🟡 Please confirm — should I place this order?")
 
     def _generate_fallback(self, session_id: str, text: str, customer_id: str,
-                           directives: str, channel: str, language: str
+                           directives: str, channel: str, language: str,
+                           skip_checkout: bool = False
                            ) -> tuple[str, list[str]]:
         """
         Deterministic engine: route intent -> call the real tools -> phrase the
         answer (via Gemini if available, else a clean template). This keeps the
         service fully functional with no ADK and is what unit tests exercise.
+
+        `skip_checkout=True` is used on an RSI hand-off: the gate already failed to
+        resolve the item and a learned lesson applies, so we DON'T re-run checkout
+        (it would just re-emit the same refusal) — we let the search + lesson-aware
+        phrasing suggest in-stock alternatives instead.
         """
         from ..tools.inventory_tool import check_stock, search_inventory
         from ..tools.order_tool import bulk_order_status, get_order_status, list_customer_orders
@@ -979,9 +1002,10 @@ class AgentService:
 
         # Checkout is transactional → always handled by the shared structured
         # handler (works for both the ADK and deterministic paths).
-        checkout = self._try_checkout(text, customer_id)
-        if checkout is not None:
-            return checkout
+        if not skip_checkout:
+            checkout = self._try_checkout(text, customer_id)
+            if checkout is not None:
+                return checkout
 
         # --- intent: bulk orders (high volume) ---
         order_ids = modality_agent.extract_order_ids_from_text(text)

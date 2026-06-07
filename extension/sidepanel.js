@@ -7,7 +7,7 @@ import { criticFlag, criticHeal, getCustomer, getToken, getMyOrders, login, logo
 // Open the side panel's DevTools console; if you don't see this line after a
 // reload, Chrome is still running an old cached copy (reload the extension AND
 // close/reopen the side panel).
-console.log("GOOPHER side panel v0.7.1 — file/xlsx bulk orders now preview & ask to confirm");
+console.log("GOOPHER side panel v0.7.2 — order-confirmation email after every placed order");
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -188,6 +188,17 @@ async function renderCheckout(c, meta) {
       "bot",
       meta
     );
+    // 5) Order-confirmation email (best-effort; sent for every placed order).
+    const em = c.email;
+    if (em && em.to) {
+      await _delay(500);
+      addMessage(
+        em.sent
+          ? `📧 Order confirmation emailed to ${em.to}.`
+          : `📧 Order confirmation queued for ${em.to}.`,
+        "bot"
+      );
+    }
   } else {
     // Payment ok but the order record wasn't confirmed — be honest about it.
     addMessage(

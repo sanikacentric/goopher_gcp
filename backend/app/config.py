@@ -68,6 +68,20 @@ class Settings(BaseSettings):
     # are preserved. Set False to manage Firestore data manually.
     auto_seed_firestore: bool = True
 
+    # --- Order email notifications (best-effort; never blocks an order) ---
+    # On every placed order an email confirmation is sent to `notify_email`.
+    # Transport (first configured wins): SMTP (smtp_*), then Resend (resend_api_key);
+    # with none set it runs in SIMULATED mode (logged + shown in the reply), so the
+    # flow works with zero secrets. Set real creds in env / Cloud Run to send.
+    email_enabled: bool = True
+    notify_email: str = "tungaresanika2@gmail.com"
+    email_from: str = "GOOPHER <orders@goopher.app>"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    resend_api_key: str = ""
+
     # --- Auth ---
     jwt_secret: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"

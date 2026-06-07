@@ -1226,7 +1226,22 @@ class AgentService:
         fl = AgentService._fulfillment_line(data)
         if fl:
             out.append(fl)
+        el = AgentService._email_line(data)
+        if el:
+            out.append(el)
         return "\n".join(out)
+
+    @staticmethod
+    def _email_line(data: dict) -> str:
+        em = data.get("email") or {}
+        to = em.get("to")
+        if not to:
+            return ""
+        if em.get("sent"):
+            return f"📧 Order confirmation emailed to {to}."
+        if em.get("mode") == "simulated":
+            return f"📧 Order confirmation queued for {to} (email simulated — set SMTP/Resend to send)."
+        return f"📧 Confirmation for {to} could not be sent right now."
 
     @staticmethod
     def _checkout_payload(data: dict, bulk: bool) -> dict:
@@ -1254,6 +1269,7 @@ class AgentService:
             # Structured cart lines so the extension renders a real cart.
             "cart": data.get("cart", []),
             "subtotal": data.get("subtotal", data.get("total")),
+            "email": data.get("email"),    # order-confirmation email status
         }
 
     @staticmethod
@@ -1282,6 +1298,9 @@ class AgentService:
         fl = AgentService._fulfillment_line(data)
         if fl:
             out.append(fl)
+        el = AgentService._email_line(data)
+        if el:
+            out.append(el)
         return "\n".join(out)
 
 

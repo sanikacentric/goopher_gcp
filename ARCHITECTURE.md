@@ -375,11 +375,22 @@ Vision turns are recorded to the `/dev` portal as a distinct `vision` flow kind.
 
 ## 5d. Ordering by file & natural language
 
-- **Bulk order from an uploaded file.** `_try_file_bulk_order` parses an attached
-  `order.txt` (`_parse_order_file` is tolerant of `order - 15 oreo cookies`,
-  `lego x1`, `3x oreos`, `TOY-NRF-3003`, …), resolves each line to a catalog
-  variant, and places ONE structured bulk order with **per-line quantities**.
-  Unknown lines are skipped and reported, never substituted.
+- **Bulk order from an uploaded file — text, CSV, or Excel.** `_try_file_bulk_order`
+  detects the format from the bytes/filename/mime and parses accordingly:
+  - **`.xlsx`** → **openpyxl** (an `.xlsx` is a binary ZIP, so it must be parsed,
+    NOT decoded as text — decoding it yielded garbage and silently fell back to a
+    default basket). `_parse_tabular` locates the `product_name` / `sku` /
+    `order_quantity` columns by header and extracts `(name, sku, qty)` per row.
+  - **`.csv`** with headers → the same tabular parser; **plain `.txt`** →
+    `_parse_order_file` (tolerant of `order - 15 oreo cookies`, `lego x1`,
+    `3x oreos`, `TOY-NRF-3003`, …).
+  Each line resolves **by SKU first, then product name** (never substitutes; unknown
+  lines are skipped and reported). It then **PREVIEWS the cart and asks "please
+  confirm"** — parity with text/voice/camera — and the Confirm button re-sends a
+  compact `__bulk_confirm__ SKU=qty; …` marker so the order is placed **without
+  re-uploading the file** (recognized in `_resolve_order`). Verified end-to-end on a
+  real enterprise PO: 9 items with exact quantities (Cheez-It ×50, Coca-Cola ×120,
+  Lay's ×200, …).
 - **Natural order phrasing.** `_is_order_intent` recognizes conversational orders
   ("order balls for me", "get me a lego", "i want to buy oreos") while excluding
   status/tracking queries — so they hit the structured gate (and produce a cart)
@@ -752,6 +763,52 @@ failures from **CCAI Insights** (low-CSAT conversations), and run the cycle as a
 > the CriticAgent heals the behaviour. It critiques its own failures with
 > Gemini-as-judge, writes a corrective lesson, and retrieves it via RAG for the
 > next similar query. The agent improves itself — no retraining, no redeploy."*
+
+---
+
+## 5m. Order-confirmation email — best-effort notifications
+
+Every placed order — **single or bulk, via text / voice / phone / camera vision /
+Excel upload** — funnels through `place_order` / `place_bulk_order`. Both call
+`email_tool.send_order_email(order)` **once at that choke point**, so a single hook
+covers all modalities (and any future one) automatically.
+
+**Design properties**
+
+- **Best-effort, never blocks checkout.** The whole send is wrapped in
+  `try/except` and returns a small `{sent, mode, to, detail}` dict — a mail outage
+  can *never* fail an order. The order is already placed; the email is a side-effect.
+- **Pluggable transport, first configured wins** (in `send_order_email`):
+  1. **SMTP** — `SMTP_HOST` / `SMTP_USER` / `SMTP_PASSWORD` (e.g. Gmail App Password).
+  2. **Resend** — `RESEND_API_KEY` (free tier; a single HTTPS POST via stdlib
+     `urllib`, no SDK).
+  3. **Simulated** — no creds → the email is logged and surfaced in the reply
+     (`📧 … (email simulated)`), so the flow and the demo work with **zero secrets**.
+- **Recipient** defaults to `settings.notify_email` (`tungaresanika2@gmail.com`),
+  overridable by `NOTIFY_EMAIL`. The body is built from the order (items, total,
+  tracking, ETA).
+- **Surfaced to the user.** `place_order`/`place_bulk_order` attach `data["email"]`;
+  the chat reply and the extension's staged checkout render
+  `📧 Order confirmation emailed to <addr>` as the final step.
+- **Deployed via CI/CD env vars** (the Cloud Run deploy replaces env vars each run,
+  so creds are injected from a GitHub secret in `deploy.yml`, exactly like
+  `JWT_SECRET` — never committed). With the secret unset it writes `""` → simulated.
+
+```
+place_order / place_bulk_order ──► _notify_order_email(data) ──► send_order_email
+        (every modality)                (best-effort)            ├─ SMTP  (smtp_*)
+                                                                 ├─ Resend(resend_api_key)
+                                                                 └─ simulated (default)
+```
+
+> **CTO line:** *"Order confirmations email the buyer on every channel — but the
+> send is a best-effort side-effect wrapped in try/except, so a mail provider
+> outage can never fail a paid order. Transport is pluggable (Resend or SMTP) and
+> falls back to a logged simulation when no secret is set."*
+
+> **Why Resend over a Gmail SMTP setup** — see [`TRADEOFFS.md` §F](TRADEOFFS.md):
+> no app-password / 2FA dance, no SMTP-port egress concerns on Cloud Run, a clean
+> free tier, and one stdlib HTTPS call instead of an SMTP handshake.
 
 ---
 

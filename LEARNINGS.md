@@ -658,6 +658,67 @@ Guardian's infrastructure self-heal.
 
 ---
 
+### 3.30 An uploaded `.xlsx` ordered the wrong items (binary parsed as text)
+
+- **Symptom:** A user attached an enterprise Excel PO and asked to bulk-order it;
+  GOOPHER instead placed the **default basket** — one of each catalog item plus an
+  a.n.a dress that wasn't in the file.
+- **Root cause:** `_try_file_bulk_order` did
+  `base64.b64decode(content_b64).decode("utf-8", errors="ignore")` and ran a
+  line-by-line text parser. An `.xlsx` is a **binary ZIP**, so decoding it as UTF-8
+  produced garbage → **0 parsed lines** → the method returned `None` → the
+  orchestrator fell through to `_try_checkout` with no product named → the default
+  basket. The file was never actually read.
+- **Fix:** Detect the format (PK/zip magic, filename, mime) and parse properly —
+  **openpyxl** for `.xlsx`, `csv` for CSV, the line parser for `.txt`. A new
+  `_parse_tabular` finds the `product_name` / `sku` / `order_quantity` columns by
+  header and extracts `(name, sku, qty)`; each resolves **by SKU first, then name**
+  (never substitutes). Added `openpyxl` to requirements; verified on the real file
+  (9 items, exact quantities).
+- **Then: confirm-before-charge parity.** File bulk orders placed immediately, unlike
+  text/voice/camera. Made them **preview → "please confirm" → place**. The tricky
+  bit: the Confirm button re-sends the message, but the **file isn't re-uploaded** —
+  so the preview carries a compact `__bulk_confirm__ SKU=qty; …` marker that
+  `_resolve_order` recognizes and places exactly. The extension was also changed to
+  **prefer `confirm_text` over the original message** on re-send (otherwise confirm
+  re-parsed the absent file → default basket again).
+- **Lessons:**
+  1. **Know your bytes.** "Decode as text" is wrong for any binary/zip container
+     (xlsx, docx, pdf). Branch on the magic bytes, don't assume UTF-8.
+  2. **A silent fallback hides the real failure.** Returning `None` → default basket
+     looked like success. A parse that can't find items should *say so*, not guess.
+  3. **Confirm re-sends need an explicit payload.** When the source (a file, a camera
+     frame) can't be re-sent, carry the resolved order forward yourself.
+
+### 3.31 Order-confirmation email — make a side-effect that can never break checkout
+
+- **Goal:** Email the buyer a receipt after **every** order (single/bulk; text,
+  voice, phone, camera, Excel).
+- **Design:** Hook it once at the single choke point both paths share —
+  `place_order` / `place_bulk_order` → `send_order_email` — so one call covers all
+  modalities. Crucially, the order is **already placed** before the email runs, so
+  the send is a **best-effort side-effect wrapped in `try/except`**: a mail-provider
+  outage returns `{sent: False, mode: "error"}` and the order still succeeds.
+- **Transport, configurable, with a safe default:** SMTP → Resend → **simulated**.
+  With no credentials it logs + surfaces `📧 (email simulated)` so the flow and the
+  demo work with **zero secrets**; real creds are injected via CI/CD env vars (the
+  Cloud Run deploy *replaces* env vars each run, so a manual `gcloud` change would be
+  wiped — the key must come from a GitHub secret in `deploy.yml`, like `JWT_SECRET`).
+- **Why Resend over a Gmail SMTP setup** (see `TRADEOFFS.md` §F): no App-Password /
+  2FA setup, no SMTP-egress concerns from Cloud Run, a clean free tier, and one
+  stdlib HTTPS POST instead of an SMTP handshake. Caveat documented: Resend's
+  no-domain test sender only delivers to the account owner's address.
+- **Lessons:**
+  1. **Notifications are side-effects, not steps.** Never let a best-effort notify
+     sit in the critical path of a money-moving action — place first, notify after,
+     catch everything.
+  2. **Hook cross-cutting concerns at the choke point** every path already flows
+     through — one hook beat four per-modality hooks.
+  3. **Default to a no-secret simulation** so the feature is demoable and testable
+     offline, and flip to real delivery purely by setting one env var.
+
+---
+
 ## 4. Key trade-offs and decisions
 
 | Decision | Options | Chosen | Why |
@@ -672,6 +733,9 @@ Guardian's infrastructure self-heal.
 | **Dev portal access** | Auth'd vs open | Open (per request) | CTO demo convenience; one env flag (`DEV_PORTAL_ENABLED`) disables it. |
 | **Resilience** | LLM-only vs fallback | Deterministic fallback engine | Service stays useful (grounded answers) during LLM outage/quota; keeps tests hermetic & offline. |
 | **Dependency pinning** | Exact pins vs ranges | Ranges (`>=`) | Exact pins caused a hard `mcp`/`google-adk` resolution conflict. |
+| **Order email transport** | Gmail SMTP vs Resend vs simulated | **Resend** (+ SMTP option), simulated default | No App-Password/2FA setup, no SMTP-egress concern on Cloud Run, clean free tier, one stdlib HTTPS call. Simulated default = demoable with zero secrets. |
+| **Email vs checkout** | In the order path vs side-effect | **Best-effort side-effect** (try/except) | A mail outage must never fail a paid order; place first, notify after. |
+| **Excel parsing** | Decode-as-text vs real parser | **openpyxl** (branch on bytes) | An `.xlsx` is a binary ZIP; decoding as text silently fell back to a default basket. |
 
 ---
 

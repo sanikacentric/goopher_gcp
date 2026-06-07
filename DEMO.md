@@ -63,16 +63,25 @@ order in the panel.
 
 ---
 
-## 3. 📄 Bulk order from a file
-**Do:** Attach `order.txt` (`order - 15 oreo cookies`, `order -20 balls`, …) →
-*"please order from the attached file"* → Send.
+## 3. 📄 Bulk order from a file — incl. an enterprise Excel PO
+**Do:** Attach an **Excel** purchase order (`enterprise_bulk_order_goopher.xlsx`,
+with `product_name` / `sku` / `order_quantity` columns) → *"place a bulk order from
+the attached file"* → Send. *(A plain `order.txt` or `.csv` works too.)*
 
-**They see:** one structured bulk order — 15 Oreo + 17 Peanuts + 20 Soccer Ball,
-per-line quantities, ~$495.
+**They see:** GOOPHER parses the spreadsheet, matches every line to the live catalog,
+then **previews the cart and asks "please confirm"** — e.g. 9 items at the exact
+quantities (Cheez-It ×50, Coca-Cola ×120, Lay's ×200, …), subtotal ~$5,282. Click
+**Confirm** → staged receipt → **📧 "Order confirmation emailed to …"**.
 
-> 🗣️ *"A buyer can drop in a file and we parse it into one structured bulk order
-> with per-line quantities. Anything not in the catalog is **skipped and
-> reported — never silently substituted.** Safety by construction."*
+> 🗣️ *"A buyer drops in an enterprise Excel PO — product names, SKUs, quantities.
+> We parse it with openpyxl, match every line by SKU (never substitute), **preview
+> for approval**, and place ONE structured bulk order through the same deterministic
+> gate. An .xlsx is binary, so we parse it — not guess at text. That's the multimodal
+> 'files' requirement, at enterprise scale."*
+
+> 💡 **Two beats to call out:** (1) the **confirm-before-charge** step is identical
+> across text, voice, camera, AND file; (2) **every** placed order — any modality —
+> emails the buyer a confirmation (best-effort, never blocks checkout).
 
 ---
 

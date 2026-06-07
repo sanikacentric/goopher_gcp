@@ -83,6 +83,22 @@ while preserving conversation context.
   → structured result. Replaces the boilerplate that was copy-pasted in two places.
   See [`ARCHITECTURE.md` §5h](ARCHITECTURE.md).
 
+**Enterprise orders & notifications**
+- **📊 Excel / CSV bulk orders.** Upload an enterprise purchase order
+  (`.xlsx`/`.csv` with `product_name` / `sku` / `order_quantity` columns) → GOOPHER
+  parses it with **openpyxl**, matches every line to the live catalog (by **SKU
+  first, then name** — never substitutes), **previews the cart and asks "please
+  confirm,"** then places **one structured bulk order** with the exact quantities.
+  An `.xlsx` is a binary ZIP, so it's parsed properly — not decoded as text. The
+  Confirm button re-sends the resolved `SKU=qty` lines, so the file is never
+  re-uploaded. See [`ARCHITECTURE.md` §5d](ARCHITECTURE.md).
+- **📧 Order-confirmation email on every order.** Single or bulk, via **text /
+  voice / phone / camera vision / Excel** — every placed order emails a receipt to
+  the buyer ([`email_tool.py`](backend/app/tools/email_tool.py)). It's **best-effort
+  and never blocks checkout** (wrapped in try/except), and pluggable: **Resend**
+  (free tier) or **SMTP**, defaulting to a clearly-labelled **simulated** mode when
+  no credentials are set. See [`ARCHITECTURE.md` §5m](ARCHITECTURE.md).
+
 **Fixes & parity**
 - **📷 Vision now asks "please confirm" before charging** — camera orders preview a
   cart and wait for confirmation, exactly like text and voice (no more

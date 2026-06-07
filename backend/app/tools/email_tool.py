@@ -107,6 +107,7 @@ def _send_smtp(settings, to: str, subject: str, body: str) -> None:
 
 def _send_resend(settings, to: str, subject: str, body: str) -> None:
     import json
+    import urllib.error
     import urllib.request
 
     payload = json.dumps({
@@ -117,4 +118,14 @@ def _send_resend(settings, to: str, subject: str, body: str) -> None:
         "https://api.resend.com/emails", data=payload, method="POST",
         headers={"Authorization": f"Bearer {settings.resend_api_key}",
                  "Content-Type": "application/json"})
-    urllib.request.urlopen(req, timeout=10).read()
+    try:
+        urllib.request.urlopen(req, timeout=10).read()
+    except urllib.error.HTTPError as exc:
+        # Surface Resend's actual message (the 403 body explains *why* — e.g.
+        # "you can only send testing emails to your own address; verify a domain").
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8", "ignore")[:300]
+        except Exception:  # noqa: BLE001
+            pass
+        raise RuntimeError(f"Resend HTTP {exc.code}: {detail or exc.reason}") from exc

@@ -434,6 +434,19 @@ class AgentService:
                     else:
                         ft.step("tool", f"↳ {name}",
                                 "checkout tool (deterministic gate)", tool=name)
+                # Order-confirmation email (best-effort notification) — surface it
+                # as its own pipeline log line so the portal shows it was sent.
+                _em = (self._last_checkout or {}).get("email") if self._last_checkout else None
+                if _em and _em.get("to"):
+                    if _em.get("sent"):
+                        ft.step("email", "✅ order email sent",
+                                f"confirmation emailed to {_em['to']} via {_em.get('mode')}",
+                                to=_em["to"], mode=_em.get("mode"))
+                    else:
+                        ft.step("email", "📧 order email (not sent)",
+                                f"{_em['to']} — {_em.get('mode')}"
+                                + (f": {_em.get('detail')}" if _em.get("detail") else ""),
+                                to=_em["to"], mode=_em.get("mode"))
                 path = "checkout"
             elif self._adk_ready and _settings.use_adk_path:
                 try:

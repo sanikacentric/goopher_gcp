@@ -129,6 +129,7 @@
       .stage.subagent { color: var(--blue); } .step.subagent { border-left: 3px solid var(--blue); }
       .stage.skill { color: #ffa657; } .step.skill { border-left: 3px solid #ffa657; }
       .stage.rsi { color: #db61a2; } .step.rsi { border-left: 3px solid #db61a2; background:#241420; }
+      .stage.email { color: #4cc9f0; } .step.email { border-left: 3px solid #4cc9f0; background:#0e2230; }
       .stage.tool { color: var(--green); } .step.tool { border-left: 3px solid var(--green); }
       .stage.llm { color: var(--accent); } .step.llm { border-left: 3px solid var(--accent); }
       .stage.memory { color: var(--amber); } .step.memory { border-left: 3px solid var(--amber); }
@@ -169,6 +170,7 @@
       <span class="chip"><i style="background:#ffa657"></i> Agent skill (capability picked from registry)</span>
       <span class="chip"><i style="background:#2ea043"></i> Tool (called by the worker)</span>
       <span class="chip"><i style="background:#1abc9c"></i> Order-management / fulfillment stage</span>
+      <span class="chip"><i style="background:#4cc9f0"></i> Order-confirmation email (notification)</span>
       <span class="chip"><i style="background:#b8338a"></i> Self-healing (Guardian)</span>
       <span class="chip"><i style="background:#db61a2"></i> Recursive self-improvement (RSI · CriticAgent)</span>
     </div>
@@ -240,7 +242,7 @@
         orchestrator: "ORCHESTRATOR", harness: "AGENT HARNESS",
         subagent: "WORKER SUB-AGENT", skill: "AGENT SKILL",
         tool: "TOOL", llm: "LLM", memory: "MEMORY", fulfillment: "FULFILLMENT",
-        heal: "SELF-HEAL", rsi: "RSI · SELF-IMPROVE",
+        heal: "SELF-HEAL", rsi: "RSI · SELF-IMPROVE", email: "EMAIL",
       };
 
       // ---- Guardian self-healing: health strip + CLIENT-ORCHESTRATED animation ----

@@ -99,10 +99,16 @@ def run_fulfillment(order_id: str, customer_id: str,
         f"new record written to ORDER_PLACED table (order_id={order_id})",
         ms=(time.perf_counter() - _t) * 1000)
 
-    # 4) Order Confirmation — email/SMS (simulated).
+    # 4) Order Confirmation — email/SMS. The real order-confirmation email is sent
+    # (best-effort) after checkout to settings.notify_email; SMS stays simulated.
     _t = time.perf_counter(); time.sleep(_STAGE_DELAY_S)
+    try:
+        from ..config import get_settings
+        _to = get_settings().notify_email or customer_email
+    except Exception:  # noqa: BLE001
+        _to = customer_email
     add("4. Order Confirmation",
-        f"confirmation email + SMS sent to {customer_email}",
+        f"confirmation email to {_to} + SMS (simulated)",
         ms=(time.perf_counter() - _t) * 1000)
 
     # 5) Warehouse Processing — pick & pack (simulated).

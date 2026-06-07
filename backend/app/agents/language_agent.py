@@ -33,7 +33,12 @@ _FINGERPRINTS = {
            "give", "need", "and", "of", "in", "stock", "price", "available",
            "yes", "no", "it", "them", "cookies", "dress"},
     "es": {"hola", "gracias", "pedido", "vestido", "dónde", "está", "cuánto",
-           "tengo", "quiero", "mi", "el", "la", "para", "cuál", "precio"},
+           "tengo", "quiero", "mi", "el", "la", "para", "cuál", "precio",
+           # high-frequency order/shopping words so a Spanish order is detected
+           "puede", "puedes", "hacer", "comprar", "compra", "colocar", "papas",
+           "fritas", "paquetes", "paquete", "lote", "mayor", "necesito", "dame",
+           "tienen", "hay", "por", "favor", "una", "unos", "unas", "galletas",
+           "refresco", "cuanto", "donde", "qué", "que"},
     "fr": {"bonjour", "merci", "commande", "robe", "où", "combien", "veux",
            "bonsoir", "prix", "quel", "ma", "mon", "s'il"},
     "de": {"hallo", "danke", "bestellung", "kleid", "wieviel", "ich", "möchte",
@@ -68,11 +73,19 @@ def detect_language(text: str, default: str = "en") -> str:
     if not text:
         return default
 
-    # 1) Script-based shortcuts.
+    # 1) Script / punctuation shortcuts that are decisive on their own.
     if _DEVANAGARI.search(text):
         return "hi"
     if _CJK.search(text):
         return "zh"
+    # Inverted "¿" / "¡" are used ONLY by Spanish — a hard signal even when the
+    # session's remembered default is English (the bug: a Spanish order detected
+    # as "en" skipped the whole multilingual confirm/translate path).
+    if "¿" in text or "¡" in text:
+        return "es"
+    # ñ is a strong (though not exclusive) Spanish marker.
+    if "ñ" in text.lower():
+        return "es"
 
     lowered = text.lower()
     words = set(_WORD_RE.findall(lowered))

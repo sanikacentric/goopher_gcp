@@ -39,6 +39,19 @@ def test_english_overrides_sticky_non_english_default():
     assert language_agent.detect_language("el precio del vestido", default="en") == "es"
 
 
+def test_spanish_order_detected_even_with_english_default():
+    """Regression: a Spanish ORDER was detected as 'en' (remembered default) and
+    skipped the multilingual confirm/translate path. '¿/¡' are decisive Spanish
+    markers, and the expanded vocab catches the voice form without punctuation."""
+    d = language_agent.detect_language
+    assert d("¿Se puede hacer un pedido al por mayor de 100 papas fritas?", default="en") == "es"
+    assert d("¿Puedes colocar un lote de 100 paquetes de papas fritas?", default="en") == "es"
+    # Voice input often strips the leading '¿' — the word fingerprints still win.
+    assert d("Se puede hacer un pedido al por mayor de 100 papas fritas", default="en") == "es"
+    # English stays English even after a Spanish turn set the default.
+    assert d("place an order of 100 potato chips", default="es") == "en"
+
+
 def test_language_directive():
     d = language_agent.language_directive("es")
     assert "Spanish" in d

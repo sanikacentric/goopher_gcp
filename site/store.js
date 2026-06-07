@@ -23,19 +23,35 @@ function iconFor(p) {
   return DEPT_ICON[p.department] || "🛍️";
 }
 
-// Product graphics: render the product's emoji as a CRISP, CONSISTENT flat icon
-// via the Twemoji CDN (clean vector art — never a random photo, a face, or
-// off-topic content). Each product always shows the correct category icon.
-function twemojiCode(emoji) {
-  const cps = [];
-  for (const ch of emoji) {
-    const cp = ch.codePointAt(0);
-    if (cp !== 0xfe0f) cps.push(cp.toString(16)); // drop the VS16 selector
-  }
-  return cps.join("-");
+// Real product photos — self-hosted in site/img/ (each one hand-verified clean,
+// correct, and face-free). Mapped by product name; dresses cycle through a few
+// museum garment shots so the clothing cards vary. The emoji is the fallback.
+const PHOTO = [
+  [/cheez|cracker/i, "crackers.jpg"],
+  [/cola|soda/i, "soda.jpg"],
+  [/kind|granola/i, "granola.jpg"],
+  [/chip/i, "chips.jpg"],
+  [/oreo|cookie/i, "oreo.jpg"],
+  [/peanut/i, "peanuts.jpg"],
+  [/play-?doh|dough|clay/i, "playdoh.jpg"],
+  [/hot ?wheels|die-?cast/i, "car.jpg"],
+  [/lego|brick/i, "lego.jpg"],
+  [/puzzle|jigsaw/i, "puzzle.jpg"],
+  [/nerf|blaster|dart/i, "nerf.jpg"],
+  [/soccer|football|ball/i, "soccer.png"],
+];
+const DRESSES = ["dress1.jpg", "dress2.jpg", "dress3.jpg"];
+
+function hashNum(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
 }
 function imgUrl(p) {
-  return `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${twemojiCode(iconFor(p))}.svg`;
+  if (p.department === "Clothing" || /dress|gown|skirt|wrap/i.test(p.name))
+    return "img/" + DRESSES[hashNum(p.sku) % DRESSES.length];
+  for (const [re, f] of PHOTO) if (re.test(p.name)) return "img/" + f;
+  return ""; // no photo → onerror shows the emoji
 }
 
 function stars(rating) {

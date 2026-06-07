@@ -371,7 +371,7 @@ run op ─┤  ✅ success → 🟢 healthy                          │
 ---
 
 ## ✅ Requirements coverage (use if the CTO asks "is everything done?")
-Every acceptance criterion is implemented, deployed, and tested (**88 passing**).
+Every acceptance criterion is implemented, deployed, and tested (**145 passing**).
 
 | # | Criterion | Status / where to show it |
 |---|---|---|
@@ -387,7 +387,7 @@ Every acceptance criterion is implemented, deployed, and tested (**88 passing**)
 | T6 | Gemini LLM (free tier / Vertex) | `gemini-2.5-flash` |
 | T7 | Google Cloud free tier | Firestore + Cloud Run + Trace |
 | T8 | Evals | `python evals/run_evals.py` |
-| T9 | Unit tests | `pytest` — 88 passing |
+| T9 | Unit tests | `pytest` — 145 passing |
 | T10 | Observability + **dev portal** + **self-healing Guardian** | `/dev`, Cloud Trace, `/metrics`, `/version` |
 | T11 / T12 | README / Architecture | `README.md`, `ARCHITECTURE.md` |
 | T14 / T16 | Production-grade, Dockerized, Cloud Run | live URL |
@@ -398,3 +398,88 @@ Every acceptance criterion is implemented, deployed, and tested (**88 passing**)
 | 5 | Order management — 9-stage fulfillment → `ORDER_PLACED` | `/dev` fulfillment pipeline |
 | Sec | Abuse protection (rate limit + request-size limits) | `middleware.py` |
 | ✨ | **Self-healing** (circuit breaker · failover · chaos · heal-forward) | `/dev` 🛡️ Guardian — the finale |
+
+---
+
+## 🧩 Code walkthrough — "show the code, sound senior"
+
+**How to use this section live.** Open the file in your editor as you talk. For each
+file there's a **TECH** line (say this to the domain expert) and a **SAY** line
+(the same thing for the VP / customer). Golden thread to repeat:
+> *"The LLM orchestrates and converses; deterministic Python transacts. Every agent
+> runs through one common harness, picks named skills, and is fully observable."*
+
+### Agent-type cheat-sheet (memorize this)
+GOOPHER uses **four different patterns on purpose** — not everything is an "agent":
+
+| Pattern | Who | Why |
+|---|---|---|
+| **LlmAgent + native function-calling** | the ROOT orchestrator + 4 workers | reliable tool use on the transactional path (ReAct *paradigm*, done implicitly) |
+| **LlmAgent + `PlanReActPlanner` (explicit ReAct)** | the Shopping **Advisor** only | read-only, multi-hop reasoning you want to *show* (the 🧠 plan panel) |
+| **LLM-as-judge** (no ADK, no ReAct) | the **CriticAgent** (RSI) | a single structured Gemini call that grades a bad answer → a lesson |
+| **Deterministic Python (no LLM)** | pre-processors, the checkout gate, tools, the Guardian | speed, safety, auditability — no intelligence needed |
+
+### Master map — every Python file, one line each
+| File | Role | Agent type | Calls Gemini? | Key tools / calls |
+|---|---|---|---|---|
+| `agents/orchestrator.py` | ROOT brain `goopher_orchestrator` + the whole turn pipeline | **LlmAgent** (native function-calling) | **Yes** — Gemini 2.5 Flash on **Vertex** via `google.genai`/ADK | delegates to 4 workers (agent-as-tool); deterministic `_try_checkout` gate; `_to_english`/`_localize`; RSI inject |
+| `agents/advisor_agent.py` | Shopping Advisor (recommendations) | **LlmAgent + `PlanReActPlanner`** (explicit ReAct), **read-only** | **Yes** — Gemini 2.5 Flash, `thinking_budget=0` | read-only skills (inventory, order); `_synthesize_recommendation` safety net |
+| `agents/critic_agent.py` | **RSI** — learn from 👎 feedback | **LLM-as-judge** (not ADK, not ReAct) | **Yes** — `client.models.generate_content` (JSON, Vertex) | `LessonStore` (Firestore/in-memory), keyword-RAG `retrieve`, heuristic fallback |
+| `agents/guardian.py` | **Self-healing** infra monitor | Deterministic (no LLM) | No | circuit breaker + chaos; DETECT→DIAGNOSE→REMEDIATE→VERIFY on **synthetic** probes |
+| `agents/vision_agent.py` | Camera "see-it-shop-it" | Multimodal Gemini call | **Yes** — `generate_content([image, prompt])`, Vertex | recognizes item → price → confirm-before-charge |
+| `agents/modality_agent.py` | Detect text/voice/image; pull ORD-ids | Deterministic (no LLM) | No | regex/string parsing |
+| `agents/language_agent.py` | Detect language + force reply language | Deterministic heuristic | No | `detect_language` (`¿`/`¡` = Spanish), `language_directive` |
+| `agents/channel_agent.py` | Web vs phone formatting | Deterministic (no LLM) | No | `channel_directive`, `adapt_for_phone` |
+| `agents/harness/agent_harness.py` | **Common scaffolding** for ALL agents | Runtime wrapper | (runs whatever agent it's given) | build → ADK session → run-loop → collect → resilience → `AgentRunResult` |
+| `agents/skills/agent_skill_registry.py` | **Skill registry** (single source of truth) | Data + lookup | No | `AgentSkill` (carries `read_only`), `get_tools`, `read_only_skill_names` |
+| `agents/skills/{inventory,order,checkout,order_mgmt}_skill.py` | One capability each (instruction + tools) | Config | No | the tool list an agent picks by name |
+| `tools/checkout_tool.py` | **Transaction** (cart→pay→persist) | Deterministic (no LLM) | No | `place_order`, `place_bulk_order`, `process_payment`, `_notify_order_email` |
+| `tools/email_tool.py` | Order-confirmation email | Deterministic (no LLM) | No | `send_order_email` → SMTP / **Resend** / simulated; `localize` callable |
+| `tools/order_mgmt_tool.py` | 9-stage fulfillment pipeline | Deterministic (no LLM) | No | `run_fulfillment` (validation→ORDER_PLACED→…→invoice), streams to `/dev` |
+| `tools/inventory_tool.py` | Catalog search / stock | Deterministic (no LLM) | No | `search_inventory`, `check_stock`, `get_product_details` |
+| `tools/order_tool.py` | Order status / history / bulk | Deterministic (no LLM) | No | `get_order_status`, `list_customer_orders`, `bulk_order_status` |
+| `db/database.py` | Repository (SQLite local / **Firestore** cloud) | Data layer | No | `search_products` (tokenized scoring + department detection) |
+| `observability/flow_recorder.py` | Live `/dev` pipeline cards | Tracing | No | `TurnTrace`, `FlowRecord` |
+| `observability/telemetry.py` | Cloud Trace + metrics + logs | Tracing | No | `log_event`, spans, `incr` |
+| `models/schemas.py` | Pydantic request/response models | Types | No | validation/serialization |
+| `config.py` | Settings | Config | No | `gemini_model`, `use_vertexai`, `notify_email`, SMTP/Resend |
+| `main.py` | FastAPI app (all endpoints + storefront + `/dev`) | API | No | `/chat`, `/vision`, `/advise`, `/critic/*`, `/orders/bulk`, `/catalog`, `/skills`, `/version` |
+
+### The five files to actually open on stage
+
+**1) `agents/orchestrator.py` — the brain.**
+- **TECH:** A real ADK `LlmAgent` (`goopher_orchestrator`) on **Gemini 2.5 Flash via Vertex** (`google.genai`). It uses **native function-calling**, not a ReAct planner, and delegates to four worker `LlmAgent`s wired as **`AgentTool`s (agent-as-tool, no transfer-back)** — that's why loops are impossible by construction. Before the LLM, deterministic Python handles modality/language/channel/memory; a deterministic **`_try_checkout` gate** does every purchase (cart → payment → `ORDER_PLACED`) so the model never moves money. Multilingual orders are translated to English for the gate (`_to_english`) and the reply/email localized back (`_localize`) — both via `_llm_text` → a Vertex `google.genai` client.
+- **SAY:** *"This is the manager. It understands the customer, decides which specialist to ask, and converses — but it is never allowed to charge a card. A separate, rule-based module does the actual transaction, so it's safe and auditable."*
+
+**2) `agents/advisor_agent.py` — the only explicit ReAct agent.**
+- **TECH:** `LlmAgent(planner=PlanReActPlanner())` on Gemini 2.5 Flash. It **plans → acts over tools → reasons → recommends**, and is handed **only read-only skills** from the registry (asserted in code), so it can never get a checkout tool. `thinking_budget=0` fixes 2.5-Flash's "plan but no answer" stall; `_synthesize_recommendation` is a grounded safety net.
+- **SAY:** *"This is the personal shopper. You can literally watch it think — plan, look things up, reason, and suggest. By design it can recommend but never buy."*
+
+**3) `agents/critic_agent.py` — recursive self-improvement (RSI).**
+- **TECH:** **Not** an ADK agent and **not** ReAct — it's **Gemini-as-judge**: a deterministic class that, on a 👎, sends the failed conversation to `client.models.generate_content` (JSON, `thinking_budget=0`) and gets back `{failure_summary, root_cause, lesson, confidence}`. Confidence-gated (≥0.70) lessons go to a `LessonStore` (Firestore `rsi_lessons` / in-memory). On the next turn the orchestrator does **keyword-RAG** (`retrieve_lessons`) and **additively injects** the lesson into its directives — no retrain, no redeploy. Falls back to a heuristic lesson when Gemini is offline.
+- **SAY:** *"When a customer says 'that wasn't helpful,' GOOPHER critiques its own answer, writes itself a lesson, and applies it the next time someone asks something similar. It gets better on its own — no engineering cycle required."*
+
+**4) `agents/guardian.py` — self-healing infrastructure.**
+- **TECH:** A deterministic **synthetic monitor** (no LLM) that drives **probe** transactions — it never touches live customer flows. Chaos buttons in `/dev` break a dependency (Vertex / catalog / fulfillment); the Guardian runs **DETECT → DIAGNOSE → REMEDIATE → VERIFY** with a circuit breaker and streams each step as a purple HEAL card.
+- **SAY:** *"If a dependency goes down at 2 a.m., the system notices, diagnoses, and recovers itself — and we can prove it live by breaking something on stage and watching it heal."*
+
+**5) `agents/harness/agent_harness.py` + `skills/agent_skill_registry.py` — the foundations.**
+- **TECH:** Every agent (orchestrator, workers, advisor) runs through **one** `AgentHarness` (build → session → run-loop → collect → resilience → `AgentRunResult`) instead of copy-pasted boilerplate. **Skills** are registered once; an agent **picks a skill by name**; each skill carries a `read_only` flag enforced in code and exposed at `GET /skills`.
+- **SAY:** *"We built it like a platform: one reusable runtime for every agent, and a catalog of capabilities with guardrails baked in — so adding a new agent is fast and safe."*
+
+### The UI — "is it a gradient or JavaScript?" (both, intentionally no framework)
+- **Storefront** (`site/`): semantic **HTML** + **pure CSS** (`store.css` — CSS **gradients**, CSS grid, responsive, *no framework*) + **vanilla JavaScript** (`store.js` fetches `GET /catalog` and renders product cards). Product images are **real, self-hosted photos** in `site/img/` (hand-verified) shown Amazon-style on white tiles, with ratings + Add-to-Cart.
+- **Extension** (`extension/`): Chrome **MV3 side panel** — `sidepanel.html` + `sidepanel.css` (**dark theme with Google-brand-color CSS gradients**) + **vanilla `sidepanel.js`** (login, chat, staged checkout, confirm-before-charge, RSI "Teach", advisor panel). `mic.js` uses the **Web Speech API** (speech-to-text) and `speechSynthesis` (text-to-speech); `camera.js` uses `getUserMedia` for vision.
+- **TECH:** No React/Vue — plain HTML/CSS/JS for **zero build step, tiny bundle, instant load**, which is ideal for an MV3 side panel. Styling is CSS gradients; the four Google colors live on the brand mark and accents, with calm Google-blue on the action buttons.
+- **SAY:** *"The store and the assistant are deliberately lightweight — they load instantly and look like a polished retail product, themed in Google's colors."*
+
+### 🆕 What's new this session (mention if asked "what changed?")
+- **Excel/CSV bulk orders** (`openpyxl`) → parse → match by SKU → **preview & confirm** → one structured bulk order (`orchestrator._parse_tabular`, `_try_file_bulk_order`).
+- **Confirm-before-charge on EVERY path** — text, voice, phone, camera, **and file/xlsx**.
+- **Order-confirmation email** on every order (`tools/email_tool.py`) — best-effort, **Resend** (free tier) or SMTP, localized to the customer's language; shown in `/dev`.
+- **Multilingual orders fully wired** — non-English purchases now hit the confirm gate and get a localized reply + email (`_to_english`/`_localize`, `language_agent` `¿/¡` detection).
+- **RSI now applies to order-intent queries too** ("can u order laptops" → learns → suggests in-stock alternatives).
+- **Advisor** recommends *other* items in the same department near the price (never the item just bought).
+- **Storefront**: real product photos, ratings, Add-to-Cart, no agent branding.
+- **Extension**: black theme with **Google brand colors**; visible phone simulator; Advisor button in Google colors.
+- **War-stories to tell** (great for "tell me about a hard bug"): a 403 that was a **Cloudflare User-Agent block** (not auth); a Spanish order that bypassed confirm because of a **four-layer bug** ending in language mis-detection; `/cola/` matching **"cho​cola​te"**. All in `LEARNINGS.md` §3.30–3.33.

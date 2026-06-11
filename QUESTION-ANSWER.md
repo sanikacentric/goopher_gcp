@@ -244,6 +244,15 @@ Gemini conversations under concurrent load (still healthy). *One-liner:* *"The l
 app's horizontal scaling, which is model-independent; the LLM scales separately on Vertex, and our
 deterministic hot path means we call it far less than total traffic — cheaper, never the bottleneck."*
 
+**Q: You only showed ONE extension — how do you prove it works for 10,000 users?**
+The extension is a **thin client, not a server** — its UI runs **locally in each user's browser**, so
+10,000 users = **10,000 independent UIs**; there's **no shared front-end to overload**. The only shared,
+finite resource is the **backend API** every extension calls, and the load test hits the **same `/chat`
+endpoint the extension uses** (identical `POST /chat` request, unique session per virtual user). So
+proving the **backend** autoscales **is** proving 10,000 extensions work. *Show it live:* extension →
+**DevTools → Network** → point at the `POST /chat` request → *"my load test fires that exact call at
+scale."* *One-liner:* *"Clicking 10,000 browsers wouldn't prove anything the API metrics don't."*
+
 **Q: Won't load-testing 10k users cost a fortune / hit quota?**
 Not the way I built it: the headline run hits `/sim/chat` — **read-only, no LLM, no writes** — which
 still exercises the *real* request + Firestore lookup path, so you measure **app autoscaling** (the

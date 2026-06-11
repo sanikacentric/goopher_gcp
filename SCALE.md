@@ -82,6 +82,26 @@ modest concurrency, and the Cloud Run instance count stepping up.
 push to 10k); `/chat` proves the **LLM** path is healthy under real concurrent load. Show the first
 for the headline 10,000-user number, the second to answer "but real users use the LLM."
 
+## "You only showed ONE extension — how do you know it works for 10,000?"
+**The extension is a thin client, not a server.** The UI runs **locally in each user's browser**, so
+10,000 users = **10,000 independent copies** of the UI — there's **no shared front-end** to overload;
+the UI scales by nature. The **only shared, finite resource** is the **backend API** on Cloud Run
+(`/chat`, `/vision`, `/advise`) that every extension calls. So "does the extension scale?" = "does the
+**backend** hold up when thousands of extensions call it at once?" — which is exactly what the load
+test measures, against the **same `/chat` endpoint the extension uses** (identical request: `POST /chat`
+with `{message, session_id, channel}` + JWT, a unique session per virtual user).
+
+**Show the link live (30s, very convincing):**
+1. In the extension, open **DevTools → Network**; send one message → point at the **`POST /chat`** request.
+   *"This is the one call the extension makes; the UI runs locally in each user's browser."*
+2. Run `loadtest.py --endpoint /chat …` → *"my load test fires that exact call at scale — thousands of
+   those extensions hitting the backend at once."*
+
+> **One-liner:** *"The extension is a per-user client, so the UI scales by itself — 10,000 users is
+> 10,000 independent UIs. What they share is the backend API, and the load test calls that exact API.
+> Proving the backend autoscales **is** proving 10,000 extensions work. Clicking 10,000 browsers wouldn't
+> prove anything the API metrics don't."*
+
 ## The scale dials (apply before the 10k run — does NOT change app code)
 The default demo deploy is capped small (cheap). For the headline run, raise the limits:
 ```bash

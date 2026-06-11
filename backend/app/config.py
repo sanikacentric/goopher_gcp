@@ -123,6 +123,12 @@ class Settings(BaseSettings):
     # Exposes session/customer ids + message content; set False to disable.
     dev_portal_enabled: bool = True
 
+    # High-volume scale demo (/sim/*): a READ-ONLY, NO-LLM, NO-WRITE path that
+    # exercises the real request + catalog lookup so a load test can prove Cloud
+    # Run autoscaling to thousands of concurrent users without burning LLM quota
+    # or mutating data. Set False to disable the simulation endpoints entirely.
+    scale_sim_enabled: bool = True
+
 
 @lru_cache
 def get_settings() -> Settings:

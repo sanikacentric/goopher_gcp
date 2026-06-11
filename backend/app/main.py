@@ -164,6 +164,69 @@ def catalog() -> dict:
     return {"departments": list(grouped.keys()), "catalog": grouped}
 
 
+# --------------------------------------------------------------------------- #
+# High-volume scale simulation — READ-ONLY · NO LLM · NO WRITES
+# --------------------------------------------------------------------------- #
+# These endpoints let a load generator drive thousands of concurrent
+# "conversations" to PROVE Cloud Run autoscaling (100 → 10,000 users) without
+# burning LLM quota or mutating data. They mirror the real deterministic routing
+# + a real catalog/order lookup, so the app + DB path is exercised under load.
+# Gated by settings.scale_sim_enabled. Nothing here touches the production flows.
+import threading as _threading
+import time as _time_mod
+
+_sim_lock = _threading.Lock()
+_sim_served = 0
+_sim_started = _time_mod.time()
+
+
+def _sim_incr() -> int:
+    global _sim_served
+    with _sim_lock:
+        _sim_served += 1
+        return _sim_served
+
+
+@app.api_route("/sim/chat", methods=["GET", "POST"])
+def sim_chat(message: str = "do you have oreo cookies", mode: str = "browse") -> dict:
+    """HIGH-VOLUME LOAD SIMULATION (read-only, no LLM, no writes).
+
+    `mode=browse` → product-support traffic (real catalog search);
+    `mode=order_status` → order-management traffic (real order lookup).
+    Returns the deterministic route it WOULD take + a real result count, so a
+    load test exercises the genuine request + DB path at scale, cheaply."""
+    if not settings.scale_sim_enabled:
+        raise HTTPException(status_code=404, detail="scale simulation disabled")
+    served = _sim_incr()
+    repo = get_repository()
+    if mode == "order_status":
+        routed = "order_agent"
+        result = {"orders": len(repo.list_orders_for_customer("CUST-1001"))}
+    else:
+        from .tools.inventory_tool import search_inventory
+        routed = "inventory_agent"
+        result = {"matches": search_inventory(query=message).get("count", 0)}
+    return {"ok": True, "sim": True, "routed_to": routed, "served": served, **result}
+
+
+@app.get("/sim/stats")
+def sim_stats() -> dict:
+    """Live scale counters for the demo: catalog volume + simulated load served."""
+    if not settings.scale_sim_enabled:
+        raise HTTPException(status_code=404, detail="scale simulation disabled")
+    repo = get_repository()
+    products = repo.list_products()
+    return {
+        "products": len(products),
+        "variants": sum(len(p.variants) for p in products),
+        "departments": sorted({p.department for p in products}),
+        "sim_requests_served": _sim_served,
+        "uptime_seconds": round(_time_mod.time() - _sim_started, 1),
+        "backend": settings.db_backend,
+        "model": settings.gemini_model,
+    }
+
+
 @app.post("/auth/login", response_model=TokenResponse)
 def login(body: LoginRequest) -> TokenResponse:
     customer = authenticate(body.email, body.password)

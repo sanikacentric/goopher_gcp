@@ -63,6 +63,25 @@ serverless and horizontal. That's what makes 10,000 users a **dial**, not a re-a
 
 ---
 
+## Bonus demo — prove the REAL LLM path scales too (for "but real users use the LLM!")
+The same tool can drive **genuine conversations through the orchestrator → Gemini** (authenticated),
+so you can show the real path holds up under concurrent users. Keep concurrency **small** (it uses
+real tokens/quota) and it asks **product questions only** — nothing is purchased.
+```powershell
+python scale/loadtest.py --url https://<your-cloud-run-url> --endpoint /chat `
+  --email demo@goopher.app --password <MASTER_PASSWORD> --stages 5,15,30 --duration 10
+```
+You'll see higher (but bounded) latency — real LLM calls take ~1–3s — with **100% success** at
+modest concurrency, and the Cloud Run instance count stepping up.
+> **SAY:** *"These are real Gemini-backed conversations — concurrent users, still healthy. At very
+> high sustained LLM QPS you'd reserve capacity with **Vertex Provisioned Throughput** for a
+> guaranteed SLA. And because our hot path is deterministic, the LLM QPS we actually need is far
+> lower than total traffic — so it's cheaper and never the bottleneck."*
+
+**Why two modes:** `/sim/chat` isolates the **app's** horizontal scaling (model-independent, cheap to
+push to 10k); `/chat` proves the **LLM** path is healthy under real concurrent load. Show the first
+for the headline 10,000-user number, the second to answer "but real users use the LLM."
+
 ## The scale dials (apply before the 10k run — does NOT change app code)
 The default demo deploy is capped small (cheap). For the headline run, raise the limits:
 ```bash

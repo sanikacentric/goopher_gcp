@@ -52,17 +52,22 @@ def _pct(values: list[float], p: float) -> float:
 async def _worker(client, url, endpoint, mode, deadline, lat, counts, idx):
     i = idx
     is_sim = endpoint == "/sim/chat"
+    is_real = endpoint == "/chat"   # REAL orchestrator → Gemini (authenticated)
     while time.monotonic() < deadline:
-        if is_sim:
-            q = QUERIES[i % len(QUERIES)]
-            m = ("order_status" if (mode == "order_status" or (mode == "mixed" and i % 3 == 0))
-                 else "browse")
-            params = {"message": q, "mode": m}
-        else:
-            params = None  # e.g. /catalog (works on the live service today, no params)
+        q = QUERIES[i % len(QUERIES)]
         t0 = time.monotonic()
         try:
-            r = await client.get(f"{url}{endpoint}", params=params)
+            if is_real:
+                # product QUESTIONS only (no order/confirm) → nothing is purchased.
+                body = {"message": f"do you have {q}?",
+                        "session_id": f"load-{idx}", "channel": "web"}
+                r = await client.post(f"{url}{endpoint}", json=body)
+            elif is_sim:
+                m = ("order_status" if (mode == "order_status" or (mode == "mixed" and i % 3 == 0))
+                     else "browse")
+                r = await client.get(f"{url}{endpoint}", params={"message": q, "mode": m})
+            else:
+                r = await client.get(f"{url}{endpoint}")  # e.g. /catalog, no params
             ok = r.status_code == 200
         except Exception:  # noqa: BLE001
             ok = False
@@ -71,13 +76,21 @@ async def _worker(client, url, endpoint, mode, deadline, lat, counts, idx):
         i += 1
 
 
-async def run_stage(url: str, endpoint: str, concurrency: int, duration: float, mode: str) -> dict:
+async def _login(url: str, email: str, password: str) -> str:
+    async with httpx.AsyncClient(timeout=30) as c:
+        r = await c.post(f"{url}/auth/login", json={"email": email, "password": password})
+        r.raise_for_status()
+        return r.json()["access_token"]
+
+
+async def run_stage(url, endpoint, concurrency, duration, mode, token=None) -> dict:
     lat: list[float] = []
     counts = [0, 0]  # [ok, err]
     limits = httpx.Limits(max_connections=concurrency + 50,
                           max_keepalive_connections=concurrency + 50)
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
     deadline = time.monotonic() + duration
-    async with httpx.AsyncClient(timeout=30, limits=limits) as client:
+    async with httpx.AsyncClient(timeout=60, limits=limits, headers=headers) as client:
         await asyncio.gather(*[
             _worker(client, url, endpoint, mode, deadline, lat, counts, i)
             for i in range(concurrency)
@@ -100,17 +113,36 @@ async def main() -> None:
     ap.add_argument("--duration", type=float, default=8.0, help="seconds per stage")
     ap.add_argument("--mode", default="mixed", choices=["browse", "order_status", "mixed"])
     ap.add_argument("--endpoint", default="/sim/chat",
-                    help="/sim/chat (this branch) or /catalog (works on the live service today)")
+                    help="/sim/chat or /catalog (no-LLM), or /chat for the REAL LLM path")
+    ap.add_argument("--email", default="demo@goopher.app", help="login for --endpoint /chat")
+    ap.add_argument("--password", default="", help="master password for --endpoint /chat")
     args = ap.parse_args()
 
     stages = [int(s) for s in args.stages.split(",") if s.strip()]
-    print(f"\n  GOOPHER load test → {args.url}{args.endpoint}   mode={args.mode}   {args.duration}s/stage")
-    print("  (read-only, no LLM, no writes — safe to run against the live service)\n")
+    token = None
+    if args.endpoint == "/chat":
+        # REAL conversations through the orchestrator → Gemini (authenticated).
+        if not args.password:
+            raise SystemExit("--password is required for --endpoint /chat (the master password).")
+        if max(stages) > 50:
+            print("  ⚠️  REAL LLM mode: high concurrency uses real tokens/quota — "
+                  "recommend small stages like --stages 5,15,30.\n")
+        token = await _login(args.url, args.email, args.password)
+        print("  ✅ logged in — driving REAL conversations (Gemini). Product questions only; "
+              "nothing is purchased.")
+
+    label = ("REAL LLM (/chat)" if args.endpoint == "/chat"
+             else f"{args.endpoint} (no-LLM)")
+    print(f"\n  GOOPHER load test → {args.url}   {label}   mode={args.mode}   {args.duration}s/stage")
+    if args.endpoint != "/chat":
+        print("  (read-only, no LLM, no writes — safe to run against the live service)\n")
+    else:
+        print()
     print(f"  {'USERS':>7} {'REQS':>9} {'RPS':>9} {'p50ms':>8} {'p95ms':>8} "
           f"{'p99ms':>8} {'OK%':>7} {'ERR':>6}")
     print("  " + "-" * 70)
     for c in stages:
-        r = await run_stage(args.url, args.endpoint, c, args.duration, args.mode)
+        r = await run_stage(args.url, args.endpoint, c, args.duration, args.mode, token)
         print(f"  {r['users']:>7} {r['total']:>9} {r['rps']:>9.0f} {r['p50']:>8.0f} "
               f"{r['p95']:>8.0f} {r['p99']:>8.0f} {r['ok_pct']:>6.1f}% {r['err']:>6}")
     print("\n  ↑ flat latency + rising RPS as users climb = Cloud Run scaling out.")

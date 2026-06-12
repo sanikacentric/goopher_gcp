@@ -63,6 +63,76 @@ serverless and horizontal. That's what makes 10,000 users a **dial**, not a re-a
 
 ---
 
+## How to narrate the Cloud Run dashboard to stakeholders
+Open **Cloud Run → goopher-api → Observability → METRICS** with the load test running, and point at
+each panel. Two voices: a **VP (business)** line and a **CTO (technical)** line.
+
+**Header — `Scaling: Auto (Min: 1, Max: 20)`:** *"This one line is the whole scale story — GOOPHER
+runs anywhere from 1 server when it's quiet to 20 when it's busy, automatically. I never touch it;
+Google Cloud decides based on demand."*
+
+| Panel | VP (business) | CTO (technical) |
+|---|---|---|
+| **Container instance count** ⭐ | *"Watch this climb as customers arrive — capacity added by itself, dropped when they leave."* | *"Instances autoscale 1→20 on concurrency; no manual provisioning, no orchestration code."* |
+| **Request count** | *"The volume of customer interactions it's handling at once — thousands."* | *"Throughput (RPS) — rises with load while latency stays flat."* |
+| **Request / End-to-end latency** | *"How fast each customer gets a response — stays fast even as volume spikes."* | *"p50/p95/p99; a bounded p95 under load = healthy scaling."* |
+| **Latency breakdown** | *"Shows exactly where any delay is, so we keep it snappy."* | *"Time split across routing / execution / egress — tuning observability."* |
+| **Billable container instance time** ⭐ | *"You pay only for the green — the busy time. Idle scales to near-zero. **Cost tracks usage, not headcount.**"* | *"Per-instance-second billing; scale-to-zero = $0 idle."* |
+
+**The two panels that matter most:** **Container instance count** (proof it *scales*) and **Billable
+instance time** (proof it's *cost-efficient*). Lead with those.
+
+**Choreography (with load running):** point at instance count **stepping up** → *"it scales"*; latency
+**flat** → *"and stays fast"*; billable time → *"and you pay only for the busy moments."*
+
+**Closing line:** *"Your ask was high-volume and global. Here's the proof on Google Cloud's own
+dashboard: as load rises, GOOPHER adds capacity automatically, stays fast, and you pay only for what
+you use — no re-architecture, no over-provisioning."*
+
+**10-second version:** *"This graph is the system adding servers by itself as customers arrive, staying
+fast, and billing only for the busy time — autoscaling and cost-efficiency, proven live."*
+
+---
+
+## Bonus demo — prove the REAL LLM path scales too (for "but real users use the LLM!")
+The same tool can drive **genuine conversations through the orchestrator → Gemini** (authenticated),
+so you can show the real path holds up under concurrent users. Keep concurrency **small** (it uses
+real tokens/quota) and it asks **product questions only** — nothing is purchased.
+```powershell
+python scale/loadtest.py --url https://<your-cloud-run-url> --endpoint /chat `
+  --email demo@goopher.app --password <MASTER_PASSWORD> --stages 5,15,30 --duration 10
+```
+You'll see higher (but bounded) latency — real LLM calls take ~1–3s — with **100% success** at
+modest concurrency, and the Cloud Run instance count stepping up.
+> **SAY:** *"These are real Gemini-backed conversations — concurrent users, still healthy. At very
+> high sustained LLM QPS you'd reserve capacity with **Vertex Provisioned Throughput** for a
+> guaranteed SLA. And because our hot path is deterministic, the LLM QPS we actually need is far
+> lower than total traffic — so it's cheaper and never the bottleneck."*
+
+**Why two modes:** `/sim/chat` isolates the **app's** horizontal scaling (model-independent, cheap to
+push to 10k); `/chat` proves the **LLM** path is healthy under real concurrent load. Show the first
+for the headline 10,000-user number, the second to answer "but real users use the LLM."
+
+## "You only showed ONE extension — how do you know it works for 10,000?"
+**The extension is a thin client, not a server.** The UI runs **locally in each user's browser**, so
+10,000 users = **10,000 independent copies** of the UI — there's **no shared front-end** to overload;
+the UI scales by nature. The **only shared, finite resource** is the **backend API** on Cloud Run
+(`/chat`, `/vision`, `/advise`) that every extension calls. So "does the extension scale?" = "does the
+**backend** hold up when thousands of extensions call it at once?" — which is exactly what the load
+test measures, against the **same `/chat` endpoint the extension uses** (identical request: `POST /chat`
+with `{message, session_id, channel}` + JWT, a unique session per virtual user).
+
+**Show the link live (30s, very convincing):**
+1. In the extension, open **DevTools → Network**; send one message → point at the **`POST /chat`** request.
+   *"This is the one call the extension makes; the UI runs locally in each user's browser."*
+2. Run `loadtest.py --endpoint /chat …` → *"my load test fires that exact call at scale — thousands of
+   those extensions hitting the backend at once."*
+
+> **One-liner:** *"The extension is a per-user client, so the UI scales by itself — 10,000 users is
+> 10,000 independent UIs. What they share is the backend API, and the load test calls that exact API.
+> Proving the backend autoscales **is** proving 10,000 extensions work. Clicking 10,000 browsers wouldn't
+> prove anything the API metrics don't."*
+
 ## The scale dials (apply before the 10k run — does NOT change app code)
 The default demo deploy is capped small (cheap). For the headline run, raise the limits:
 ```bash

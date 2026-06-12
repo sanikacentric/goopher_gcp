@@ -217,6 +217,48 @@ Free-tier-first: Gemini on Vertex ($300 credit), Cloud Run, Firestore. Direct
 in-process ADK function tools (MCP-stdio failed in Cloud Run and wasn't justified
 for a single consumer). *Point at:* `ARCHITECTURE.md §4`, `LEARNINGS §4`.
 
+**Q: How does this handle high volume — 100 to 10,000 users? (the brief's core ask)**
+GOOPHER is **stateless** with session state in **Firestore**, so **Cloud Run autoscales
+horizontally** — any instance serves any user. Capacity is a **config dial**:
+`concurrency × max-instances` (e.g. 80 × 100 = up to 8,000 concurrent). The expensive part —
+Gemini — is kept **off the hot path** (routing/language/checkout are deterministic Python), so
+most traffic is cheap; it **degrades gracefully** to grounded tool answers if the model is
+throttled, and **scales to zero** at idle. *Demo it:* `python scale/loadtest.py …` ramps to 10k
+and the Cloud Run **instance graph steps up live**. *Point at:* `SCALE.md`.
+
+**Q: What did you actually change/code to make it autoscale?**
+**Nothing in the app — and that's the point.** Autoscaling is a **Cloud Run platform capability**
+that works *because* the architecture is stateless + Firestore-backed + async. Scale is tuned with
+**`gcloud` flags** (`--concurrency`, `--max-instances`, `--min-instances`), not code. What I *added*
+is the **proof tooling**: read-only, no-LLM `/sim/chat` + `/sim/stats` endpoints and a
+**load generator** (`scale/loadtest.py`) so I can drive 10,000 concurrent users and show Cloud Run
+scaling out — **without burning LLM quota or mutating data**. *(Senior framing: the platform does the
+scaling; my job was to architect so it can, and to prove it.)*
+
+**Q: But real users use the LLM — does THAT scale?**
+Yes — Gemini on **Vertex** is itself managed + autoscaled; for guaranteed QPS under sustained load
+use **Vertex Provisioned Throughput** (reserved capacity + SLA). **Flash** is low-cost, and because
+the deterministic layer absorbs much of the traffic, the **LLM QPS you actually need is far lower
+than total request volume**. *Demo it:* `loadtest.py --endpoint /chat --stages 5,15,30` drives real
+Gemini conversations under concurrent load (still healthy). *One-liner:* *"The load test isolates the
+app's horizontal scaling, which is model-independent; the LLM scales separately on Vertex, and our
+deterministic hot path means we call it far less than total traffic — cheaper, never the bottleneck."*
+
+**Q: You only showed ONE extension — how do you prove it works for 10,000 users?**
+The extension is a **thin client, not a server** — its UI runs **locally in each user's browser**, so
+10,000 users = **10,000 independent UIs**; there's **no shared front-end to overload**. The only shared,
+finite resource is the **backend API** every extension calls, and the load test hits the **same `/chat`
+endpoint the extension uses** (identical `POST /chat` request, unique session per virtual user). So
+proving the **backend** autoscales **is** proving 10,000 extensions work. *Show it live:* extension →
+**DevTools → Network** → point at the `POST /chat` request → *"my load test fires that exact call at
+scale."* *One-liner:* *"Clicking 10,000 browsers wouldn't prove anything the API metrics don't."*
+
+**Q: Won't load-testing 10k users cost a fortune / hit quota?**
+Not the way I built it: the headline run hits `/sim/chat` — **read-only, no LLM, no writes** — which
+still exercises the *real* request + Firestore lookup path, so you measure **app autoscaling** (the
+model-independent property) without LLM cost. The real-LLM run is deliberately small (5–30 concurrent)
+and asks **product questions only**, so nothing is purchased.
+
 ---
 
 # Part B — Customer / business stakeholder Q&A

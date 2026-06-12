@@ -42,6 +42,14 @@ def test_sim_counter_increments():
     assert after >= before + 1
 
 
+def test_sim_is_exempt_from_rate_limiting():
+    """A load generator runs from ONE IP. /sim/* must be exempt from the per-client
+    rate limit (global cap 120/min) or the test would 429 — defeating the point."""
+    codes = {client.get("/sim/chat", params={"message": "lego"}).status_code
+             for _ in range(150)}          # well past the 120/min global budget
+    assert codes == {200}                  # never rate-limited
+
+
 def test_sim_disabled_returns_404(monkeypatch):
     from backend.app import main as m
     monkeypatch.setattr(m.settings, "scale_sim_enabled", False)

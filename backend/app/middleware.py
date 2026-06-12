@@ -111,9 +111,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 except ValueError:
                     pass
 
-        # --- 2) Per-client rate limits (skip health/metrics/dev + static) ---
+        # --- 2) Per-client rate limits (skip health/metrics/dev/sim + static) ---
+        # /sim/* are the high-volume SCALE-DEMO endpoints (read-only, no LLM): a load
+        # generator runs from ONE IP, so the per-client limit would 429 the test —
+        # exempt them so the load test measures Cloud Run autoscaling, not the limiter.
         if _settings.rate_limit_enabled and not (
-            path in ("/healthz", "/metrics") or path.startswith("/dev") or _is_static(path)
+            path in ("/healthz", "/metrics") or path.startswith("/dev")
+            or path.startswith("/sim") or _is_static(path)
         ):
             client = _client_id(request)
 

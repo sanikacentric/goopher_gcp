@@ -63,6 +63,37 @@ serverless and horizontal. That's what makes 10,000 users a **dial**, not a re-a
 
 ---
 
+## How to narrate the Cloud Run dashboard to stakeholders
+Open **Cloud Run → goopher-api → Observability → METRICS** with the load test running, and point at
+each panel. Two voices: a **VP (business)** line and a **CTO (technical)** line.
+
+**Header — `Scaling: Auto (Min: 1, Max: 20)`:** *"This one line is the whole scale story — GOOPHER
+runs anywhere from 1 server when it's quiet to 20 when it's busy, automatically. I never touch it;
+Google Cloud decides based on demand."*
+
+| Panel | VP (business) | CTO (technical) |
+|---|---|---|
+| **Container instance count** ⭐ | *"Watch this climb as customers arrive — capacity added by itself, dropped when they leave."* | *"Instances autoscale 1→20 on concurrency; no manual provisioning, no orchestration code."* |
+| **Request count** | *"The volume of customer interactions it's handling at once — thousands."* | *"Throughput (RPS) — rises with load while latency stays flat."* |
+| **Request / End-to-end latency** | *"How fast each customer gets a response — stays fast even as volume spikes."* | *"p50/p95/p99; a bounded p95 under load = healthy scaling."* |
+| **Latency breakdown** | *"Shows exactly where any delay is, so we keep it snappy."* | *"Time split across routing / execution / egress — tuning observability."* |
+| **Billable container instance time** ⭐ | *"You pay only for the green — the busy time. Idle scales to near-zero. **Cost tracks usage, not headcount.**"* | *"Per-instance-second billing; scale-to-zero = $0 idle."* |
+
+**The two panels that matter most:** **Container instance count** (proof it *scales*) and **Billable
+instance time** (proof it's *cost-efficient*). Lead with those.
+
+**Choreography (with load running):** point at instance count **stepping up** → *"it scales"*; latency
+**flat** → *"and stays fast"*; billable time → *"and you pay only for the busy moments."*
+
+**Closing line:** *"Your ask was high-volume and global. Here's the proof on Google Cloud's own
+dashboard: as load rises, GOOPHER adds capacity automatically, stays fast, and you pay only for what
+you use — no re-architecture, no over-provisioning."*
+
+**10-second version:** *"This graph is the system adding servers by itself as customers arrive, staying
+fast, and billing only for the busy time — autoscaling and cost-efficiency, proven live."*
+
+---
+
 ## Bonus demo — prove the REAL LLM path scales too (for "but real users use the LLM!")
 The same tool can drive **genuine conversations through the orchestrator → Gemini** (authenticated),
 so you can show the real path holds up under concurrent users. Keep concurrency **small** (it uses

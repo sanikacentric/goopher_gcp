@@ -37,8 +37,9 @@ _FINGERPRINTS = {
            # high-frequency order/shopping words so a Spanish order is detected
            "puede", "puedes", "hacer", "comprar", "compra", "colocar", "papas",
            "fritas", "paquetes", "paquete", "lote", "mayor", "necesito", "dame",
-           "tienen", "hay", "por", "favor", "una", "unos", "unas", "galletas",
-           "refresco", "cuanto", "donde", "qué", "que"},
+           "tienen", "tienes", "tiene", "hay", "por", "favor", "una", "unos", "unas",
+           "galletas", "refresco", "cuanto", "donde", "qué", "que", "entonces",
+           "también", "pero", "más", "muy", "este", "esta", "esto", "como", "cómo"},
     "fr": {"bonjour", "merci", "commande", "robe", "où", "combien", "veux",
            "bonsoir", "prix", "quel", "ma", "mon", "s'il"},
     "de": {"hallo", "danke", "bestellung", "kleid", "wieviel", "ich", "möchte",
@@ -106,9 +107,13 @@ def detect_language(text: str, default: str = "en") -> str:
     if en_score >= 1 and en_score >= best_other_score:
         return "en"
 
-    # Otherwise: require 2+ matching words, or 1 match that carries an accent —
-    # a lone common token shouldn't flip a sentence to another language.
-    if best_other_score >= 2 or (best_other_score == 1 and has_accent):
+    # Otherwise return the non-English language when: 2+ of its words match; OR 1
+    # word matches AND there's a strong corroborating signal — an accent, OR the
+    # message carries ZERO English signal (so a lone Spanish content word like
+    # "galletas" with no English structure words ⇒ Spanish, e.g.
+    # "Entonces tienes galletas Oreo"). A lone token in an otherwise-English
+    # sentence still won't flip it, because en_score would be ≥ 1 above.
+    if best_other_score >= 2 or (best_other_score >= 1 and (has_accent or en_score == 0)):
         return best_other
     return default
 

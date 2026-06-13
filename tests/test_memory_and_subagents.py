@@ -50,6 +50,12 @@ def test_spanish_order_detected_even_with_english_default():
     assert d("Se puede hacer un pedido al por mayor de 100 papas fritas", default="en") == "es"
     # English stays English even after a Spanish turn set the default.
     assert d("place an order of 100 potato chips", default="es") == "en"
+    # Spanish statement-question with no ¿ and one content word + zero English signal.
+    assert d("Entonces tienes galletas Oreo", default="en") == "es"
+    assert d("tienes papas fritas", default="en") == "es"
+    # …but a lone Spanish-ish token inside an English sentence stays English.
+    assert d("do you have oreo cookies", default="es") == "en"
+    assert d("order it", default="es") == "en"
 
 
 def test_language_directive():

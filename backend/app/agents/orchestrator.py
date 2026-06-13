@@ -44,8 +44,13 @@ their orders (single or in bulk).
 The store sells clothing (dresses), food/snacks (chips, cookies, soda, peanuts,
 crackers, snack bars), AND toys (soccer ball, LEGO, NERF, Play-Doh, Hot Wheels,
 puzzles). NEVER say you only sell one category.
-Be concise and proactive. Surface low-stock warnings and the current sale price.
+Be concise. Surface low-stock warnings and the current sale price.
 Stay on the topic of the store's clothing, food, and toy products and order help.
+
+If a customer asks for an item we do NOT sell (e.g. laptops, phones, electronics),
+reply BRIEFLY in ONE short sentence that we don't carry it. Do NOT proactively list
+products or suggest alternatives — unless a LEARNED LESSON in your context tells you
+to (only then should you name specific in-stock products).
 """.strip()
 
 
@@ -535,6 +540,18 @@ class AgentService:
                 used_tools = list(used_tools) + ["lesson_retrieve"]
                 ft.step("rsi", f"💡 lesson_retrieve — applied {len(_rsi_lessons)} learned lesson(s)",
                         _rsi_guidance[:180])
+                # The lesson is "suggest concrete in-stock alternatives". LLMs often
+                # answer with categories, not products — so GUARANTEE specific picks
+                # deterministically when the reply declines an item we don't carry.
+                _low = reply.lower()
+                _declines = any(k in _low for k in (
+                    "don't sell", "do not sell", "don't carry", "do not carry",
+                    "not sell", "not carry", "don't have", "do not have", "no laptops",
+                    "i'm sorry", "i am sorry", "unfortunately"))
+                if _declines:
+                    picks = self._instock_picks_line(language)
+                    if picks:
+                        reply = reply.rstrip() + "\n\n" + picks
 
             if channel == "phone":
                 with span("preprocess.adapt_for_phone"):
@@ -592,6 +609,23 @@ class AgentService:
             items = [f"{p.name} (${p.sale_price:.2f}, {p.department})" for p in prods[:n]]
             return ("\nIN-STOCK ITEMS you may suggest as alternatives: "
                     + "; ".join(items) + ".") if items else ""
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def _instock_picks_line(self, language: str = "en", n: int = 3) -> str:
+        """A SHORT customer-facing line naming a few concrete in-stock products —
+        appended (deterministically) when a learned lesson applies but the model
+        answered with categories instead of products. Localized; never raises."""
+        try:
+            from ..db.database import get_repository
+            prods = [p for p in get_repository().list_products()
+                     if any(v.stock > 0 for v in p.variants)]
+            prods.sort(key=lambda p: 0 if (p.department or "").lower().startswith("toy") else 1)
+            picks = "; ".join(f"{p.name} — ${p.sale_price:.2f}" for p in prods[:n])
+            if not picks:
+                return ""
+            line = f"💡 You might like: {picks}. What are you shopping for?"
+            return self._localize(line, language) if language and language != "en" else line
         except Exception:  # noqa: BLE001
             return ""
 
@@ -939,27 +973,25 @@ class AgentService:
             return {"ok": True, "variant_ids": [vid], "quantities": [qty], "bulk": False}
 
         product = self._extract_order_product(text)
-        contextual = bool(re.search(
-            r"\b(above|this|that|these|those|them|it|same|last|previous|the one)\b", lowered))
         if product:
             res = resolve_variant_by_name(product)
             if not res.get("ok"):
                 return {"ok": False, "message": res["message"], "bulk": False}
             return {"ok": True, "variant_ids": [res["variant_id"]], "quantities": [qty], "bulk": False}
-        if contextual:
-            from ..tools.inventory_tool import get_last_viewed
-            lv = get_last_viewed()
-            vid = self._resolve_id_to_variant(lv["sku"]) if lv else None
-            if vid is None:
-                return {"ok": False, "bulk": False,
-                        "message": "Which item would you like to order? Tell me the "
-                                   "product name, or ask me about it first."}
+
+        # No product NAMED ("place an order", "can you order", "order it/this/the
+        # above") → order the item the customer JUST discussed (last viewed). We do
+        # NOT fall back to a random default item — that placed the wrong order
+        # (e.g. asked about Coca-Cola, then "place an order" bought Cheez-It). If
+        # nothing was viewed, ASK rather than guess. Never substitutes.
+        from ..tools.inventory_tool import get_last_viewed
+        lv = get_last_viewed()
+        vid = self._resolve_id_to_variant(lv["sku"]) if lv else None
+        if vid:
             return {"ok": True, "variant_ids": [vid], "quantities": [qty], "bulk": False}
-        # bare "place an order" → default demo item
-        vids = self._default_basket(1)
-        if not vids:
-            return {"ok": False, "bulk": False, "message": "No in-stock items available."}
-        return {"ok": True, "variant_ids": vids, "quantities": [qty], "bulk": False}
+        return {"ok": False, "bulk": False,
+                "message": "Which item would you like to order? Tell me the product "
+                           "name, or ask me about it first (e.g. \"do you have Oreos?\")."}
 
     @staticmethod
     def _default_basket(n: int) -> list[str]:

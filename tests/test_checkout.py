@@ -11,6 +11,29 @@ from backend.app.tools.checkout_tool import (
 )
 
 
+def test_bare_order_uses_last_viewed_not_a_random_default(monkeypatch):
+    """Regression: ask about Coca-Cola, then 'place an order' must order Coca-Cola —
+    NOT fall back to a random default item (it was buying Cheez-It)."""
+    import backend.app.tools.inventory_tool as inv
+    inv.search_inventory(query="coca cola")          # sets last-viewed = Coca-Cola
+    svc = AgentService()
+    out = svc._try_checkout("can you place an order", "CUST-1001")  # no product named
+    assert out is not None
+    pay = svc._last_checkout
+    assert pay and pay.get("ok") is True
+    names = " ".join(c["name"].lower() for c in pay["cart"])
+    assert "coca" in names and "cheez" not in names   # the viewed item, never a guess
+
+
+def test_bare_order_with_nothing_viewed_asks_instead_of_guessing(monkeypatch):
+    """No product named and nothing viewed → ASK which item; never place a guess."""
+    import backend.app.tools.inventory_tool as inv
+    monkeypatch.setattr(inv, "_LAST_VIEWED", None)
+    svc = AgentService()
+    out = svc._try_checkout("place an order", "CUST-1001")
+    assert out is not None and "which item" in out[0].lower()
+
+
 def test_translate_helpers_are_safe_noops_without_llm():
     """The multilingual gate helpers must never break: no LLM → return the input,
     and English is always a pure no-op (so existing English behaviour is untouched)."""

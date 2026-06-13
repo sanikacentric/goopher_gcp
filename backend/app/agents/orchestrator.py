@@ -540,18 +540,20 @@ class AgentService:
                 used_tools = list(used_tools) + ["lesson_retrieve"]
                 ft.step("rsi", f"💡 lesson_retrieve — applied {len(_rsi_lessons)} learned lesson(s)",
                         _rsi_guidance[:180])
-                # The lesson is "suggest concrete in-stock alternatives". LLMs often
-                # answer with categories, not products — so GUARANTEE specific picks
-                # deterministically when the reply declines an item we don't carry.
-                _low = reply.lower()
-                _declines = any(k in _low for k in (
-                    "don't sell", "do not sell", "don't carry", "do not carry",
-                    "not sell", "not carry", "don't have", "do not have", "no laptops",
-                    "i'm sorry", "i am sorry", "unfortunately"))
-                if _declines:
+
+            # RSI before→after, ENFORCED deterministically (works for text AND voice,
+            # since LLMs ignore "be terse"/"name products"):
+            #   • a "we don't sell that" reply with NO lesson → keep it PLAIN (the
+            #     model often volunteers a product list; we replace it with a clean
+            #     one-liner) → a clean "before".
+            #   • the same reply WITH a lesson → guarantee specific in-stock picks.
+            if path in ("adk", "fallback") and self._reply_declines(reply):
+                if _rsi_lessons:
                     picks = self._instock_picks_line(language)
-                    if picks:
+                    if picks and "💡" not in reply:
                         reply = reply.rstrip() + "\n\n" + picks
+                else:
+                    reply = self._plain_decline(language)
 
             if channel == "phone":
                 with span("preprocess.adapt_for_phone"):
@@ -628,6 +630,22 @@ class AgentService:
             return self._localize(line, language) if language and language != "en" else line
         except Exception:  # noqa: BLE001
             return ""
+
+    @staticmethod
+    def _reply_declines(reply: str) -> bool:
+        """True if a reply is a 'we don't sell/carry this' decline (NOT 'out of
+        stock'). Drives the RSI before→after contrast."""
+        low = (reply or "").lower()
+        return any(k in low for k in (
+            "don't sell", "do not sell", "don't carry", "do not carry",
+            "don't offer", "do not offer", "we don't have laptops", "no laptops"))
+
+    def _plain_decline(self, language: str = "en") -> str:
+        """The clean 'before' for the RSI demo: a short decline with NO product
+        suggestions (until a lesson is taught). Localized."""
+        line = ("Sorry, we don't carry that. We sell women's clothing, "
+                "food & snacks, and toys.")
+        return self._localize(line, language) if language and language != "en" else line
 
     # ----- generation paths (called by run_turn after pre-processing) ----- #
     def _generate_adk(self, session_id: str, text: str, customer_id: str,

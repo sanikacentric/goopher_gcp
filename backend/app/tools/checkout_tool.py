@@ -14,8 +14,24 @@ is intentionally fake; swapping in a real PSP (Stripe, etc.) would only touch
 """
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from ..db.database import get_repository
 from ..observability.telemetry import incr, log_event
+
+# How many days after the order is placed we promise delivery (demo SLA).
+_DELIVERY_DAYS = 5
+
+
+def _order_dates() -> tuple[str, str]:
+    """
+    Return (order_date, estimated_delivery) as ISO strings, computed from the
+    real current date so the ETA is ALWAYS in the future. Previously these were
+    hardcoded (2026-06-01 / 2026-06-08), which drifted into the past as time
+    passed and made confirmations show an already-elapsed delivery date.
+    """
+    today = date.today()
+    return today.isoformat(), (today + timedelta(days=_DELIVERY_DAYS)).isoformat()
 
 
 def _next_order_id() -> str:
@@ -171,12 +187,13 @@ def place_order(customer_id: str, variant_id: str = "", qty: int = 1,
 
     repo = get_repository()
     order_id = _next_order_id()
+    order_date, est_delivery = _order_dates()
     order = Order(
         order_id=order_id,
         customer_id=customer_id,
         status="Processing",
-        order_date="2026-06-01",
-        estimated_delivery="2026-06-08",
+        order_date=order_date,
+        estimated_delivery=est_delivery,
         delivered_date=None,
         tracking_number=None,
         carrier=None,
@@ -211,9 +228,9 @@ def place_order(customer_id: str, variant_id: str = "", qty: int = 1,
         "total": total,
         "payment": payment,
         "fulfillment": fulfillment,
-        "estimated_delivery": "2026-06-08",
+        "estimated_delivery": est_delivery,
         "message": (f"Payment successful — order {order_id} placed! "
-                    f"${total:.2f} charged. Estimated delivery 2026-06-08."),
+                    f"${total:.2f} charged. Estimated delivery {est_delivery}."),
     }
     data["email"] = _notify_order_email(data, localize)   # best-effort confirmation email
     return data
@@ -290,9 +307,10 @@ def place_bulk_order(customer_id: str, variant_ids: list[str] | None = None,
 
     payment = process_payment(total, method="card")
     order_id = _next_order_id()
+    order_date, est_delivery = _order_dates()
     order = Order(
         order_id=order_id, customer_id=customer_id, status="Processing",
-        order_date="2026-06-01", estimated_delivery="2026-06-08",
+        order_date=order_date, estimated_delivery=est_delivery,
         delivered_date=None, tracking_number=None, carrier=None,
         shipping_address="123 Demo St, Plano, TX 75024",
         items=items, total=total,
@@ -319,7 +337,7 @@ def place_bulk_order(customer_id: str, variant_ids: list[str] | None = None,
         "total": total,
         "payment": payment,
         "fulfillment": fulfillment,
-        "estimated_delivery": "2026-06-08",
+        "estimated_delivery": est_delivery,
         "message": (f"Payment successful — bulk order {order_id} placed with "
                     f"{len(items)} item(s), ${total:.2f} charged."),
     }

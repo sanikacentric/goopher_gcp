@@ -19,7 +19,7 @@ GOOPHER runs with **zero secrets** out of the box:
 |---|---|
 | Database | SQLite (`DB_BACKEND=sqlite`), auto-created |
 | LLM | Falls back to a deterministic path; set a key for real Gemini |
-| Order email | **Simulated** — logged and shown in the reply, nothing sent |
+| Order email | **Simulated** — logged and shown in the reply, nothing sent. Real delivery is opt-in: see [README → Order-confirmation email](README.md#-order-confirmation-email-optional) |
 | Login | Fail-closed: set `MASTER_PASSWORD` in `.env` to log in |
 
 To use real Gemini, either set `GOOGLE_API_KEY` (AI Studio) **or** use Vertex AI

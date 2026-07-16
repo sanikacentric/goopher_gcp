@@ -102,11 +102,13 @@ while preserving conversation context.
   Confirm button re-sends the resolved `SKU=qty` lines, so the file is never
   re-uploaded. See [`ARCHITECTURE.md` §5d](ARCHITECTURE.md).
 - **📧 Order-confirmation email on every order.** Single or bulk, via **text /
-  voice / phone / camera vision / Excel** — every placed order emails a receipt to
-  the buyer ([`email_tool.py`](backend/app/tools/email_tool.py)). It's **best-effort
-  and never blocks checkout** (wrapped in try/except), and pluggable: **Resend**
-  (free tier) or **SMTP**, defaulting to a clearly-labelled **simulated** mode when
-  no credentials are set. See [`ARCHITECTURE.md` §5m](ARCHITECTURE.md).
+  voice / phone / camera vision / Excel** — every placed order composes a receipt
+  in the shopper's language ([`email_tool.py`](backend/app/tools/email_tool.py)).
+  It's **best-effort and never blocks checkout** (wrapped in try/except), and
+  pluggable: **Resend** (free tier) or **SMTP**. **Defaults to a clearly-labelled
+  simulated mode** — nothing is sent until you configure a transport. See
+  [Order-confirmation email](#-order-confirmation-email-optional) to enable real
+  delivery, and [`ARCHITECTURE.md` §5m](ARCHITECTURE.md) for the internals.
 
 **Fixes & parity**
 - **📷 Vision now asks "please confirm" before charging** — camera orders preview a
@@ -278,6 +280,50 @@ uvicorn backend.app.main:app --reload --port 8080
 ```
 With a key set, GOOPHER uses the **ADK + Gemini** path (real reasoning + tool
 calling). Without one, it falls back to the deterministic engine.
+
+---
+
+## 📧 Order-confirmation email (optional)
+
+Every placed order — single or bulk, from **text / voice / phone / camera vision
+/ Excel upload** — sends a confirmation receipt in the shopper's language.
+
+**By default this runs in SIMULATED mode: no credentials, no mail server, and
+nothing actually sent.** The email is composed, written to the logs, and shown in
+the reply, so the whole flow is demonstrable out of the box. This is deliberate —
+the public repo ships **no real email address and no mail credentials**.
+
+Sending is **best-effort and never blocks checkout** — if a transport is
+misconfigured or down, the order still completes
+([`email_tool.py`](backend/app/tools/email_tool.py) wraps it in try/except).
+
+### Enabling real delivery
+
+There is a provision to send real email whenever you want it. Set **`NOTIFY_EMAIL`**
+(the recipient) plus **one** transport — the first one configured wins:
+
+| | Variables | Notes |
+|---|---|---|
+| **Resend** | `RESEND_API_KEY` | Free tier. The test sender `onboarding@resend.dev` needs no domain verification, but only delivers to your Resend account's own address — so set `NOTIFY_EMAIL` to that same address. |
+| **SMTP** | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | e.g. Gmail with a 16-char App Password. |
+| **(none)** | — | **Simulated mode** — the default. |
+
+**Locally** — in `.env` (gitignored, never committed):
+```bash
+NOTIFY_EMAIL=you@example.com
+RESEND_API_KEY=re_xxx            # or the SMTP_* set
+```
+
+**On Cloud Run via CI** — add `NOTIFY_EMAIL` and `RESEND_API_KEY` as GitHub
+repository secrets (**Settings → Secrets and variables → Actions**). The deploy
+reads them; with neither set it falls back to `orders@example.com` and stays in
+simulated mode. Never hardcode either into `deploy.yml` or commit them.
+
+> 🔒 Keep the recipient address in a **secret**, not a plain variable — secrets
+> are encrypted, masked in logs, and are **not exposed to pull requests from
+> forks**, so a malicious fork PR cannot read them.
+
+See [`ARCHITECTURE.md` §5m](ARCHITECTURE.md) for the transport-selection logic.
 
 ---
 

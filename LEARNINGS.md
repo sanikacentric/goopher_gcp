@@ -193,7 +193,7 @@ independent issues. Each is a useful lesson on its own:
   (in-process). Renamed `app/mcp/` → `app/tools/`.
 - **Trade-off accepted:** Lose "true MCP transport" (and external-client
   reusability) in exchange for reliability and simplicity. MCP only earns its
-  keep when *external* clients (Claude Desktop, other apps) need the tools.
+  keep when *external* MCP-compatible clients or other apps need the tools.
 - **Lesson:** Don't adopt a protocol/pattern for its own sake; match the
   architecture to the actual consumer set and the runtime's constraints.
 

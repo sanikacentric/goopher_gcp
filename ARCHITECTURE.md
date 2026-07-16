@@ -175,7 +175,7 @@ coherent across turns, channels, and languages.*
   bursty chat backend; `min-instances=0` keeps cost at $0 when idle (T14).
 - **Cloud Trace** — 2.5M free spans/month for the built-in observability (T10).
 - **MCP** — decouples tools from the agent so the same inventory/order tools
-  are reusable by any MCP client (e.g. Claude Desktop), not just GOOPHER (T5).
+  are reusable by any external MCP-compatible client, not just GOOPHER (T5).
 
 ---
 

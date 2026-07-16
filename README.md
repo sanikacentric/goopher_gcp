@@ -1,8 +1,17 @@
 # 🛍️ GOOPHER
 
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/sanikacentric/goopher_gcp/actions/workflows/deploy.yml/badge.svg)](https://github.com/sanikacentric/goopher_gcp/actions/workflows/deploy.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+
 **A unified conversational retail agent for JCPenney "Casual Dresses for Women",
 delivered as a Chrome extension and powered by Google ADK + Gemini on Google
 Cloud (free tier).**
+
+> 🔓 **Open source (Apache-2.0).** GOOPHER runs locally with **zero secrets** —
+> SQLite, simulated payments, and simulated order email out of the box. See
+> [CONTRIBUTING.md](CONTRIBUTING.md) to get started and
+> [SECURITY.md](SECURITY.md) before deploying your own instance.
 
 GOOPHER lets a shopper discover dresses, check **real-time inventory**, and
 manage **orders** (one at a time *or* in bulk) — across **channels** (web /
@@ -400,6 +409,33 @@ Interactive docs at `/docs` when running.
   structured JSON logs, `/metrics` counters; flip `OTEL_EXPORTER=gcp` for Cloud Trace.
 
 ## ⚠️ Notes & disclaimers
-- Synthetic JCPenney-style data; brand names used only for demo realism.
-- Demo auth uses a seeded password; swap for Firebase Auth in production.
+- Synthetic JCPenney-style data; brand names used only for demo realism. GOOPHER
+  is **not affiliated with, endorsed by, or sponsored by** JCPenney or any brand
+  named in the demo catalog.
+- **Payments are simulated** — `process_payment` always succeeds and moves no
+  money. There is no payment gateway.
+- Demo auth is a single-user lockdown (email allowlist + one master password);
+  swap for Firebase Auth in production.
 - All Google Cloud services chosen for their **always-free tiers**.
+
+## 🤝 Contributing
+Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md)
+for setup, the test/eval gates, and the no-secrets rule. To report a
+vulnerability, follow [SECURITY.md](SECURITY.md) (please don't open a public
+issue).
+
+## 📄 License
+Licensed under the **Apache License, Version 2.0** — see [LICENSE](LICENSE).
+Apache-2.0 is the license used across the Google ecosystem this project builds
+on (Agent Development Kit, Gemini samples, Cloud SDKs), and it includes an
+express patent grant.
+
+```
+Copyright 2026 GOOPHER contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+```

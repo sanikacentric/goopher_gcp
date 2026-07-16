@@ -74,7 +74,10 @@ class Settings(BaseSettings):
     # with none set it runs in SIMULATED mode (logged + shown in the reply), so the
     # flow works with zero secrets. Set real creds in env / Cloud Run to send.
     email_enabled: bool = True
-    notify_email: str = "tungaresanika2@gmail.com"
+    # Where order confirmations are sent. Set NOTIFY_EMAIL in your .env / Cloud Run
+    # env to your own address; the placeholder default keeps the repo free of
+    # personal data and still works (SIMULATED mode logs the email).
+    notify_email: str = "orders@example.com"
     email_from: str = "GOOPHER <orders@goopher.app>"
     smtp_host: str = ""
     smtp_port: int = 587

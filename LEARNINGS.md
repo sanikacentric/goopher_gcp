@@ -9,8 +9,8 @@
 
 **Date:** 2026-05-31 → 2026-06-01
 **Repo:** https://github.com/sanikacentric/goopher_gcp
-**Live service:** https://goopher-api-7vnucwimtq-uc.a.run.app
-**GCP project:** `sanika-project-2107` (Free Trial, $300 credit)
+**Live service:** https://<your-service>.a.run.app
+**GCP project:** `<your-project-id>` (Free Trial, $300 credit)
 
 ---
 

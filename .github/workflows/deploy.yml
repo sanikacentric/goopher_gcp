@@ -7,13 +7,17 @@
 #
 # Required repository secrets for deploy (Settings → Secrets and variables →
 # Actions → New repository secret):
-#   GCP_PROJECT_ID   your Google Cloud project id (e.g. sanika-project-2107)
+#   GCP_PROJECT_ID   your Google Cloud project id (e.g. my-goopher-project)
 #   GCP_SA_KEY       JSON key of a deployer service account (see README/scripts)
 #   JWT_SECRET       a long random string for signing auth tokens
 #   MASTER_PASSWORD  the ONLY password that can log in (single-user lockdown).
 #                    If unset, the deployed service rejects every login.
 # Optional:
 #   ALLOWED_EMAILS   comma-separated allowlist (defaults to demo@goopher.app)
+#   NOTIFY_EMAIL     where order confirmations are sent. With Resend's test sender
+#                    this must be your Resend account's own address. Unset ->
+#                    orders@example.com (email stays simulated).
+#   RESEND_API_KEY   Resend key to actually send mail. Unset -> simulated mode.
 #   GOOGLE_API_KEY   AI Studio Gemini key (NOT needed when using Vertex AI, which
 #                    this workflow does via USE_VERTEXAI=true)
 #   OPENAI_API_KEY   only if you also want the OpenAI fallback available in cloud
@@ -123,6 +127,7 @@ jobs:
           MASTER_PW: ${{ secrets.MASTER_PASSWORD }}
           ALLOWED: ${{ secrets.ALLOWED_EMAILS }}
           RESEND: ${{ secrets.RESEND_API_KEY }}
+          NOTIFY: ${{ secrets.NOTIFY_EMAIL }}
         run: |
           # Sanitize: single tokens / single lines (env-var string can't contain
           # commas or newlines). The master password must NOT contain a comma.
@@ -131,6 +136,7 @@ jobs:
           PW_CLEAN="$(printf '%s' "$MASTER_PW" | tr -d '\r\n')"
           EMAILS_CLEAN="$(printf '%s' "${ALLOWED:-demo@goopher.app}" | tr -d '[:space:]')"
           RESEND_CLEAN="$(printf '%s' "$RESEND" | tr -d '[:space:]')"
+          NOTIFY_CLEAN="$(printf '%s' "${NOTIFY:-orders@example.com}" | tr -d '[:space:]')"
           # Write env vars to a YAML file so the (possibly punctuation-heavy)
           # master password can't break gcloud's comma-separated --set-env-vars.
           F=/tmp/envvars.yaml
@@ -149,9 +155,9 @@ jobs:
           echo "MASTER_PASSWORD: \"${PW_CLEAN}\""          >> "$F"
           # Order-confirmation email via Resend (free tier). The test sender
           # onboarding@resend.dev needs no domain verification but only delivers
-          # to the Resend account's own email — keep NOTIFY_EMAIL = that address.
-          # If RESEND_API_KEY secret is unset, this is "" → email stays simulated.
-          echo "NOTIFY_EMAIL: \"tungaresanika2@gmail.com\"" >> "$F"
+          # to the Resend account's own email — so set the NOTIFY_EMAIL secret to
+          # that same address. If RESEND_API_KEY is unset, email stays simulated.
+          echo "NOTIFY_EMAIL: \"${NOTIFY_CLEAN}\""         >> "$F"
           echo "EMAIL_FROM: \"onboarding@resend.dev\""      >> "$F"
           echo "RESEND_API_KEY: \"${RESEND_CLEAN}\""        >> "$F"
           gcloud run deploy "$SERVICE" \

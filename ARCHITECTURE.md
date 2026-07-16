@@ -784,7 +784,7 @@ covers all modalities (and any future one) automatically.
      `urllib`, no SDK).
   3. **Simulated** — no creds → the email is logged and surfaced in the reply
      (`📧 … (email simulated)`), so the flow and the demo work with **zero secrets**.
-- **Recipient** defaults to `settings.notify_email` (`tungaresanika2@gmail.com`),
+- **Recipient** defaults to `settings.notify_email` (`your-address@example.com`),
   overridable by `NOTIFY_EMAIL`. The body is built from the order (items, total,
   tracking, ETA).
 - **Surfaced to the user.** `place_order`/`place_bulk_order` attach `data["email"]`;

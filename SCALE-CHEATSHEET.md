@@ -1,9 +1,9 @@
 # GOOPHER — Autoscaling Cheatsheet (copy-paste)
 
-**Service:** `goopher-api` · **Region:** `us-central1` · **Project:** `sanika-project-2107`
-**URL:** `https://goopher-api-7vnucwimtq-uc.a.run.app`
-**Cloud Run metrics:** `https://console.cloud.google.com/run/detail/us-central1/goopher-api/observability/metrics?project=sanika-project-2107`
-**Cloud Trace:** `https://console.cloud.google.com/traces/list?project=sanika-project-2107`
+**Service:** `goopher-api` · **Region:** `us-central1` · **Project:** `<your-project-id>`
+**URL:** `https://<your-service>.a.run.app`
+**Cloud Run metrics:** `https://console.cloud.google.com/run/detail/us-central1/goopher-api/observability/metrics?project=<your-project-id>`
+**Cloud Trace:** `https://console.cloud.google.com/traces/list?project=<your-project-id>`
 
 > **Shell note:** **Cloud Shell = bash** (single-line, `\` to wrap). **Your laptop = PowerShell**
 > (backtick `` ` `` to wrap). The `gcloud` commands run in **Cloud Shell**; the `python` load test
@@ -34,7 +34,7 @@ Verify (Cloud Shell):
 ```bash
 gcloud run services describe goopher-api --region us-central1 --format="value(spec.template.metadata.annotations)"
 # expect: ...maxScale=20;minScale=1...
-curl https://goopher-api-7vnucwimtq-uc.a.run.app/sim/stats   # expect backend=firestore, a counter
+curl https://<your-service>.a.run.app/sim/stats   # expect backend=firestore, a counter
 ```
 > Free-trial quota caps total CPU at **20 vCPU**, so `max-instances 20 × cpu 1` is the ceiling here.
 > On a paid account, raise `--max-instances` and the ceiling lifts — same mechanism.
@@ -49,7 +49,7 @@ gcloud run services update goopher-api --region us-central1 --concurrency 80 --m
 ## 1 · NON-LLM scale demo (the headline — "100 → ~1000 users")
 No setup needed (`/sim` is rate-limit-exempt). Run in **PowerShell** (or Cloud Shell):
 ```powershell
-python scale/loadtest.py --url https://goopher-api-7vnucwimtq-uc.a.run.app --stages 50,150,400,800 --duration 20
+python scale/loadtest.py --url https://<your-service>.a.run.app --stages 50,150,400,800 --duration 20
 ```
 **Steps while it runs:**
 1. Watch the terminal table → **OK% ~100%**, errors ~0, RPS rising.
@@ -70,7 +70,7 @@ gcloud run services update goopher-api --region us-central1 --update-env-vars RA
 ```
 **Step B — run the real-LLM test (PowerShell; SMALL stages — uses real tokens):**
 ```powershell
-python scale/loadtest.py --url https://goopher-api-7vnucwimtq-uc.a.run.app --endpoint /chat --email demo@goopher.app --password "<DEPLOYED_MASTER_PASSWORD>" --stages 5,10,20 --duration 10
+python scale/loadtest.py --url https://<your-service>.a.run.app --endpoint /chat --email demo@goopher.app --password "<DEPLOYED_MASTER_PASSWORD>" --stages 5,10,20 --duration 10
 ```
 > Use the **GitHub-secret `MASTER_PASSWORD`** value (the deployed one), NOT the local `.env` one.
 > Product questions only → nothing is purchased. Expect ~1–3s latency, high OK% at 5–20 concurrent.
@@ -125,9 +125,9 @@ gcloud run services describe goopher-api --region us-central1 --format="value(sp
 ```
 ```powershell
 # non-LLM headline run (PowerShell)
-python scale/loadtest.py --url https://goopher-api-7vnucwimtq-uc.a.run.app --stages 50,150,400,800 --duration 20
+python scale/loadtest.py --url https://<your-service>.a.run.app --stages 50,150,400,800 --duration 20
 ```
 ```powershell
 # real-LLM run (after raising the rate limit in Cloud Shell)
-python scale/loadtest.py --url https://goopher-api-7vnucwimtq-uc.a.run.app --endpoint /chat --email demo@goopher.app --password "<PW>" --stages 5,10,20 --duration 10
+python scale/loadtest.py --url https://<your-service>.a.run.app --endpoint /chat --email demo@goopher.app --password "<PW>" --stages 5,10,20 --duration 10
 ```

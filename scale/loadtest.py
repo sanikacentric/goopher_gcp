@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 import time
 
@@ -38,7 +39,9 @@ try:
 except ImportError:  # pragma: no cover
     raise SystemExit("Install httpx first:  pip install httpx")
 
-DEFAULT_URL = "https://goopher-api-7vnucwimtq-uc.a.run.app"
+# Local backend by default. Point at your own deployed service with --url
+# (or set GOOPHER_URL) to load-test Cloud Run autoscaling.
+DEFAULT_URL = os.environ.get("GOOPHER_URL", "http://localhost:8080")
 QUERIES = ["oreo cookies", "potato chips", "soccer ball", "lego", "soda",
            "dress", "peanuts", "play-doh", "crackers", "nerf"]
 

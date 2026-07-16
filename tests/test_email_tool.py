@@ -12,7 +12,7 @@ from backend.app.tools.checkout_tool import place_bulk_order, place_order
 
 
 def _settings(**over):
-    base = dict(email_enabled=True, notify_email="tungaresanika2@gmail.com",
+    base = dict(email_enabled=True, notify_email="orders@example.com",
                 email_from="GOOPHER <orders@goopher.app>", smtp_host="", smtp_port=587,
                 smtp_user="", smtp_password="", resend_api_key="")
     base.update(over)
@@ -30,7 +30,7 @@ def test_simulated_when_no_transport(monkeypatch):
     monkeypatch.setattr(et, "get_settings", lambda: _settings())
     r = et.send_order_email(ORDER)
     assert r["sent"] is False and r["mode"] == "simulated"
-    assert r["to"] == "tungaresanika2@gmail.com"
+    assert r["to"] == "orders@example.com"
 
 
 def test_smtp_path_used_when_configured(monkeypatch):
@@ -41,7 +41,7 @@ def test_smtp_path_used_when_configured(monkeypatch):
                         lambda s, to, sub, body: captured.update(to=to, sub=sub, body=body))
     r = et.send_order_email(ORDER)
     assert r["sent"] is True and r["mode"] == "smtp"
-    assert captured["to"] == "tungaresanika2@gmail.com"
+    assert captured["to"] == "orders@example.com"
     assert "ORD-1" in captured["sub"] and "Oreo" in captured["body"]
 
 
@@ -93,7 +93,7 @@ def test_localize_failure_falls_back_and_still_sends(monkeypatch):
 # --- orders attach the email status (every path goes through these) --------- #
 def test_place_order_attaches_email():
     res = place_order("CUST-1001")
-    assert res["ok"] and "email" in res and res["email"]["to"] == "tungaresanika2@gmail.com"
+    assert res["ok"] and "email" in res and res["email"]["to"] == "orders@example.com"
 
 
 def test_place_bulk_order_attaches_email():

@@ -4,7 +4,7 @@ A ready-to-present walkthrough. Each section has **what to do**, **what they'll
 see**, and the **exact line to say**. Total runtime ≈ 8–10 minutes; every section
 also works standalone.
 
-> **Live service:** `https://goopher-api-7vnucwimtq-uc.a.run.app`
+> **Live service:** `https://<your-service>.a.run.app`
 > **Dev portal:** `…/dev`  ·  **Storefront:** `…/`  ·  **Extension:** GOOPHER side panel
 
 ---
